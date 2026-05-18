@@ -1,0 +1,10 @@
+{
+  "name": "Obelisk",
+  "description": "A location-based narrative experience platform where creators layer stories, audio, and AI characters onto physical space.",
+  "requestFramePermissions": [
+    "geolocation",
+    "microphone"
+  ],
+  "y7": [],
+  "Yp": []
+}

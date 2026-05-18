@@ -1,0 +1,32 @@
+{
+  "name": "sound-maps",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --force",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@google/genai": "^1.41.0",
+    "@react-leaflet/core": "^3.0.0",
+    "@supabase/supabase-js": "^2.105.4",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^0.564.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "react-leaflet": "^5.0.0",
+    "react-router-dom": "^7.13.0",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "@types/leaflet": "^1.9.21",
+    "@types/node": "^22.14.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0"
+  }
+}
