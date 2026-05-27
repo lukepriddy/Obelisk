@@ -233,7 +233,35 @@ export const Player: React.FC = () => {
     setAudioStarted(true);
   };
 
-  if (loading || !tour || !userPos) return <div className="flex h-screen items-center justify-center bg-slate-900 text-white">Loading Experience...</div>;
+  if (loading || !tour || !userPos) return <div className="flex h-screen items-center justify-center bg-zinc-950 text-white">Loading Experience...</div>;
+
+  // ── Player theme tokens ───────────────────────────────────────────────────
+  // Welcome screen always uses the tour's own bg/text/accent colors.
+  // Everything else (bars, cards, sheet, HUD) uses these fixed theme tokens so
+  // a bad tour color choice can never break the player chrome.
+  const isDark  = (tour.player_theme || 'dark') === 'dark';
+  const accent  = tour.accent_color || '#10b981';
+  const th = {
+    // Top / bottom bars
+    barBg:       isDark ? 'rgba(9,9,11,0.96)'   : 'rgba(255,255,255,0.96)',
+    barBorder:   isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+    barText:     isDark ? '#ffffff'              : '#09090b',
+    barMuted:    isDark ? '#71717a'              : '#52525b',
+    // Floating cards (Now Playing, Character card)
+    cardBg:      isDark ? 'rgba(24,24,27,0.95)' : 'rgba(255,255,255,0.95)',
+    cardBorder:  isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+    cardText:    isDark ? '#ffffff'              : '#09090b',
+    cardMuted:   isDark ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.55)',
+    // Info sheet
+    sheetBg:     isDark ? '#18181b'              : '#ffffff',
+    sheetText:   isDark ? '#ffffff'              : '#09090b',
+    sheetMuted:  isDark ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.55)',
+    sheetHandle: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)',
+    sheetBorder: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+    // HUD
+    hudBg:       isDark ? 'rgba(24,24,27,0.96)' : 'rgba(255,255,255,0.96)',
+    hudText:     isDark ? '#ffffff'              : '#09090b',
+  };
 
   // Top bar height constant (used to offset floating elements)
   const TOP_BAR = 56; // px, matches h-14
@@ -306,7 +334,7 @@ export const Player: React.FC = () => {
 
       {/* ── WELCOME SCREEN (z-2000, covers map + bars) ── */}
       {!audioStarted && tour && (() => {
-        const bg         = tour.bg_color    || '#0f172a';
+        const bg         = tour.bg_color    || '#09090b';
         const accent     = tour.accent_color || '#10b981';
         const textColor  = tour.text_color   || '#ffffff';
         const fontFamily = FONT_STYLES[tour.font_style || 'sans']?.fontFamily;
@@ -392,17 +420,16 @@ export const Player: React.FC = () => {
         <div
           className="absolute inset-0 z-[3000] flex items-end justify-center"
           style={{
-            background: tourInfoVisible ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0)',
-            backdropFilter: tourInfoVisible ? 'blur(6px)' : 'blur(0px)',
-            transition: 'background 0.35s, backdrop-filter 0.35s',
+            backgroundColor: 'rgba(0,0,0,0.55)',
+            opacity: tourInfoVisible ? 1 : 0,
+            transition: 'opacity 0.3s',
           }}
           onClick={closeTourInfo}
         >
           <div
             className="w-full max-w-lg flex flex-col rounded-t-3xl shadow-2xl overflow-hidden"
             style={{
-              backgroundColor: tour.bg_color || '#18181b',
-              fontFamily: FONT_STYLES[tour.font_style || 'sans']?.fontFamily,
+              backgroundColor: th.sheetBg,
               transform: tourInfoVisible ? 'translateY(0)' : 'translateY(100%)',
               transition: 'transform 0.38s cubic-bezier(0.32, 0.72, 0, 1)',
               paddingBottom: 'env(safe-area-inset-bottom, 0px)',
@@ -413,9 +440,9 @@ export const Player: React.FC = () => {
               if (e.changedTouches[0].clientY - sheetDragStartY.current > 60) closeTourInfo();
             }}
           >
-            {/* Handle + close affordance */}
+            {/* Handle */}
             <div className="flex flex-col items-center pt-3 pb-1">
-              <div className="w-10 h-1 rounded-full" style={{ backgroundColor: `${tour.text_color || '#ffffff'}30` }} />
+              <div className="w-10 h-1 rounded-full" style={{ backgroundColor: th.sheetHandle }} />
             </div>
 
             <div className="px-6 pt-3 pb-6 flex flex-col gap-4">
@@ -426,20 +453,20 @@ export const Player: React.FC = () => {
                     <img src={tour.welcome_image_url} alt="" className="w-14 h-14 object-cover rounded-xl shrink-0 shadow-lg" />
                   )}
                   <div className="min-w-0">
-                    <h2 className="font-bold text-xl leading-tight" style={{ color: tour.text_color || '#ffffff' }}>{tour.title}</h2>
+                    <h2 className="font-bold text-xl leading-tight" style={{ color: th.sheetText }}>{tour.title}</h2>
                     {tour.welcome_subtitle && (
-                      <p className="text-sm mt-0.5" style={{ color: tour.accent_color || '#10b981' }}>{tour.welcome_subtitle}</p>
+                      <p className="text-sm mt-0.5" style={{ color: accent }}>{tour.welcome_subtitle}</p>
                     )}
                   </div>
                 </div>
-                <button onClick={closeTourInfo} className="p-1.5 rounded-full shrink-0 mt-0.5" style={{ color: `${tour.text_color || '#ffffff'}60` }}>
+                <button onClick={closeTourInfo} className="p-1.5 rounded-full shrink-0 mt-0.5" style={{ color: th.sheetMuted }}>
                   <X size={18} />
                 </button>
               </div>
 
               {/* Description */}
               {tour.description && (
-                <p className="text-sm leading-relaxed" style={{ color: `${tour.text_color || '#ffffff'}b0` }}>
+                <p className="text-sm leading-relaxed" style={{ color: th.sheetMuted }}>
                   {tour.description}
                 </p>
               )}
@@ -453,8 +480,8 @@ export const Player: React.FC = () => {
                 }}
                 className="flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-medium border"
                 style={{
-                  borderColor: `${tour.text_color || '#ffffff'}18`,
-                  color: coordsCopied ? (tour.accent_color || '#10b981') : `${tour.text_color || '#ffffff'}80`,
+                  borderColor: th.sheetBorder,
+                  color: coordsCopied ? accent : th.sheetMuted,
                 }}
               >
                 {coordsCopied ? <><Check size={14} /> Copied!</> : <><MapPin size={14} /> {tour.lat.toFixed(5)}, {tour.lng.toFixed(5)}</>}
@@ -473,23 +500,24 @@ export const Player: React.FC = () => {
           {/* Now Playing card */}
           {activeZones.length > 0 && (
             <div
-              className="w-full px-4 py-2.5 rounded-2xl border border-white/10"
+              className="w-full px-4 py-2.5 rounded-2xl"
               style={{
-                backgroundColor: tour?.bg_color ? `${tour.bg_color}f0` : 'rgba(24,24,27,0.95)',
+                backgroundColor: th.cardBg,
+                border: `1px solid ${th.cardBorder}`,
                 backdropFilter: 'blur(14px)',
-                boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
               }}
             >
               <div className="flex items-center gap-2 mb-1.5">
-                <Volume2 className="animate-pulse shrink-0" size={12} style={{ color: tour?.accent_color || '#10b981' }} />
-                <span className="font-bold uppercase text-[9px] tracking-widest" style={{ color: tour?.accent_color || '#10b981' }}>Now Playing</span>
+                <Volume2 className="animate-pulse shrink-0" size={12} style={{ color: accent }} />
+                <span className="font-bold uppercase text-[9px] tracking-widest" style={{ color: accent }}>Now Playing</span>
               </div>
               <div className="space-y-1">
                 {activeZones.map((az, idx) => (
                   <div key={idx} className="flex justify-between items-center gap-3">
-                    <span className="text-xs truncate" style={{ color: tour?.text_color || '#ffffff' }}>{az.title}</span>
-                    <div className="w-16 h-1 rounded-full overflow-hidden shrink-0" style={{ backgroundColor: `${tour?.accent_color || '#10b981'}33` }}>
-                      <div className="h-full transition-all duration-300" style={{ width: `${az.volume}%`, backgroundColor: tour?.accent_color || '#10b981' }} />
+                    <span className="text-xs truncate" style={{ color: th.cardText }}>{az.title}</span>
+                    <div className="w-16 h-1 rounded-full overflow-hidden shrink-0" style={{ backgroundColor: `${accent}33` }}>
+                      <div className="h-full transition-all duration-300" style={{ width: `${az.volume}%`, backgroundColor: accent }} />
                     </div>
                   </div>
                 ))}
@@ -500,14 +528,14 @@ export const Player: React.FC = () => {
           {/* Character card */}
           {activeCharacterZone && !showChat && (
             <div
-              className="w-full rounded-2xl overflow-hidden border border-white/10 animate-in slide-in-from-bottom-3"
+              className="w-full rounded-2xl overflow-hidden animate-in slide-in-from-bottom-3"
               style={{
-                backgroundColor: tour?.bg_color ? `${tour.bg_color}f0` : 'rgba(24,24,27,0.95)',
+                backgroundColor: th.cardBg,
+                border: `1px solid ${th.cardBorder}`,
                 backdropFilter: 'blur(14px)',
-                boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
               }}
             >
-              {/* Character image — full-width banner crop */}
               {activeCharacterZone.character_image_url && (
                 <img
                   src={activeCharacterZone.character_image_url}
@@ -517,26 +545,21 @@ export const Player: React.FC = () => {
               )}
 
               <div className="px-4 pt-3 pb-4 flex flex-col gap-2.5">
-                {/* Name + bio */}
                 <div>
-                  <h3 className="font-bold text-base leading-tight" style={{ color: tour?.text_color || '#ffffff' }}>
+                  <h3 className="font-bold text-base leading-tight" style={{ color: th.cardText }}>
                     {activeCharacterZone.title}
                   </h3>
                   {(activeCharacterZone.character_bio || activeCharacterZone.description) && (
-                    <p className="text-sm mt-1.5 leading-relaxed" style={{ color: tour?.text_color ? `${tour.text_color}b0` : 'rgba(255,255,255,0.65)' }}>
+                    <p className="text-sm mt-1.5 leading-relaxed" style={{ color: th.cardMuted }}>
                       {activeCharacterZone.character_bio || activeCharacterZone.description}
                     </p>
                   )}
                 </div>
 
-                {/* Talk to button */}
                 <button
                   onClick={() => setShowChat(true)}
                   className="w-full py-3 rounded-xl font-bold text-white flex items-center justify-center gap-2.5 active:opacity-80 transition-opacity"
-                  style={{
-                    backgroundColor: tour?.accent_color || '#10b981',
-                    boxShadow: '0 2px 12px rgba(0,0,0,0.35)',
-                  }}
+                  style={{ backgroundColor: accent, boxShadow: '0 2px 12px rgba(0,0,0,0.25)' }}
                 >
                   <Mic size={16} />
                   Talk to {activeCharacterZone.title}
@@ -566,15 +589,22 @@ export const Player: React.FC = () => {
           className="absolute left-4 right-4 z-[1500] animate-in slide-in-from-top-4 duration-300"
           style={{ top: `calc(${TOP_BAR + 12}px + env(safe-area-inset-top, 0px))` }}
         >
-          <div className="bg-zinc-900/95 backdrop-blur border border-emerald-500/40 rounded-2xl shadow-2xl p-4 flex items-start gap-3">
-            <div className="w-8 h-8 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0 mt-0.5">
-              <MapPin className="text-emerald-400" size={14} />
+          <div
+            className="backdrop-blur rounded-2xl shadow-2xl p-4 flex items-start gap-3"
+            style={{
+              backgroundColor: th.hudBg,
+              border: `1px solid ${accent}40`,
+            }}
+          >
+            <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5"
+              style={{ backgroundColor: `${accent}20`, border: `1px solid ${accent}40` }}>
+              <MapPin size={14} style={{ color: accent }} />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest mb-0.5">{hudNotification.title}</div>
-              <p className="text-white text-sm leading-snug">{hudNotification.message}</p>
+              <div className="text-[10px] font-bold uppercase tracking-widest mb-0.5" style={{ color: accent }}>{hudNotification.title}</div>
+              <p className="text-sm leading-snug" style={{ color: th.hudText }}>{hudNotification.message}</p>
             </div>
-            <button onClick={() => setHudNotification(null)} className="text-zinc-500 hover:text-white shrink-0 p-1 -mr-1 -mt-1">
+            <button onClick={() => setHudNotification(null)} className="shrink-0 p-1 -mr-1 -mt-1 active:opacity-60" style={{ color: th.barMuted }}>
               <X size={18} />
             </button>
           </div>
@@ -630,16 +660,20 @@ export const Player: React.FC = () => {
 
       {/* ── TOP BAR ── */}
       <div
-        className="absolute top-0 left-0 right-0 z-[1000] bg-zinc-950/95 backdrop-blur-md border-b border-zinc-800/60"
-        style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+        className="absolute top-0 left-0 right-0 z-[1000] backdrop-blur-md"
+        style={{
+          backgroundColor: th.barBg,
+          borderBottom: `1px solid ${th.barBorder}`,
+          paddingTop: 'env(safe-area-inset-top, 0px)',
+        }}
       >
         <div className="flex items-center h-14 px-3 gap-2">
 
-          {/* Back — only once experience has started */}
           {audioStarted ? (
             <button
               onClick={() => { audioService.stopAll(); setAudioStarted(false); }}
-              className="w-10 h-10 flex items-center justify-center rounded-xl text-zinc-400 active:bg-zinc-800 shrink-0"
+              className="w-10 h-10 flex items-center justify-center rounded-xl shrink-0 active:opacity-60 transition-opacity"
+              style={{ color: th.barMuted }}
             >
               <ArrowLeft size={20} />
             </button>
@@ -647,17 +681,15 @@ export const Player: React.FC = () => {
             <div className="w-10 shrink-0" />
           )}
 
-          {/* Obelisk logo — centred */}
           <div className="flex-1 flex items-center justify-center gap-2">
-            <MapPin className="text-emerald-400 shrink-0" size={18} />
-            <span className="font-bold text-white tracking-tight">Obelisk</span>
+            <MapPin size={18} style={{ color: accent }} className="shrink-0" />
+            <span className="font-bold tracking-tight" style={{ color: th.barText }}>Obelisk</span>
           </div>
 
-          {/* GPS indicator + hamburger */}
           <div className="flex items-center gap-1 shrink-0">
             <button
               onClick={() => setSimulationMode(!simulationMode)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg active:bg-zinc-800"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg active:opacity-60 transition-opacity"
               title="Toggle GPS / Simulation"
             >
               <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${simulationMode ? 'bg-amber-400' : 'bg-emerald-400'}`} />
@@ -665,7 +697,7 @@ export const Player: React.FC = () => {
                 {simulationMode ? 'Sim' : 'GPS'}
               </span>
             </button>
-            <button className="w-10 h-10 flex items-center justify-center rounded-xl text-zinc-400 active:bg-zinc-800">
+            <button className="w-10 h-10 flex items-center justify-center rounded-xl active:opacity-60 transition-opacity" style={{ color: th.barMuted }}>
               <Menu size={20} />
             </button>
           </div>
@@ -685,18 +717,17 @@ export const Player: React.FC = () => {
       >
         <button
           onClick={openTourInfo}
-          className="w-full bg-zinc-950/95 backdrop-blur-md border-t border-zinc-800/60 flex flex-col items-center gap-1.5 pt-2.5 pb-3 active:bg-zinc-900/80 transition-colors"
+          className="w-full backdrop-blur-md flex flex-col items-center gap-1.5 pt-2.5 pb-3 active:opacity-70 transition-opacity"
+          style={{
+            backgroundColor: th.barBg,
+            borderTop: `1px solid ${th.barBorder}`,
+          }}
         >
-          {/* Drag handle */}
-          <div className="w-9 h-[3px] bg-zinc-600 rounded-full" />
-
-          {/* Title */}
-          <span className="text-white font-bold text-base tracking-tight mt-0.5 px-6 text-center leading-snug">
+          <div className="w-9 h-[3px] rounded-full" style={{ backgroundColor: th.sheetHandle }} />
+          <span className="font-bold text-base tracking-tight mt-0.5 px-6 text-center leading-snug" style={{ color: th.barText }}>
             {tour.title}
           </span>
-
-          {/* Supporting line — subtitle or gentle upward nudge */}
-          <span className="flex items-center gap-1 text-zinc-500 text-xs">
+          <span className="flex items-center gap-1 text-xs" style={{ color: th.barMuted }}>
             {tour.welcome_subtitle
               ? <span className="truncate max-w-[220px]">{tour.welcome_subtitle}</span>
               : <span>Tap for details</span>

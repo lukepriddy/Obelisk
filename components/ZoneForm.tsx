@@ -347,17 +347,20 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
                     </div>
                     <div className="flex items-end justify-between w-full mt-1">
                       <span className={`text-[10px] leading-tight ${selected ? 'text-indigo-300' : 'text-zinc-500'}`}>{v.description}</span>
-                      <button
+                      <span
+                        role="button"
+                        tabIndex={0}
                         onClick={(e) => {
                           e.stopPropagation();
                           window.speechSynthesis.cancel();
                           const utt = new SpeechSynthesisUtterance("Hello. I am your guide for today's journey.");
                           window.speechSynthesis.speak(utt);
                         }}
-                        className="p-1 rounded text-zinc-500 hover:text-white transition-colors shrink-0 -mr-1"
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.currentTarget.click(); }}
+                        className="p-1 rounded text-zinc-500 hover:text-white transition-colors shrink-0 -mr-1 cursor-pointer"
                       >
                         <Volume2 size={11} />
-                      </button>
+                      </span>
                     </div>
                   </button>
                 );

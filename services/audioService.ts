@@ -43,6 +43,10 @@ export class AudioService {
 
     try {
       const response = await fetch(url);
+      if (!response.ok) {
+        console.warn(`Audio fetch failed for ${zoneId}: ${response.status} ${url}`);
+        return;
+      }
       const arrayBuffer = await response.arrayBuffer();
       const audioBuffer = await this.context.decodeAudioData(arrayBuffer);
 

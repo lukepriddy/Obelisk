@@ -21,14 +21,15 @@ const DEFAULT_ZONE_PROPS = {
 // ── Auth helpers ──────────────────────────────────────────────────────────────
 
 export const auth = {
-  /** Sends a magic-link email. Returns error string or null. */
+  /** Sends a 6-digit OTP code to the given email address. */
   signInWithEmail: async (email: string): Promise<{ error: string | null }> => {
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: window.location.origin,
-      },
-    });
+    const { error } = await supabase.auth.signInWithOtp({ email });
+    return { error: error?.message ?? null };
+  },
+
+  /** Verifies the 6-digit OTP code the user typed in. */
+  verifyOtp: async (email: string, token: string): Promise<{ error: string | null }> => {
+    const { error } = await supabase.auth.verifyOtp({ email, token, type: 'email' });
     return { error: error?.message ?? null };
   },
 

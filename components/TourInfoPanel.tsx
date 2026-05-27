@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Tour } from '../types';
 import { MAP_STYLES, FONT_STYLES } from '../constants';
 import { uploadImage } from '../services/storageService';
-import { Image, Type, Palette, AlignLeft, Upload, MapPin, Eye, Settings, Globe, Lock, Loader2 } from 'lucide-react';
+import { Image, Type, Palette, AlignLeft, Upload, MapPin, Eye, Settings, Globe, Lock, Loader2, Sun, Moon } from 'lucide-react';
 
 interface TourInfoPanelProps {
   tour: Tour;
@@ -19,7 +19,7 @@ export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({ tour, onUpdate }) 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const accent  = tour.accent_color || '#10b981';
-  const bg      = tour.bg_color     || '#0f172a';
+  const bg      = tour.bg_color     || '#09090b';
   const textCol = tour.text_color   || '#ffffff';
   const font    = FONT_STYLES[tour.font_style || 'sans'];
 
@@ -183,6 +183,28 @@ export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({ tour, onUpdate }) 
             </div>
           </div>
 
+          {/* Player Theme */}
+          <div>
+            <label className="block text-xs font-bold text-zinc-400 uppercase mb-2 flex items-center gap-2">
+              <Eye size={13} /> Player Theme
+            </label>
+            <div className="flex bg-zinc-800 rounded p-1 gap-1">
+              <button
+                onClick={() => onUpdate({ player_theme: 'dark' })}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded transition-colors ${(tour.player_theme || 'dark') === 'dark' ? 'bg-emerald-600 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
+              >
+                <Moon size={12} /> Dark
+              </button>
+              <button
+                onClick={() => onUpdate({ player_theme: 'light' })}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded transition-colors ${tour.player_theme === 'light' ? 'bg-emerald-600 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
+              >
+                <Sun size={12} /> Light
+              </button>
+            </div>
+            <p className="text-[10px] text-zinc-500 mt-1.5">Controls the player UI chrome. Your accent color still comes through on buttons and indicators.</p>
+          </div>
+
           {/* Font Style */}
           <div>
             <label className="block text-xs font-bold text-zinc-400 uppercase mb-2 flex items-center gap-2">
@@ -258,7 +280,7 @@ export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({ tour, onUpdate }) 
                 onClick={() => onUpdate({ is_public: true })}
                 className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded transition-colors ${tour.is_public ? 'bg-emerald-600 text-white shadow' : 'text-zinc-400 hover:text-zinc-200'}`}
               >
-                <Globe size={12} /> Public — anyone with link
+                <Globe size={12} /> Public
               </button>
               <button
                 onClick={() => onUpdate({ is_public: false })}
@@ -267,11 +289,6 @@ export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({ tour, onUpdate }) 
                 <Lock size={12} /> Private
               </button>
             </div>
-            <p className="text-[10px] text-zinc-500 mt-1.5">
-              {tour.is_public
-                ? 'Anyone with the player link can access this tour.'
-                : 'Only you can view this tour. Share link won\'t work for others.'}
-            </p>
           </div>
 
           {/* Text Color */}

@@ -258,6 +258,7 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
       text_color: tour.text_color,
       font_style: tour.font_style,
       map_style: tour.map_style,
+      player_theme: tour.player_theme,
       is_public: tour.is_public,
       lat: tour.lat,
       lng: tour.lng,
@@ -375,7 +376,7 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
             ref={mapRef}
             center={tour.lat === 0 && tour.lng === 0 ? MAP_DEFAULT_CENTER : [tour.lat, tour.lng]}
             zoom={MAP_DEFAULT_ZOOM}
-            style={{ height: '100%', width: '100%', background: '#0f172a' }}
+            style={{ height: '100%', width: '100%', background: '#09090b' }}
             zoomControl={false}
             scrollWheelZoom={true}
           >
@@ -480,7 +481,7 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
           ) : rightPanel === 'tour' && tour ? (
             <TourInfoPanel tour={tour} onUpdate={updateTourFields} />
           ) : (
-            <div className="text-slate-500 text-center mt-20">Select a zone</div>
+            <div className="text-zinc-500 text-center mt-20">Select a zone</div>
           )}
         </div>
       )}

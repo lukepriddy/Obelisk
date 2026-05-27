@@ -11,7 +11,7 @@
  */
 
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') ?? '';
-const TEXT_MODEL     = 'gemini-2.5-flash-preview-05-20';
+const TEXT_MODEL     = 'gemini-2.5-flash';
 const TTS_MODEL      = 'gemini-2.5-flash-preview-tts';
 const GEMINI_BASE    = 'https://generativelanguage.googleapis.com/v1beta/models';
 
@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
           body: JSON.stringify({
             system_instruction: { parts: [{ text: systemInstruction }] },
             contents,
-            generationConfig: { maxOutputTokens: 300 },
+            generationConfig: { maxOutputTokens: 800 },
           }),
         }
       );

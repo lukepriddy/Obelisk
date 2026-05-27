@@ -66,11 +66,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ user }) => {
   return (
     <div className="p-6 max-w-5xl mx-auto h-full overflow-auto">
       <div className="flex justify-between items-center mb-4">
-        <h1 className="text-3xl font-bold text-slate-800">Your Tours</h1>
+        <h1 className="text-3xl font-bold text-zinc-800">Your Tours</h1>
         <button
           onClick={createTour}
           disabled={creating}
-          className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-white px-4 py-2 rounded-lg transition-colors"
+          className="flex items-center gap-2 bg-zinc-900 hover:bg-zinc-800 disabled:opacity-60 text-white px-4 py-2 rounded-lg transition-colors"
         >
           <Plus size={18} />
           <span>{creating ? 'Creating…' : 'New Tour'}</span>
@@ -86,14 +86,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ user }) => {
       {tours.length === 0 ? (
         <div className="text-center py-20 bg-white rounded-xl border border-dashed border-gray-300">
           <Map className="mx-auto h-12 w-12 text-gray-300 mb-4" />
-          <p className="text-slate-500">You haven't created any tours yet.</p>
+          <p className="text-zinc-500">You haven't created any tours yet.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {tours.map((tour) => (
             <div key={tour.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
               {/* Cover image */}
-              <div className="h-40 bg-slate-100 relative overflow-hidden">
+              <div className="h-40 bg-zinc-100 relative overflow-hidden">
                 {tour.welcome_image_url ? (
                   <img src={tour.welcome_image_url} alt={tour.title} className="w-full h-full object-cover" />
                 ) : (
@@ -105,8 +105,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ user }) => {
               </div>
 
               <div className="p-5">
-                <h3 className="font-bold text-lg text-slate-800 mb-1">{tour.title}</h3>
-                <p className="text-sm text-slate-500 mb-4 line-clamp-2">{tour.description}</p>
+                <h3 className="font-bold text-lg text-zinc-800 mb-1">{tour.title}</h3>
+                <p className="text-sm text-zinc-500 mb-4 line-clamp-2">{tour.description}</p>
 
                 {/* Delete confirmation inline */}
                 {confirmDeleteId === tour.id ? (
@@ -122,7 +122,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user }) => {
                     </button>
                     <button
                       onClick={() => setConfirmDeleteId(null)}
-                      className="text-xs text-slate-500 hover:text-slate-700"
+                      className="text-xs text-zinc-500 hover:text-zinc-700"
                     >
                       Cancel
                     </button>
@@ -133,14 +133,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ user }) => {
                     <div className="flex items-center gap-3">
                       <Link
                         to={`/editor/${tour.id}`}
-                        className="flex items-center gap-1 text-sm text-slate-600 hover:text-emerald-600 font-medium"
+                        className="flex items-center gap-1 text-sm text-zinc-600 hover:text-emerald-600 font-medium"
                       >
                         <Edit size={16} /> Edit
                       </Link>
                       <button
                         onClick={() => setConfirmDeleteId(tour.id)}
                         title="Delete tour"
-                        className="text-slate-300 hover:text-red-400 transition-colors"
+                        className="text-zinc-300 hover:text-red-400 transition-colors"
                       >
                         <Trash2 size={15} />
                       </button>
@@ -151,7 +151,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user }) => {
                       <button
                         onClick={() => copyPlayerLink(tour.id)}
                         title="Copy player link"
-                        className="flex items-center gap-1 text-sm text-slate-400 hover:text-slate-700 transition-colors"
+                        className="flex items-center gap-1 text-sm text-zinc-400 hover:text-zinc-700 transition-colors"
                       >
                         {copiedId === tour.id
                           ? <><Check size={15} className="text-emerald-500" /><span className="text-emerald-600 text-xs font-medium">Copied!</span></>
