@@ -12,49 +12,42 @@ interface ChatInterfaceProps {
 }
 
 export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onUnlock, theme = 'dark' }) => {
-  const [history, setHistory] = useState<ChatMessage[]>([]);
-  const [isReady, setIsReady] = useState(false);
+  const [history, setHistory]     = useState<ChatMessage[]>([]);
+  const [isReady, setIsReady]     = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg]   = useState<string | null>(null);
   const [inputText, setInputText] = useState('');
   const [isRecording, setIsRecording] = useState(false);
-  // greetState: 'begin' = waiting for tap, 'done' = greeted
-  const [greetState, setGreetState] = useState<'begin' | 'done'>('begin');
 
-  const greetingAudioRef = useRef<AudioBuffer | null>(null);
-  const greetingTextRef  = useRef<string | null>(null);
-  const scrollRef        = useRef<HTMLDivElement>(null);
-  const recognitionRef   = useRef<any>(null);
-  const micStreamRef     = useRef<MediaStream | null>(null);
-  const hasGreetedRef    = useRef(false);
+  const scrollRef      = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<any>(null);
+  const micStreamRef   = useRef<MediaStream | null>(null);
+  const hasGreetedRef  = useRef(false);
   const speakingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── Theme tokens ─────────────────────────────────────────────────────────
+  // ── Theme tokens ──────────────────────────────────────────────────────────
   const dk = theme === 'dark';
   const t = {
-    root:        dk ? 'bg-zinc-950 border-zinc-800'          : 'bg-white border-zinc-200',
-    header:      dk ? 'border-zinc-800'                      : 'border-zinc-200',
-    headerText:  dk ? 'text-white'                           : 'text-zinc-900',
-    headerMuted: dk ? 'text-zinc-500'                        : 'text-zinc-500',
-    closeBtn:    dk ? 'text-zinc-500 hover:text-white hover:bg-zinc-800' : 'text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100',
-    chatBg:      dk ? ''                                     : '',   // inherits root
-    spinner:     dk ? 'border-zinc-700 border-t-indigo-400'  : 'border-zinc-300 border-t-indigo-500',
-    spinnerText: dk ? 'text-zinc-500'                        : 'text-zinc-500',
-    errorBg:     dk ? 'bg-red-500/10 border-red-500/30 text-red-300' : 'bg-red-50 border-red-200 text-red-600',
-    userBubble:  'bg-indigo-600 text-white rounded-br-md',
-    aiBubble:    dk ? 'bg-zinc-800 text-zinc-100 rounded-bl-md' : 'bg-zinc-100 text-zinc-900 rounded-bl-md',
-    typingDot:   dk ? 'bg-zinc-400'                          : 'bg-zinc-400',
-    typingBg:    dk ? 'bg-zinc-800'                          : 'bg-zinc-100',
-    inputBar:    dk ? 'border-zinc-800'                      : 'border-zinc-200',
-    inputField:  dk ? 'bg-zinc-800 border-zinc-700 text-white placeholder-zinc-500 focus:border-indigo-500/60'
-                    : 'bg-zinc-100 border-zinc-200 text-zinc-900 placeholder-zinc-400 focus:border-indigo-400',
-    micBtn:      dk ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300' : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-600',
-    sendActive:  'bg-indigo-600 hover:bg-indigo-500 text-white',
+    root:         dk ? 'bg-zinc-950 border-zinc-800'          : 'bg-white border-zinc-200',
+    header:       dk ? 'border-zinc-800'                      : 'border-zinc-200',
+    headerText:   dk ? 'text-white'                           : 'text-zinc-900',
+    headerMuted:  dk ? 'text-zinc-500'                        : 'text-zinc-500',
+    closeBtn:     dk ? 'text-zinc-500 hover:text-white hover:bg-zinc-800' : 'text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100',
+    errorBg:      dk ? 'bg-red-500/10 border-red-500/30 text-red-300' : 'bg-red-50 border-red-200 text-red-600',
+    userBubble:   'bg-indigo-600 text-white rounded-br-md',
+    aiBubble:     dk ? 'bg-zinc-800 text-zinc-100 rounded-bl-md' : 'bg-zinc-100 text-zinc-900 rounded-bl-md',
+    typingDot:    dk ? 'bg-zinc-400'  : 'bg-zinc-400',
+    typingBg:     dk ? 'bg-zinc-800'  : 'bg-zinc-100',
+    inputBar:     dk ? 'border-zinc-800' : 'border-zinc-200',
+    inputField:   dk ? 'bg-zinc-800 border-zinc-700 text-white placeholder-zinc-500 focus:border-indigo-500/60'
+                     : 'bg-zinc-100 border-zinc-200 text-zinc-900 placeholder-zinc-400 focus:border-indigo-400',
+    micBtn:       dk ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300' : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-600',
+    sendActive:   'bg-indigo-600 hover:bg-indigo-500 text-white',
     sendInactive: dk ? 'bg-zinc-900 text-zinc-700 cursor-not-allowed' : 'bg-zinc-100 text-zinc-400 cursor-not-allowed',
-    beginSubtext: dk ? 'text-zinc-500' : 'text-zinc-400',
-    beginLoading: dk ? 'bg-zinc-800 text-zinc-500' : 'bg-zinc-100 text-zinc-400',
     recordingLabel: dk ? 'text-red-400' : 'text-red-500',
+    spinnerBorder: dk ? 'border-zinc-700 border-t-indigo-400' : 'border-zinc-300 border-t-indigo-500',
+    spinnerText:  dk ? 'text-zinc-500' : 'text-zinc-500',
     statusDot: (state: 'speaking' | 'loading' | 'ready') =>
       state === 'speaking' ? 'bg-indigo-400 animate-pulse'
       : state === 'loading' ? 'bg-amber-400 animate-pulse'
@@ -90,7 +83,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [history, isSpeaking]);
 
-  // ── Fetch greeting on mount (silent — no autoplay) ────────────────────────
+  // ── Fetch and show greeting on mount ─────────────────────────────────────
   useEffect(() => {
     if (hasGreetedRef.current) return;
     hasGreetedRef.current = true;
@@ -101,16 +94,14 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
         : '[The player has arrived at your location. Greet them briefly and in character, then wait for them to respond.]';
 
       try {
-        const { text, audioBuffer } = await geminiService.generateCharacterResponse(
+        const { text } = await geminiService.generateCharacterResponse(
           [],
           greetingPrompt,
           zone.character_prompt || 'You are a helpful assistant.',
           zone.voice_style || 'Kore',
         );
-        greetingTextRef.current  = text;
-        greetingAudioRef.current = audioBuffer ?? null;
+        setHistory([{ role: 'model', text }]);
         setIsReady(true);
-        // Stay in 'begin' state — wait for the user to tap Begin
       } catch {
         setErrorMsg('Could not reach the character. Check your connection and try again.');
         setIsReady(true);
@@ -119,33 +110,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
 
     fetchGreeting();
   }, []);
-
-  // ── Begin button handler (runs inside a gesture → audio allowed) ──────────
-  const handleBegin = () => {
-    if (!isReady) return; // shouldn't happen; button is disabled, but safety check
-
-    // Play a silent buffer immediately to permanently unlock the AudioContext
-    const ctx = audioService.context;
-    if (ctx) {
-      if (ctx.state === 'suspended') ctx.resume();
-      const silent = ctx.createBuffer(1, 1, ctx.sampleRate);
-      const s = ctx.createBufferSource();
-      s.buffer = silent;
-      s.connect(ctx.destination);
-      s.start(0);
-    }
-
-    // Reveal the greeting text, transition to chat mode
-    if (greetingTextRef.current) {
-      setHistory([{ role: 'model', text: greetingTextRef.current }]);
-    }
-    setGreetState('done');
-
-    // Play greeting audio (same gesture stack → allowed)
-    if (greetingAudioRef.current) {
-      playAudio(greetingAudioRef.current);
-    }
-  };
 
   // ── Speech recognition ────────────────────────────────────────────────────
   const setupSpeechRecognition = () => {
@@ -228,7 +192,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
     onClose();
   };
 
-  const isLoading = !isReady || isSending || greetState !== 'done';
+  const isLoading = !isReady || isSending;
   const dotState  = isSpeaking ? 'speaking' : isLoading ? 'loading' : 'ready';
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -257,7 +221,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
         <div className="flex-1 min-w-0">
           <h3 className={`font-semibold text-sm leading-tight truncate ${t.headerText}`}>{zone.title}</h3>
           <p className={`text-[10px] uppercase tracking-wider mt-0.5 ${t.headerMuted}`}>
-            {isSpeaking ? 'Speaking...' : isSending ? 'Thinking...' : greetState === 'begin' ? (!isReady ? 'Starting...' : 'Tap Begin') : 'Ready'}
+            {isSpeaking ? 'Speaking...' : isSending ? 'Thinking...' : !isReady ? 'Starting...' : 'Ready'}
           </p>
         </div>
 
@@ -271,6 +235,13 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
 
       {/* Chat log */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-3 min-h-0">
+
+        {!isReady && (
+          <div className={`flex items-center justify-center gap-2 py-8 ${t.spinnerText}`}>
+            <div className={`w-5 h-5 border-2 rounded-full animate-spin ${t.spinnerBorder}`} />
+            <span className="text-sm">Connecting to {zone.title}…</span>
+          </div>
+        )}
 
         {errorMsg && (
           <div className={`text-sm px-4 py-3 rounded-2xl text-center border ${t.errorBg}`}>
@@ -287,26 +258,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
             </div>
           </div>
         ))}
-
-        {/* Begin button — shown before user taps to start */}
-        {greetState === 'begin' && (
-          <div className="flex flex-col items-center gap-2.5 py-6">
-            <button
-              onClick={handleBegin}
-              disabled={!isReady}
-              className={`px-10 py-3 rounded-full text-sm font-semibold transition-all shadow-lg ${
-                isReady
-                  ? 'bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white'
-                  : `${t.beginLoading} cursor-not-allowed`
-              }`}
-            >
-              {isReady ? 'Begin' : 'Starting…'}
-            </button>
-            {isReady && (
-              <p className={`text-[10px] ${t.beginSubtext}`}>Tap to start the conversation</p>
-            )}
-          </div>
-        )}
 
         {isSending && (
           <div className="flex justify-start">
@@ -337,7 +288,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
 
           <textarea
             className={`flex-1 border rounded-2xl px-3.5 py-2.5 text-sm focus:outline-none resize-none leading-snug disabled:opacity-40 ${t.inputField}`}
-            placeholder={greetState === 'begin' ? 'Tap Begin above…' : isSending ? 'Thinking…' : 'Message…'}
+            placeholder={!isReady ? 'Starting…' : isSending ? 'Thinking…' : 'Message…'}
             value={inputText}
             rows={1}
             disabled={isLoading}
