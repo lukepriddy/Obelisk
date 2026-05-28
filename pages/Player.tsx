@@ -574,6 +574,7 @@ export const Player: React.FC = () => {
       {showChat && activeCharacterZone && (
         <ChatInterface
           zone={activeCharacterZone}
+          theme={tour.player_theme || 'dark'}
           onClose={() => setShowChat(false)}
           onUnlock={(zoneId) => {
             unlockedZoneIdsRef.current = new Set([...unlockedZoneIdsRef.current, zoneId]);
