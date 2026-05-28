@@ -21,9 +21,9 @@ const GEMINI_BASE     = 'https://generativelanguage.googleapis.com/v1beta/models
 // Short phrase that showcases tone without being too long (keeps costs minimal)
 const SAMPLE_TEXT = "Welcome. I'm glad you found me here. There's much to discover on this journey.";
 
-// Remaining 6 — first 16 already uploaded, daily quota hit on 2026-05-28.
+// Remaining 4 — 18/22 done, daily quota hit on 2026-05-28.
 const VOICES = [
-  'Gacrux', 'Rasalgethi', 'Sadachbia', 'Sadaltager', 'Schedar', 'Umbriel',
+  'Sadachbia', 'Sadaltager', 'Schedar', 'Umbriel',
 ];
 
 // ── WAV header builder ────────────────────────────────────────────────────────
