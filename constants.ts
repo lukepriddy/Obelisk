@@ -35,7 +35,7 @@ export const FONT_STYLES: Record<string, { label: string; fontFamily: string }> 
   mono:  { label: 'Monospace',   fontFamily: "'Courier New', Courier, monospace" },
 };
 
-export const VOICES: { name: string; description: string; gender: string; locale?: string }[] = [
+export const VOICES: { name: string; description: string; gender: string; sampleUrl?: string }[] = [
   // Female
   { name: 'Kore',         description: 'Firm, clear',            gender: 'F' },
   { name: 'Aoede',        description: 'Smooth, breezy',         gender: 'F' },

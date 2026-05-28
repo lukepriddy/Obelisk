@@ -2,12 +2,6 @@ import React, { useRef, useState, useEffect } from 'react';
 import { Zone, ZoneExitBehavior, ZoneEndBehavior } from '../types';
 import { SAMPLE_AUDIO_FILES, VOICES, CHARACTER_TEMPLATES } from '../constants';
 import { uploadAudio, uploadImage } from '../services/storageService';
-import { geminiService } from '../services/geminiService';
-import { audioService } from '../services/audioService';
-
-// Module-level cache — survives re-renders, resets on page refresh.
-// Keyed by voice name; value is the decoded AudioBuffer ready to play.
-const voiceSampleCache = new Map<string, AudioBuffer>();
 import { Music, AlertCircle, Clock, Volume2, EyeOff, Radio, PlayCircle, Upload, Link as LinkIcon, FileAudio, ListMusic, Bot, MessageSquare, Lock, Unlock, GitBranch, Bell, Sparkles, KeySquare, ImageIcon, X, Trash2, Play, Pause, Loader2 } from 'lucide-react';
 
 // ── Mini audio preview player ───────────────────────────────────────────────
@@ -129,50 +123,26 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
   const [showAllVoices, setShowAllVoices] = useState(false);
   const [audioUploading, setAudioUploading] = useState(false);
   const [imageUploading, setImageUploading] = useState(false);
-  // null = idle, string = voice currently loading or playing
-  const [previewingVoice, setPreviewingVoice] = useState<string | null>(null);
+  const [playingVoice, setPlayingVoice] = useState<string | null>(null);
+  const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  const playVoiceSample = async (voiceName: string) => {
-    if (previewingVoice) return; // already loading or playing
-    setPreviewingVoice(voiceName);
-
-    try {
-      // Ensure AudioContext is running (requires a user gesture — this IS one)
-      if (audioService.context?.state === 'suspended') {
-        await audioService.context.resume();
-      }
-
-      // Serve from cache if we already generated this voice
-      let buffer = voiceSampleCache.get(voiceName);
-
-      if (!buffer) {
-        const { audioBuffer } = await geminiService.generateCharacterResponse(
-          [],
-          'Welcome. I\'m glad you found me here. There\'s much to discover on this journey.',
-          'You are demonstrating your voice. Speak the sample text naturally and clearly. Keep it brief.',
-          voiceName,
-        );
-        if (audioBuffer) {
-          voiceSampleCache.set(voiceName, audioBuffer);
-          buffer = audioBuffer;
-        }
-      }
-
-      if (buffer && audioService.context) {
-        const ctx = audioService.context;
-        if (ctx.state === 'suspended') await ctx.resume();
-        const src = ctx.createBufferSource();
-        src.buffer = buffer;
-        src.connect(ctx.destination);
-        src.start(0);
-        src.onended = () => setPreviewingVoice(null);
-        return; // onended will clear previewingVoice
-      }
-    } catch {
-      // silent fail — just clear the spinner
+  const playVoiceSample = (voiceName: string, sampleUrl?: string) => {
+    if (!sampleUrl) return;
+    // Stop any currently playing sample
+    if (voiceAudioRef.current) {
+      voiceAudioRef.current.pause();
+      voiceAudioRef.current.src = '';
     }
-
-    setPreviewingVoice(null);
+    if (playingVoice === voiceName) {
+      // Tapping the same voice again stops it
+      setPlayingVoice(null);
+      return;
+    }
+    const audio = new Audio(sampleUrl);
+    voiceAudioRef.current = audio;
+    setPlayingVoice(voiceName);
+    audio.play().catch(() => {});
+    audio.onended = () => setPlayingVoice(null);
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -398,28 +368,24 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
                     </div>
                     <div className="flex items-end justify-between w-full mt-1">
                       <span className={`text-[10px] leading-tight ${selected ? 'text-indigo-300' : 'text-zinc-500'}`}>{v.description}</span>
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          playVoiceSample(v.name);
-                        }}
-                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.currentTarget.click(); }}
-                        title={voiceSampleCache.has(v.name) ? 'Play sample' : 'Generate & play sample'}
-                        className={`p-1 rounded transition-colors shrink-0 -mr-1 cursor-pointer ${
-                          previewingVoice === v.name
-                            ? 'text-indigo-400'
-                            : previewingVoice
-                            ? 'text-zinc-700 cursor-not-allowed'
-                            : 'text-zinc-500 hover:text-white'
-                        }`}
-                      >
-                        {previewingVoice === v.name
-                          ? <Loader2 size={11} className="animate-spin" />
-                          : <Volume2 size={11} />
-                        }
-                      </span>
+                      {v.sampleUrl && (
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            playVoiceSample(v.name, v.sampleUrl);
+                          }}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.currentTarget.click(); }}
+                          title={playingVoice === v.name ? 'Stop' : 'Play sample'}
+                          className={`p-1 rounded transition-colors shrink-0 -mr-1 cursor-pointer ${
+                            playingVoice === v.name ? 'text-indigo-400 animate-pulse' : 'text-zinc-500 hover:text-white'
+                          }`}
+                        >
+                          <Volume2 size={11} />
+                        </span>
+                      )}
+
                     </div>
                   </button>
                 );
