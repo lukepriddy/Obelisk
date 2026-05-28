@@ -21,13 +21,9 @@ const GEMINI_BASE     = 'https://generativelanguage.googleapis.com/v1beta/models
 // Short phrase that showcases tone without being too long (keeps costs minimal)
 const SAMPLE_TEXT = "Welcome. I'm glad you found me here. There's much to discover on this journey.";
 
-// Only voices confirmed valid by the Gemini TTS API.
-// Iocaste, Isonoe, Altair, Hydrus were rejected as unsupported.
+// Remaining 6 — first 16 already uploaded, daily quota hit on 2026-05-28.
 const VOICES = [
-  'Kore', 'Aoede', 'Leda', 'Zephyr', 'Callirrhoe', 'Autonoe', 'Despina',
-  'Erinome', 'Laomedeia', 'Pulcherrima', 'Vindemiatrix',
-  'Fenrir', 'Puck', 'Charon', 'Orus', 'Enceladus', 'Gacrux',
-  'Rasalgethi', 'Sadachbia', 'Sadaltager', 'Schedar', 'Umbriel',
+  'Gacrux', 'Rasalgethi', 'Sadachbia', 'Sadaltager', 'Schedar', 'Umbriel',
 ];
 
 // ── WAV header builder ────────────────────────────────────────────────────────
