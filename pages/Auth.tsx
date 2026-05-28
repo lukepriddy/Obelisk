@@ -4,7 +4,7 @@ import { MapPin, Mail, ArrowLeft } from 'lucide-react';
 
 export const Auth: React.FC = () => {
   const [email, setEmail]     = useState('');
-  const [code, setCode]       = useState(['', '', '', '', '', '']);
+  const [code, setCode]       = useState(['', '', '', '', '', '', '', '']);
   const [step, setStep]       = useState<'email' | 'code'>('email');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -29,10 +29,10 @@ export const Auth: React.FC = () => {
 
   const handleCodeChange = (index: number, value: string) => {
     // Allow paste of full 6-digit code
-    if (value.length === 6 && /^\d{6}$/.test(value)) {
+    if (value.length === 8 && /^\d{8}$/.test(value)) {
       const digits = value.split('');
       setCode(digits);
-      inputRefs.current[5]?.focus();
+      inputRefs.current[7]?.focus();
       verifyCode(digits.join(''));
       return;
     }
@@ -40,7 +40,7 @@ export const Auth: React.FC = () => {
     const next = [...code];
     next[index] = digit;
     setCode(next);
-    if (digit && index < 5) inputRefs.current[index + 1]?.focus();
+    if (digit && index < 7) inputRefs.current[index + 1]?.focus();
     if (next.every(d => d !== '')) verifyCode(next.join(''));
   };
 
@@ -57,7 +57,7 @@ export const Auth: React.FC = () => {
     setLoading(false);
     if (error) {
       setErrorMsg('Incorrect code — check your email and try again.');
-      setCode(['', '', '', '', '', '']);
+      setCode(['', '', '', '', '', '', '', '']);
       inputRefs.current[0]?.focus();
     }
     // On success Supabase fires onAuthStateChange → App.tsx handles navigation
@@ -65,7 +65,7 @@ export const Auth: React.FC = () => {
 
   const handleBack = () => {
     setStep('email');
-    setCode(['', '', '', '', '', '']);
+    setCode(['', '', '', '', '', '', '', '']);
     setErrorMsg(null);
   };
 
@@ -119,7 +119,7 @@ export const Auth: React.FC = () => {
               </form>
 
               <p className="mt-5 text-[11px] text-center text-zinc-600">
-                We'll email you a 6-digit code — no password needed.
+                We'll email you an 8-digit code — no password needed.
               </p>
             </>
           ) : (
@@ -131,7 +131,7 @@ export const Auth: React.FC = () => {
                 </div>
                 <h2 className="text-xl font-bold text-white">Check your email</h2>
                 <p className="text-zinc-400 text-sm">
-                  Enter the 6-digit code sent to<br />
+                  Enter the 8-digit code sent to<br />
                   <span className="text-white font-medium">{email}</span>
                 </p>
               </div>
@@ -149,7 +149,7 @@ export const Auth: React.FC = () => {
                     onChange={(e) => handleCodeChange(i, e.target.value)}
                     onKeyDown={(e) => handleCodeKeyDown(i, e)}
                     disabled={loading}
-                    className="w-11 h-14 text-center text-xl font-bold bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-emerald-500 transition-colors disabled:opacity-50"
+                    className="w-9 h-12 text-center text-lg font-bold bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-emerald-500 transition-colors disabled:opacity-50"
                   />
                 ))}
               </div>
