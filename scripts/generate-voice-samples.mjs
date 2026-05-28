@@ -15,7 +15,7 @@ const SUPABASE_URL    = 'https://pzlgiurtjrmkpbjlaabz.supabase.co';
 const SUPABASE_KEY    = process.env.SUPABASE_SERVICE_KEY; // service role key (NOT anon key)
 const BUCKET          = 'audio';
 const PREFIX          = 'voice-samples';
-const TTS_MODEL       = 'gemini-3.1-flash-preview-tts';
+const TTS_MODEL       = 'gemini-2.5-flash-preview-tts';
 const GEMINI_BASE     = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 // Short phrase that showcases tone without being too long (keeps costs minimal)
