@@ -201,6 +201,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
       fixed inset-0 z-[5000] flex flex-col border
       md:inset-auto md:bottom-6 md:right-6 md:w-[420px] md:h-[600px]
       md:rounded-2xl md:shadow-2xl
+      animate-in fade-in duration-200
       ${t.root}
     `}>
 
