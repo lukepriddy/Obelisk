@@ -15,17 +15,19 @@ const SUPABASE_URL    = 'https://pzlgiurtjrmkpbjlaabz.supabase.co';
 const SUPABASE_KEY    = process.env.SUPABASE_SERVICE_KEY; // service role key (NOT anon key)
 const BUCKET          = 'audio';
 const PREFIX          = 'voice-samples';
-const TTS_MODEL       = 'gemini-2.5-flash-preview-tts';
+const TTS_MODEL       = 'gemini-3.1-flash-preview-tts';
 const GEMINI_BASE     = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 // Short phrase that showcases tone without being too long (keeps costs minimal)
 const SAMPLE_TEXT = "Welcome. I'm glad you found me here. There's much to discover on this journey.";
 
+// Only voices confirmed valid by the Gemini TTS API.
+// Iocaste, Isonoe, Altair, Hydrus were rejected as unsupported.
 const VOICES = [
   'Kore', 'Aoede', 'Leda', 'Zephyr', 'Callirrhoe', 'Autonoe', 'Despina',
-  'Erinome', 'Iocaste', 'Isonoe', 'Laomedeia', 'Pulcherrima', 'Vindemiatrix',
-  'Fenrir', 'Puck', 'Charon', 'Orus', 'Altair', 'Enceladus', 'Gacrux',
-  'Hydrus', 'Rasalgethi', 'Sadachbia', 'Sadaltager', 'Schedar', 'Umbriel',
+  'Erinome', 'Laomedeia', 'Pulcherrima', 'Vindemiatrix',
+  'Fenrir', 'Puck', 'Charon', 'Orus', 'Enceladus', 'Gacrux',
+  'Rasalgethi', 'Sadachbia', 'Sadaltager', 'Schedar', 'Umbriel',
 ];
 
 // ── WAV header builder ────────────────────────────────────────────────────────
@@ -55,30 +57,35 @@ function pcmToWav(pcmBuffer, sampleRate = 24000, channels = 1, bitsPerSample = 1
 
 // ── Generate one voice sample via Gemini TTS ──────────────────────────────────
 async function generatePcm(voiceName) {
-  const res = await fetch(
-    `${GEMINI_BASE}/${TTS_MODEL}:generateContent?key=${GEMINI_KEY}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: SAMPLE_TEXT }] }],
-        generationConfig: {
-          responseModalities: ['AUDIO'],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: { voiceName },
-            },
-          },
+  const url = `${GEMINI_BASE}/${TTS_MODEL}:generateContent?key=${GEMINI_KEY}`;
+  const body = {
+    contents: [{ parts: [{ text: SAMPLE_TEXT }] }],
+    generationConfig: {
+      responseModalities: ['AUDIO'],
+      speechConfig: {
+        voiceConfig: {
+          prebuiltVoiceConfig: { voiceName },
         },
-      }),
-    }
-  );
+      },
+    },
+  };
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
 
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error?.message ?? `HTTP ${res.status}`);
+
+  if (!res.ok) {
+    throw new Error(`Gemini ${res.status}: ${JSON.stringify(data.error ?? data)}`);
+  }
 
   const b64 = data?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-  if (!b64) throw new Error('No audio data in response');
+  if (!b64) {
+    throw new Error(`No audio in response: ${JSON.stringify(data).slice(0, 300)}`);
+  }
   return Buffer.from(b64, 'base64');
 }
 
@@ -111,7 +118,25 @@ async function uploadWav(voiceName, wavBuffer) {
 if (!GEMINI_KEY)   { console.error('Missing GEMINI_API_KEY');      process.exit(1); }
 if (!SUPABASE_KEY) { console.error('Missing SUPABASE_SERVICE_KEY'); process.exit(1); }
 
-console.log(`Generating ${VOICES.length} voice samples…\n`);
+// ── Ensure the storage bucket exists ─────────────────────────────────────────
+process.stdout.write(`Ensuring "${BUCKET}" storage bucket exists… `);
+const bucketRes = await fetch(`${SUPABASE_URL}/storage/v1/bucket`, {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${SUPABASE_KEY}`,
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({ id: BUCKET, name: BUCKET, public: true }),
+});
+const bucketData = await bucketRes.json();
+if (bucketRes.ok || bucketData.message?.includes('already exists') || bucketData.error?.includes('already exists')) {
+  console.log('✓');
+} else {
+  console.error(`\nFailed to create bucket: ${JSON.stringify(bucketData)}`);
+  process.exit(1);
+}
+
+console.log(`\nGenerating ${VOICES.length} voice samples…\n`);
 
 const results = {};
 
@@ -128,8 +153,11 @@ for (const voice of VOICES) {
     results[voice] = null;
   }
 
-  // Small delay to avoid hammering the API
-  await new Promise(r => setTimeout(r, 400));
+  // Gemini 2.5 Flash TTS limit is 10 RPM — wait 7s between each call
+  if (VOICES.indexOf(voice) < VOICES.length - 1) {
+    process.stdout.write('  (waiting 7s for rate limit…)\n');
+    await new Promise(r => setTimeout(r, 7000));
+  }
 }
 
 // ── Print constants.ts snippet ────────────────────────────────────────────────
