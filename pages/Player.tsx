@@ -432,7 +432,7 @@ export const Player: React.FC = () => {
 
         return (
           <div
-            className="absolute inset-0 z-[2000] flex flex-col items-center"
+            className="absolute inset-0 z-[2000] flex flex-col items-center overflow-hidden"
             style={{ backgroundColor: bg, fontFamily }}
           >
             {/* ── FIXED HEADER — title always visible ── */}
@@ -447,7 +447,7 @@ export const Player: React.FC = () => {
             </div>
 
             {/* ── SCROLLABLE MIDDLE — image, description, map, coords ── */}
-            <div className="flex-1 overflow-y-auto w-full max-w-sm px-5" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+            <div className="flex-1 min-h-0 overflow-y-auto w-full max-w-sm px-5" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
               <div className="w-full max-w-sm mx-auto flex flex-col items-center text-center gap-5 pb-4">
 
                 {tour.welcome_image_url && (
@@ -831,7 +831,7 @@ export const Player: React.FC = () => {
               </button>
             )}
             {/* Map style picker */}
-            <div className="relative">
+            <div className="relative" onClick={e => e.stopPropagation()}>
               <button
                 onClick={() => setShowMapPicker(p => !p)}
                 className="w-10 h-10 flex items-center justify-center rounded-xl active:opacity-60 transition-opacity"
