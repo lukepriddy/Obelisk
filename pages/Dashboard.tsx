@@ -57,9 +57,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ user }) => {
 
   const handleDeleteTour = async (tourId: string) => {
     setDeletingId(tourId);
-    await dbDeleteTour(tourId);
-    setTours(prev => prev.filter(t => t.id !== tourId));
-    setConfirmDeleteId(null);
+    const ok = await dbDeleteTour(tourId);
+    if (ok) {
+      setTours(prev => prev.filter(t => t.id !== tourId));
+      setConfirmDeleteId(null);
+    } else {
+      alert('Could not delete the tour. Please try again.');
+    }
     setDeletingId(null);
   };
 
@@ -128,42 +132,44 @@ export const Dashboard: React.FC<DashboardProps> = ({ user }) => {
                     </button>
                   </div>
                 ) : (
-                  <div className="flex items-center justify-between mt-4">
-                    {/* Left: Edit + Delete */}
-                    <div className="flex items-center gap-3">
+                  <div className="flex flex-col gap-3 mt-2 pt-3 border-t border-zinc-100">
+                    {/* Row 1: Edit | Delete + Share */}
+                    <div className="flex items-center justify-between">
                       <Link
                         to={`/editor/${tour.id}`}
-                        className="flex items-center gap-1 text-sm text-zinc-600 hover:text-emerald-600 font-medium"
+                        className="flex items-center gap-1.5 text-sm text-zinc-600 hover:text-emerald-600 font-medium transition-colors"
                       >
-                        <Edit size={16} /> Edit
+                        <Edit size={15} /> Edit
                       </Link>
-                      <button
-                        onClick={() => setConfirmDeleteId(tour.id)}
-                        title="Delete tour"
-                        className="text-zinc-300 hover:text-red-400 transition-colors"
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => copyPlayerLink(tour.id)}
+                          title="Share player link"
+                          className="flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-700 transition-colors"
+                        >
+                          {copiedId === tour.id
+                            ? <><Check size={15} className="text-emerald-500" /><span className="text-emerald-600 text-xs font-medium">Copied!</span></>
+                            : <><Link2 size={15} /><span className="text-xs">Share</span></>}
+                        </button>
+                        <button
+                          onClick={() => setConfirmDeleteId(tour.id)}
+                          title="Delete tour"
+                          className="text-zinc-300 hover:text-red-400 transition-colors"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
                     </div>
 
-                    {/* Right: Share + Play */}
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => copyPlayerLink(tour.id)}
-                        title="Copy player link"
-                        className="flex items-center gap-1 text-sm text-zinc-400 hover:text-zinc-700 transition-colors"
-                      >
-                        {copiedId === tour.id
-                          ? <><Check size={15} className="text-emerald-500" /><span className="text-emerald-600 text-xs font-medium">Copied!</span></>
-                          : <Link2 size={15} />}
-                      </button>
-                      <Link
-                        to={`/player/${tour.id}`}
-                        className="flex items-center gap-1 text-sm bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-full hover:bg-emerald-200 font-medium transition-colors"
-                      >
-                        <Play size={16} /> Play
-                      </Link>
-                    </div>
+                    {/* Row 2: Preview button (sim mode on, creator only) */}
+                    <Link
+                      to={`/player/${tour.id}?preview=1`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm bg-emerald-100 text-emerald-700 hover:bg-emerald-200 font-semibold transition-colors"
+                    >
+                      <Play size={15} /> Preview
+                    </Link>
                   </div>
                 )}
               </div>

@@ -144,7 +144,7 @@ export const Auth: React.FC = () => {
                     ref={el => { inputRefs.current[i] = el; }}
                     type="text"
                     inputMode="numeric"
-                    maxLength={6}
+                    maxLength={1}
                     value={digit}
                     onChange={(e) => handleCodeChange(i, e.target.value)}
                     onKeyDown={(e) => handleCodeKeyDown(i, e)}

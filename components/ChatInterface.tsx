@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Zone, ChatMessage } from '../types';
 import { geminiService } from '../services/geminiService';
 import { audioService } from '../services/audioService';
-import { Mic, X, Send, Square } from 'lucide-react';
+import { Mic, Send, Square, ChevronDown } from 'lucide-react';
 
 interface ChatInterfaceProps {
   zone: Zone;
@@ -12,42 +12,53 @@ interface ChatInterfaceProps {
 }
 
 export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onUnlock, theme = 'dark' }) => {
-  const [history, setHistory]     = useState<ChatMessage[]>([]);
-  const [isReady, setIsReady]     = useState(false);
-  const [isSending, setIsSending] = useState(false);
+  const [history, setHistory]       = useState<ChatMessage[]>([]);
+  const [isReady, setIsReady]       = useState(false);
+  const [isSending, setIsSending]   = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [errorMsg, setErrorMsg]   = useState<string | null>(null);
-  const [inputText, setInputText] = useState('');
+  const [errorMsg, setErrorMsg]     = useState<string | null>(null);
+  const [inputText, setInputText]   = useState('');
   const [isRecording, setIsRecording] = useState(false);
 
   const scrollRef      = useRef<HTMLDivElement>(null);
+  const textareaRef    = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<any>(null);
   const micStreamRef   = useRef<MediaStream | null>(null);
   const hasGreetedRef  = useRef(false);
+  const hasUnlockedRef = useRef(false);
   const speakingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Textarea auto-resize ──────────────────────────────────────────────────
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 140) + 'px';
+  }, [inputText]);
 
   // ── Theme tokens ──────────────────────────────────────────────────────────
   const dk = theme === 'dark';
   const t = {
-    root:         dk ? 'bg-zinc-950 border-zinc-800'          : 'bg-white border-zinc-200',
-    header:       dk ? 'border-zinc-800'                      : 'border-zinc-200',
-    headerText:   dk ? 'text-white'                           : 'text-zinc-900',
-    headerMuted:  dk ? 'text-zinc-500'                        : 'text-zinc-500',
-    closeBtn:     dk ? 'text-zinc-500 hover:text-white hover:bg-zinc-800' : 'text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100',
-    errorBg:      dk ? 'bg-red-500/10 border-red-500/30 text-red-300' : 'bg-red-50 border-red-200 text-red-600',
-    userBubble:   'bg-indigo-600 text-white rounded-br-md',
-    aiBubble:     dk ? 'bg-zinc-800 text-zinc-100 rounded-bl-md' : 'bg-zinc-100 text-zinc-900 rounded-bl-md',
-    typingDot:    dk ? 'bg-zinc-400'  : 'bg-zinc-400',
-    typingBg:     dk ? 'bg-zinc-800'  : 'bg-zinc-100',
-    inputBar:     dk ? 'border-zinc-800' : 'border-zinc-200',
-    inputField:   dk ? 'bg-zinc-800 border-zinc-700 text-white placeholder-zinc-500 focus:border-indigo-500/60'
-                     : 'bg-zinc-100 border-zinc-200 text-zinc-900 placeholder-zinc-400 focus:border-indigo-400',
-    micBtn:       dk ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300' : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-600',
-    sendActive:   'bg-indigo-600 hover:bg-indigo-500 text-white',
-    sendInactive: dk ? 'bg-zinc-900 text-zinc-700 cursor-not-allowed' : 'bg-zinc-100 text-zinc-400 cursor-not-allowed',
+    root:           dk ? 'bg-zinc-950 border-zinc-800/80' : 'bg-white border-zinc-200',
+    header:         dk ? 'border-zinc-800'                : 'border-zinc-200',
+    headerText:     dk ? 'text-white'                     : 'text-zinc-900',
+    headerMuted:    dk ? 'text-zinc-500'                  : 'text-zinc-500',
+    closeBtn:       dk ? 'text-zinc-400 hover:text-white hover:bg-zinc-800' : 'text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100',
+    errorBg:        dk ? 'bg-red-500/10 border-red-500/30 text-red-300' : 'bg-red-50 border-red-200 text-red-600',
+    userBubble:     'bg-indigo-600 text-white rounded-br-md',
+    aiBubble:       dk ? 'bg-zinc-800 text-zinc-100 rounded-bl-md' : 'bg-zinc-100 text-zinc-900 rounded-bl-md',
+    typingDot:      dk ? 'bg-zinc-400' : 'bg-zinc-400',
+    typingBg:       dk ? 'bg-zinc-800' : 'bg-zinc-100',
+    inputBar:       dk ? 'border-zinc-800' : 'border-zinc-200',
+    inputField:     dk ? 'bg-zinc-800 border-zinc-700 text-white placeholder-zinc-500 focus:border-indigo-500/60'
+                       : 'bg-zinc-100 border-zinc-200 text-zinc-900 placeholder-zinc-400 focus:border-indigo-400',
+    micBtn:         dk ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300' : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-600',
+    sendActive:     'bg-indigo-600 hover:bg-indigo-500 text-white',
+    sendInactive:   dk ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed' : 'bg-zinc-100 text-zinc-400 cursor-not-allowed',
     recordingLabel: dk ? 'text-red-400' : 'text-red-500',
-    spinnerBorder: dk ? 'border-zinc-700 border-t-indigo-400' : 'border-zinc-300 border-t-indigo-500',
-    spinnerText:  dk ? 'text-zinc-500' : 'text-zinc-500',
+    spinnerBorder:  dk ? 'border-zinc-700 border-t-indigo-400' : 'border-zinc-300 border-t-indigo-500',
+    spinnerText:    dk ? 'text-zinc-500' : 'text-zinc-500',
+    handle:         dk ? 'bg-white/20' : 'bg-black/15',
     statusDot: (state: 'speaking' | 'loading' | 'ready') =>
       state === 'speaking' ? 'bg-indigo-400 animate-pulse'
       : state === 'loading' ? 'bg-amber-400 animate-pulse'
@@ -55,35 +66,36 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   };
 
   // ── Audio playback ────────────────────────────────────────────────────────
-  const playAudio = async (buffer: AudioBuffer, onDone?: () => void) => {
-    const ctx = audioService.context;
-    if (!ctx) { setIsSpeaking(false); onDone?.(); return; }
-    if (ctx.state === 'suspended') await ctx.resume();
+  const playAudio = async (buffer: AudioBuffer) => {
+    try {
+      const ctx = audioService.context;
+      if (!ctx) return;
+      if (ctx.state === 'suspended') await ctx.resume();
 
-    setIsSpeaking(true);
-    if (speakingTimerRef.current) clearTimeout(speakingTimerRef.current);
-    speakingTimerRef.current = setTimeout(() => {
-      setIsSpeaking(false);
-      onDone?.();
-    }, (buffer.duration + 3) * 1000);
-
-    const src = ctx.createBufferSource();
-    src.buffer = buffer;
-    src.connect(ctx.destination);
-    src.start(0);
-    src.onended = () => {
+      setIsSpeaking(true);
       if (speakingTimerRef.current) clearTimeout(speakingTimerRef.current);
+      speakingTimerRef.current = setTimeout(() => setIsSpeaking(false), (buffer.duration + 3) * 1000);
+
+      const src = ctx.createBufferSource();
+      src.buffer = buffer;
+      src.connect(ctx.destination);
+      src.start(0);
+      src.onended = () => {
+        if (speakingTimerRef.current) clearTimeout(speakingTimerRef.current);
+        setIsSpeaking(false);
+      };
+    } catch (err) {
+      console.warn('playAudio failed:', err);
       setIsSpeaking(false);
-      onDone?.();
-    };
+    }
   };
 
   // ── Auto-scroll ───────────────────────────────────────────────────────────
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [history, isSpeaking]);
+  }, [history, isSending]);
 
-  // ── Fetch and show greeting on mount ─────────────────────────────────────
+  // ── Greeting on mount ─────────────────────────────────────────────────────
   useEffect(() => {
     if (hasGreetedRef.current) return;
     hasGreetedRef.current = true;
@@ -92,24 +104,22 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
       const greetingPrompt = zone.greeting_message
         ? `[The player has arrived. Your exact opening line is: "${zone.greeting_message}" — say it now, word for word, then wait for the player to respond.]`
         : '[The player has arrived at your location. Greet them briefly and in character, then wait for them to respond.]';
-
       try {
         const { text } = await geminiService.generateCharacterResponse(
-          [],
-          greetingPrompt,
+          [], greetingPrompt,
           zone.character_prompt || 'You are a helpful assistant.',
           zone.voice_style || 'Kore',
         );
         setHistory([{ role: 'model', text }]);
         setIsReady(true);
-      } catch {
+      } catch (err) {
+        console.warn('Greeting failed:', err);
         setErrorMsg('Could not reach the character. Check your connection and try again.');
         setIsReady(true);
       }
     };
-
     fetchGreeting();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Speech recognition ────────────────────────────────────────────────────
   const setupSpeechRecognition = () => {
@@ -119,8 +129,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
     recognition.continuous = false;
     recognition.interimResults = true;
     recognition.onresult = (e: any) => {
-      let interim = '';
-      let final = '';
+      let interim = '', final = '';
       for (let i = e.resultIndex; i < e.results.length; i++) {
         if (e.results[i].isFinal) final += e.results[i][0].transcript;
         else interim += e.results[i][0].transcript;
@@ -132,14 +141,20 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
     recognitionRef.current = recognition;
   };
 
+  const stopRecording = () => {
+    if (recognitionRef.current && isRecording) {
+      try { recognitionRef.current.stop(); } catch {}
+      setIsRecording(false);
+    }
+  };
+
   const toggleMic = async () => {
     if (!recognitionRef.current) {
       setupSpeechRecognition();
       if (!recognitionRef.current) return;
     }
     if (isRecording) {
-      recognitionRef.current.stop();
-      setIsRecording(false);
+      stopRecording();
     } else {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -157,6 +172,10 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
     const text = inputText.trim();
     if (!text || isSending) return;
 
+    // Stop any active recording BEFORE clearing the input so onresult
+    // can't race and refill the input after we clear it.
+    stopRecording();
+
     const newHistory: ChatMessage[] = [...history, { role: 'user', text }];
     setHistory(newHistory);
     setInputText('');
@@ -166,20 +185,23 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
     try {
       const conversationHistory = newHistory.filter(m => m.role === 'user' || m.role === 'model');
       const { text: replyText, audioBuffer } = await geminiService.generateCharacterResponse(
-        conversationHistory.slice(0, -1),
-        text,
+        conversationHistory.slice(0, -1), text,
         zone.character_prompt || 'You are a helpful assistant.',
         zone.voice_style || 'Kore',
       );
 
       setHistory(prev => [...prev, { role: 'model', text: replyText }]);
 
-      if (audioBuffer) {
-        await playAudio(audioBuffer, () => {
-          if (zone.avatar_unlock_zone_id && onUnlock) onUnlock(zone.avatar_unlock_zone_id);
-        });
+      // Fire zone unlock exactly once, immediately on reply text arriving —
+      // not gated on TTS completing, not repeated on subsequent messages.
+      if (!hasUnlockedRef.current && zone.avatar_unlock_zone_id && onUnlock) {
+        hasUnlockedRef.current = true;
+        onUnlock(zone.avatar_unlock_zone_id);
       }
-    } catch {
+
+      if (audioBuffer) await playAudio(audioBuffer);
+    } catch (err) {
+      console.warn('sendMessage failed:', err);
       setErrorMsg('Something went wrong. Try again.');
     } finally {
       setIsSending(false);
@@ -187,8 +209,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   };
 
   const handleClose = () => {
-    if (micStreamRef.current) micStreamRef.current.getTracks().forEach(t => t.stop());
-    if (recognitionRef.current) try { recognitionRef.current.stop(); } catch {}
+    stopRecording();
+    if (micStreamRef.current) { micStreamRef.current.getTracks().forEach(t => t.stop()); micStreamRef.current = null; }
+    if (speakingTimerRef.current) clearTimeout(speakingTimerRef.current);
     onClose();
   };
 
@@ -197,19 +220,27 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className={`
-      fixed inset-0 z-[5000] flex flex-col border
-      md:inset-auto md:bottom-6 md:right-6 md:w-[420px] md:h-[600px]
-      md:rounded-2xl md:shadow-2xl
-      animate-in fade-in duration-200
-      ${t.root}
-    `}>
-
-      {/* Header */}
-      <div
-        className={`flex items-center gap-3 px-4 pb-3 border-b shrink-0 rounded-t-2xl ${t.header}`}
-        style={{ paddingTop: 'calc(12px + env(safe-area-inset-top, 0px))' }}
+    <div
+      className={`
+        fixed inset-0 z-[5000]
+        flex flex-col
+        md:inset-auto md:bottom-6 md:right-6
+        md:w-[420px] md:h-[600px]
+        md:rounded-2xl md:border md:shadow-2xl
+        ${t.root}
+      `}
+    >
+      {/* ── Drag handle — also a close affordance ── */}
+      <button
+        onClick={handleClose}
+        aria-label="Close"
+        className="flex items-center justify-center pt-3 pb-1.5 w-full shrink-0"
       >
+        <div className={`w-10 h-[3px] rounded-full ${t.handle}`} />
+      </button>
+
+      {/* ── Header ── */}
+      <div className={`flex items-center gap-3 px-4 pt-0.5 pb-3 border-b shrink-0 ${t.header}`}>
         {zone.character_image_url ? (
           <div className="relative shrink-0">
             <img src={zone.character_image_url} alt={zone.title} className="w-9 h-9 rounded-full object-cover" />
@@ -218,25 +249,23 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
         ) : (
           <div className={`w-2 h-2 rounded-full shrink-0 transition-colors ${t.statusDot(dotState)}`} />
         )}
-
         <div className="flex-1 min-w-0">
           <h3 className={`font-semibold text-sm leading-tight truncate ${t.headerText}`}>{zone.title}</h3>
           <p className={`text-[10px] uppercase tracking-wider mt-0.5 ${t.headerMuted}`}>
             {isSpeaking ? 'Speaking...' : isSending ? 'Thinking...' : !isReady ? 'Starting...' : 'Ready'}
           </p>
         </div>
-
         <button
           onClick={handleClose}
           className={`w-9 h-9 flex items-center justify-center rounded-full transition-colors shrink-0 ${t.closeBtn}`}
+          aria-label="Close chat"
         >
-          <X size={18} />
+          <ChevronDown size={20} />
         </button>
       </div>
 
-      {/* Chat log */}
+      {/* ── Chat log ── */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-3 min-h-0">
-
         {!isReady && (
           <div className={`flex items-center justify-center gap-2 py-8 ${t.spinnerText}`}>
             <div className={`w-5 h-5 border-2 rounded-full animate-spin ${t.spinnerBorder}`} />
@@ -271,10 +300,10 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
         )}
       </div>
 
-      {/* Input bar */}
+      {/* ── Input bar ── */}
       <div
         className={`px-3 pt-2 shrink-0 border-t ${t.inputBar}`}
-        style={{ paddingBottom: 'calc(8px + env(safe-area-inset-bottom, 0px))' }}
+        style={{ paddingBottom: 'calc(10px + env(safe-area-inset-bottom, 0px))' }}
       >
         <div className="flex items-end gap-2">
           <button
@@ -288,14 +317,15 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
           </button>
 
           <textarea
-            className={`flex-1 border rounded-2xl px-3.5 py-2.5 text-sm focus:outline-none resize-none leading-snug disabled:opacity-40 ${t.inputField}`}
+            ref={textareaRef}
+            className={`flex-1 border rounded-2xl px-3.5 py-2.5 focus:outline-none resize-none leading-snug disabled:opacity-40 ${t.inputField}`}
             placeholder={!isReady ? 'Starting…' : isSending ? 'Thinking…' : 'Message…'}
             value={inputText}
             rows={1}
             disabled={isLoading}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-            style={{ maxHeight: '100px' }}
+            style={{ fontSize: '16px', overflowY: 'hidden' }}
           />
 
           <button

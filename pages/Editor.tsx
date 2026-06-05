@@ -139,6 +139,9 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [undoStack, setUndoStack] = useState<Array<{ type: 'create' | 'delete'; zone: Zone }>>([]);
 
+  // Pending zone updates — flushed on Save so all changes go out in one batch.
+  const pendingZoneUpdatesRef = useRef<Map<string, Partial<Zone>>>(new Map());
+
   useEffect(() => {
     if (tourId) loadData(tourId);
   }, [tourId]);
@@ -152,6 +155,21 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
   }, [hasUnsavedChanges]);
+
+  // 2) ⌘S / Ctrl+S keyboard shortcut — ref keeps the handler fresh every render.
+  // Initialized with a no-op; the effect below syncs it before any user interaction.
+  const saveTourRef = useRef<() => Promise<void>>(() => Promise.resolve());
+  useEffect(() => { saveTourRef.current = saveTour; });
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault();
+        saveTourRef.current();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []); // empty — always calls latest via ref
 
 
   const loadData = async (id: string) => {
@@ -203,9 +221,14 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
     setRightPanel('zone');
   };
 
-  const updateZone = async (id: string, updates: Partial<Zone>) => {
+  const updateZone = (id: string, updates: Partial<Zone>) => {
     setZones(prev => prev.map(z => z.id === id ? { ...z, ...updates } : z));
-    if (!id.startsWith('temp_')) await dbUpdateZone(id, updates);
+    if (!id.startsWith('temp_')) {
+      // Merge into the pending queue — flushed when the user presses Save.
+      const existing = pendingZoneUpdatesRef.current.get(id) ?? {};
+      pendingZoneUpdatesRef.current.set(id, { ...existing, ...updates });
+      setHasUnsavedChanges(true);
+    }
   };
 
   const deleteZone = async (id: string) => {
@@ -248,21 +271,32 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
   const saveTour = async () => {
     if (!tour) return;
     setSaving(true);
-    await dbUpdateTour(tour.id, {
-      title: tour.title,
-      description: tour.description,
-      welcome_subtitle: tour.welcome_subtitle,
-      welcome_image_url: tour.welcome_image_url,
-      accent_color: tour.accent_color,
-      bg_color: tour.bg_color,
-      text_color: tour.text_color,
-      font_style: tour.font_style,
-      map_style: tour.map_style,
-      player_theme: tour.player_theme,
-      is_public: tour.is_public,
-      lat: tour.lat,
-      lng: tour.lng,
-    });
+
+    // Flush all pending zone updates in parallel with the tour save.
+    const zoneSaves = Array.from(pendingZoneUpdatesRef.current.entries()).map(
+      ([id, updates]) => dbUpdateZone(id, updates)
+    );
+
+    await Promise.all([
+      ...zoneSaves,
+      dbUpdateTour(tour.id, {
+        title: tour.title,
+        description: tour.description,
+        welcome_subtitle: tour.welcome_subtitle,
+        welcome_image_url: tour.welcome_image_url,
+        accent_color: tour.accent_color,
+        bg_color: tour.bg_color,
+        text_color: tour.text_color,
+        font_style: tour.font_style,
+        map_style: tour.map_style,
+        player_theme: tour.player_theme,
+        is_public: tour.is_public,
+        lat: tour.lat,
+        lng: tour.lng,
+      }),
+    ]);
+
+    pendingZoneUpdatesRef.current.clear(); // Only cleared after all writes confirm
     setSaving(false);
     setHasUnsavedChanges(false);
     setSavedOk(true);
@@ -356,16 +390,18 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
                  </button>
                  <div className="flex items-center gap-2">
                    {hasUnsavedChanges && !saving && (
-                     <span className="text-[10px] text-amber-400 font-medium animate-pulse">Unsaved</span>
+                     <span className="text-xs text-amber-400 font-medium animate-pulse">Unsaved changes</span>
                    )}
                    {savedOk && !hasUnsavedChanges && (
-                     <span className="text-[10px] text-emerald-400 font-medium">Saved ✓</span>
+                     <span className="text-xs text-emerald-400 font-medium">Saved ✓</span>
                    )}
                    <button
                      onClick={saveTour}
-                     className={`relative p-2 rounded text-white transition-colors ${hasUnsavedChanges ? 'bg-amber-600 hover:bg-amber-500' : 'bg-emerald-600 hover:bg-emerald-500'}`}
+                     title="Save (⌘S)"
+                     className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded text-white text-xs font-semibold transition-all ${hasUnsavedChanges ? 'bg-amber-500 hover:bg-amber-400 shadow-lg shadow-amber-900/40' : 'bg-emerald-600 hover:bg-emerald-500'}`}
                    >
-                     {saving ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>}
+                     {saving ? <Loader2 className="animate-spin" size={14}/> : <Save size={14}/>}
+                     Save
                    </button>
                  </div>
              </div>
@@ -376,6 +412,7 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
             ref={mapRef}
             center={tour.lat === 0 && tour.lng === 0 ? MAP_DEFAULT_CENTER : [tour.lat, tour.lng]}
             zoom={MAP_DEFAULT_ZOOM}
+            maxZoom={22}
             style={{ height: '100%', width: '100%', background: '#09090b' }}
             zoomControl={false}
             scrollWheelZoom={true}
@@ -384,6 +421,8 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
               key={tour.map_style || 'dark'}
               url={(MAP_STYLES[tour.map_style || 'dark'] || MAP_STYLES.dark).url}
               attribution={(MAP_STYLES[tour.map_style || 'dark'] || MAP_STYLES.dark).attribution}
+              maxNativeZoom={19}
+              maxZoom={22}
             />
             <EnsureWheelZoom />
             <MapInteraction tool={activeTool} onMapClick={handleMapClick} />
@@ -472,13 +511,21 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
       {(selectedZoneId || rightPanel === 'tour') && (
         <div className="w-80 bg-zinc-900 border-l border-zinc-800 p-4 shadow-2xl z-20 h-full overflow-y-auto shrink-0 animate-in slide-in-from-right-10 custom-scrollbar">
           {selectedZoneId && selectedZone ? (
+            selectedZone.id.startsWith('temp_') ? (
+              <div className="flex flex-col items-center justify-center gap-3 py-20 text-zinc-500">
+                <Loader2 size={22} className="animate-spin text-emerald-500" />
+                <span className="text-sm">Creating zone…</span>
+              </div>
+            ) : (
             <ZoneForm
               zone={selectedZone}
               onUpdate={(u) => updateZone(selectedZone.id, u)}
               onDelete={() => deleteZone(selectedZone.id)}
               zonesList={zones}
             />
+            )
           ) : rightPanel === 'tour' && tour ? (
+
             <TourInfoPanel tour={tour} onUpdate={updateTourFields} />
           ) : (
             <div className="text-zinc-500 text-center mt-20">Select a zone</div>

@@ -82,9 +82,10 @@ export const updateTour = async (tourId: string, updates: Partial<Tour>): Promis
   if (error) console.error('updateTour:', error);
 };
 
-export const deleteTour = async (tourId: string): Promise<void> => {
+export const deleteTour = async (tourId: string): Promise<boolean> => {
   const { error } = await supabase.from('tours').delete().eq('id', tourId);
-  if (error) console.error('deleteTour:', error);
+  if (error) { console.error('deleteTour:', error); return false; }
+  return true;
 };
 
 // ── Zone helpers ──────────────────────────────────────────────────────────────

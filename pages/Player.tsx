@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Circle, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { getTourById, getZonesByTourId } from '../services/db';
@@ -40,18 +40,32 @@ const InvalidateSize = () => {
 export const Player: React.FC = () => {
   const { tourId } = useParams<{ tourId: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const isPreview = searchParams.get('preview') === '1';
   
   const [tour, setTour] = useState<Tour | null>(null);
   const [zones, setZones] = useState<Zone[]>([]);
   const [userPos, setUserPos] = useState<[number, number] | null>(null);
   const [loading, setLoading] = useState(true);
+  const [gpsError, setGpsError] = useState<string | null>(null);
   const [audioStarted, setAudioStarted] = useState(false);
-  const [simulationMode, setSimulationMode] = useState(true);
+  const [simulationMode, setSimulationMode] = useState(isPreview);
   const [activeZones, setActiveZones] = useState<{title: string, volume: number}[]>([]);
 
   // Character Interaction
   const [activeCharacterZone, setActiveCharacterZone] = useState<Zone | null>(null);
+  // persistedCharacterZone keeps the last character zone so the chat
+  // session (and history) survives briefly leaving the zone radius.
+  const [persistedCharacterZone, setPersistedCharacterZone] = useState<Zone | null>(null);
+  const persistedCharZoneRef = useRef<Zone | null>(null);
   const [showChat, setShowChat] = useState(false);
+  // Incremented only when entering a *different* character zone, so the
+  // ChatInterface re-mounts for a fresh session.  Re-entering the same
+  // zone keeps history alive.
+  const [chatKey, setChatKey] = useState(0);
+  // Stickiness: delay clearing activeCharacterZone so brief exits don't
+  // dismiss the "Talk to" button or break an open conversation.
+  const charZoneExitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Tour info sheet — separate mounted/visible states for smooth CSS transition
   const [tourInfoMounted, setTourInfoMounted] = useState(false);
@@ -149,7 +163,7 @@ export const Player: React.FC = () => {
               }
             } else if (prereqMet) {
               visitedZoneIdsRef.current = new Set([...visitedZoneIdsRef.current, zone.id]);
-              if (zone.entry_message) showHud(zone.title, zone.entry_message);
+              if (zone.entry_message && zone.type !== 'character') showHud(zone.title, zone.entry_message);
             }
           }
 
@@ -187,11 +201,32 @@ export const Player: React.FC = () => {
       setActiveZones(activeState);
 
       if (foundCharZone?.id !== activeCharacterZone?.id) {
-        setActiveCharacterZone(foundCharZone);
+        if (foundCharZone) {
+          // Entered a character zone — apply immediately, cancel any exit timer
+          if (charZoneExitTimerRef.current) clearTimeout(charZoneExitTimerRef.current);
+          setActiveCharacterZone(foundCharZone);
+
+          // If this is a DIFFERENT zone from what's persisted, start a fresh session
+          if (persistedCharZoneRef.current?.id !== foundCharZone.id) {
+            persistedCharZoneRef.current = foundCharZone;
+            setPersistedCharacterZone(foundCharZone);
+            setChatKey(k => k + 1);
+            setShowChat(false);
+          }
+        } else {
+          // Left the zone — give a 6-second grace period before clearing
+          if (charZoneExitTimerRef.current) clearTimeout(charZoneExitTimerRef.current);
+          charZoneExitTimerRef.current = setTimeout(() => {
+            setActiveCharacterZone(null);
+          }, 6000);
+        }
       }
     }, 200);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      if (charZoneExitTimerRef.current) clearTimeout(charZoneExitTimerRef.current);
+    };
   }, [audioStarted, userPos, zones, activeCharacterZone]);
 
   // GPS Watcher
@@ -202,8 +237,18 @@ export const Player: React.FC = () => {
         const newPos: [number, number] = [pos.coords.latitude, pos.coords.longitude];
         setUserPos(newPos);
         simPosRef.current = newPos;
+        setGpsError(null); // clear any previous error on successful fix
       },
-      (err) => console.error(err),
+      (err) => {
+        console.error(err);
+        if (err.code === err.PERMISSION_DENIED) {
+          setGpsError('Location access was denied. Please enable location services and reload to play this experience.');
+        } else if (err.code === err.POSITION_UNAVAILABLE) {
+          setGpsError('Your location could not be determined. Please check your GPS signal and try again.');
+        } else {
+          setGpsError('Could not get your location. Please try again or check your device settings.');
+        }
+      },
       { enableHighAccuracy: true }
     );
     return () => navigator.geolocation.clearWatch(watchId);
@@ -215,25 +260,32 @@ export const Player: React.FC = () => {
     setTour(t);
     const z = await getZonesByTourId(id);
     setZones(z);
-    
-    // Set initial position to tour center
-    setUserPos([t.lat, t.lng]);
-    simPosRef.current = [t.lat, t.lng];
-    
+
+    // In preview/sim mode seed position at the tour start point.
+    // In GPS mode leave userPos null — the watchPosition callback will set it
+    // once the device gets a real fix, preventing fake zone triggers.
+    if (isPreview) {
+      setUserPos([t.lat, t.lng]);
+      simPosRef.current = [t.lat, t.lng];
+    }
+
     setLoading(false);
   };
 
   const startAudio = async () => {
     await audioService.init();
-    await Promise.all(
-      zones
-        .filter(z => z.type === 'audio')
-        .map(z => audioService.loadAudio(z.id, z.media_url))
-    );
+    zones.filter(z => z.type === 'audio').forEach(z => audioService.loadAudio(z.id, z.media_url));
     setAudioStarted(true);
   };
 
-  if (loading || !tour || !userPos) return <div className="flex h-screen items-center justify-center bg-zinc-950 text-white">Loading Experience...</div>;
+  if (loading || !tour) return (
+    <div className="flex h-screen items-center justify-center bg-zinc-950 text-white">
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+        <span className="text-sm text-zinc-400">Loading Experience…</span>
+      </div>
+    </div>
+  );
 
   // ── Player theme tokens ───────────────────────────────────────────────────
   // Welcome screen always uses the tour's own bg/text/accent colors.
@@ -266,14 +318,19 @@ export const Player: React.FC = () => {
   // Top bar height constant (used to offset floating elements)
   const TOP_BAR = 56; // px, matches h-14
 
+  // In GPS mode userPos is null until the device gets a fix.
+  // Use the tour start point as the map center fallback so Leaflet never crashes.
+  const mapCenter: [number, number] = userPos ?? [tour.lat, tour.lng];
+
   return (
     <div className="h-full relative bg-zinc-950">
 
       {/* ── FULL-SCREEN MAP ── */}
       <div className="absolute inset-0">
         <MapContainer
-          center={userPos}
+          center={mapCenter}
           zoom={17}
+          maxZoom={22}
           style={{ height: '100%', width: '100%' }}
           zoomControl={false}
         >
@@ -281,10 +338,12 @@ export const Player: React.FC = () => {
             key={tour?.map_style || 'dark'}
             url={(MAP_STYLES[tour?.map_style || 'dark'] || MAP_STYLES.dark).url}
             attribution={(MAP_STYLES[tour?.map_style || 'dark'] || MAP_STYLES.dark).attribution}
+            maxNativeZoom={19}
+            maxZoom={22}
           />
           
           <InvalidateSize />
-          {!simulationMode && <MapRecenter lat={userPos[0]} lng={userPos[1]} />}
+          {!simulationMode && userPos && <MapRecenter lat={userPos[0]} lng={userPos[1]} />}
 
           {/* Zones */}
           {zones.map(zone => {
@@ -314,21 +373,23 @@ export const Player: React.FC = () => {
              );
           })}
 
-          {/* User Marker */}
-          <Marker 
-            position={userPos} 
-            icon={UserIcon}
-            draggable={simulationMode}
-            eventHandlers={{
-              drag: (e) => {
-                 const marker = e.target;
-                 const pos = marker.getLatLng();
-                 const newPos: [number, number] = [pos.lat, pos.lng];
-                 setUserPos(newPos);
-                 simPosRef.current = newPos;
-              }
-            }}
-          />
+          {/* User Marker — only render when we have an actual position */}
+          {userPos && (
+            <Marker
+              position={userPos}
+              icon={UserIcon}
+              draggable={simulationMode}
+              eventHandlers={{
+                drag: (e) => {
+                  const marker = e.target;
+                  const pos = marker.getLatLng();
+                  const newPos: [number, number] = [pos.lat, pos.lng];
+                  setUserPos(newPos);
+                  simPosRef.current = newPos;
+                }
+              }}
+            />
+          )}
         </MapContainer>
       </div>
 
@@ -402,12 +463,28 @@ export const Player: React.FC = () => {
 
               <p className="text-xs opacity-40" style={{ color: textColor }}>Headphones are recommended.</p>
 
+              {/* GPS error banner */}
+              {gpsError && (
+                <div className="w-full rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300 leading-snug text-center">
+                  {gpsError}
+                </div>
+              )}
+
+              {/* GPS acquiring indicator (GPS mode only, no error) */}
+              {!isPreview && !userPos && !gpsError && (
+                <div className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 flex items-center justify-center gap-2 text-sm" style={{ color: textColor }}>
+                  <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin opacity-60" />
+                  <span className="opacity-60">Waiting for GPS signal…</span>
+                </div>
+              )}
+
               <button
                 onClick={startAudio}
-                className="flex items-center justify-center gap-2 text-white w-full py-4 rounded-2xl text-lg font-bold shadow-xl active:scale-95 transition-transform"
+                disabled={!isPreview && !userPos}
+                className="flex items-center justify-center gap-2 text-white w-full py-4 rounded-2xl text-lg font-bold shadow-xl active:scale-95 transition-transform disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
                 style={{ backgroundColor: accent }}
               >
-                <PlayCircle size={22} /> Begin Experience
+                <PlayCircle size={22} /> Begin
               </button>
 
             </div>
@@ -492,10 +569,11 @@ export const Player: React.FC = () => {
       )}
 
       {/* ── FLOATING PANEL — Now Playing + Character card, centered above bottom bar ── */}
-      {audioStarted && (
+      {/* Hidden when chat is open — the chat sheet occupies the bottom of the screen */}
+      {audioStarted && !showChat && (
         <div
           className="absolute left-1/2 -translate-x-1/2 z-[1500] flex flex-col items-end gap-2 w-full max-w-sm px-4"
-          style={{ bottom: 'calc(88px + env(safe-area-inset-bottom, 0px))' }}
+          style={{ bottom: 'calc(76px + env(safe-area-inset-bottom, 0px))' }}
         >
           {/* Now Playing card */}
           {activeZones.length > 0 && (
@@ -526,7 +604,7 @@ export const Player: React.FC = () => {
           )}
 
           {/* Character card */}
-          {activeCharacterZone && !showChat && (
+          {activeCharacterZone && (
             <div
               className="w-full rounded-2xl overflow-hidden animate-in slide-in-from-bottom-3"
               style={{
@@ -562,7 +640,7 @@ export const Player: React.FC = () => {
                   style={{ backgroundColor: accent, boxShadow: '0 2px 12px rgba(0,0,0,0.25)' }}
                 >
                   <Mic size={16} />
-                  Talk to {activeCharacterZone.title}
+                  {persistedCharacterZone?.id === activeCharacterZone?.id ? 'Continue conversation' : `Talk to ${activeCharacterZone.title}`}
                 </button>
               </div>
             </div>
@@ -570,18 +648,24 @@ export const Player: React.FC = () => {
         </div>
       )}
 
-      {/* ── CHAT INTERFACE ── */}
-      {showChat && activeCharacterZone && (
-        <ChatInterface
-          zone={activeCharacterZone}
-          theme={tour.player_theme || 'dark'}
-          onClose={() => setShowChat(false)}
-          onUnlock={(zoneId) => {
-            unlockedZoneIdsRef.current = new Set([...unlockedZoneIdsRef.current, zoneId]);
-            const unlockedZone = zones.find(z => z.id === zoneId);
-            if (unlockedZone) showHud('Zone Unlocked', `${unlockedZone.title} is now accessible.`);
-          }}
-        />
+      {/* ── CHAT INTERFACE ────────────────────────────────────────────────────
+           Keep the component mounted while a character zone is persisted so
+           conversation history and the Gemini session survive briefly leaving
+           the radius. `hidden` (display:none) hides it including its fixed
+           children, preserving state without rendering anything visible.   */}
+      {persistedCharacterZone && (
+        <div key={chatKey} className={showChat ? 'contents' : 'hidden'}>
+          <ChatInterface
+            zone={persistedCharacterZone}
+            theme={tour.player_theme || 'dark'}
+            onClose={() => setShowChat(false)}
+            onUnlock={(zoneId) => {
+              unlockedZoneIdsRef.current = new Set([...unlockedZoneIdsRef.current, zoneId]);
+              const unlockedZone = zones.find(z => z.id === zoneId);
+              if (unlockedZone) showHud('Zone Unlocked', `${unlockedZone.title} is now accessible.`);
+            }}
+          />
+        </div>
       )}
 
       {/* ── HUD NOTIFICATION — drops below top bar ── */}
@@ -688,17 +772,23 @@ export const Player: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-1 shrink-0">
+            {isPreview && (
+              <button
+                onClick={() => setSimulationMode(!simulationMode)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg active:opacity-60 transition-opacity"
+                title="Toggle GPS / Simulation"
+              >
+                <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${simulationMode ? 'bg-amber-400' : 'bg-emerald-400'}`} />
+                <span className={`text-[10px] font-bold uppercase tracking-wide ${simulationMode ? 'text-amber-400' : 'text-emerald-400'}`}>
+                  {simulationMode ? 'Sim' : 'GPS'}
+                </span>
+              </button>
+            )}
             <button
-              onClick={() => setSimulationMode(!simulationMode)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg active:opacity-60 transition-opacity"
-              title="Toggle GPS / Simulation"
+              onClick={openTourInfo}
+              className="w-10 h-10 flex items-center justify-center rounded-xl active:opacity-60 transition-opacity"
+              style={{ color: th.barMuted }}
             >
-              <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${simulationMode ? 'bg-amber-400' : 'bg-emerald-400'}`} />
-              <span className={`text-[10px] font-bold uppercase tracking-wide ${simulationMode ? 'text-amber-400' : 'text-emerald-400'}`}>
-                {simulationMode ? 'Sim' : 'GPS'}
-              </span>
-            </button>
-            <button className="w-10 h-10 flex items-center justify-center rounded-xl active:opacity-60 transition-opacity" style={{ color: th.barMuted }}>
               <Menu size={20} />
             </button>
           </div>
@@ -706,37 +796,39 @@ export const Player: React.FC = () => {
         </div>
       </div>
 
-      {/* ── BOTTOM BAR ── */}
-      <div
-        className="absolute bottom-0 left-0 right-0 z-[1000]"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
-        onTouchStart={(e) => { swipeTouchStartY.current = e.touches[0].clientY; }}
-        onTouchEnd={(e) => {
-          const delta = swipeTouchStartY.current - e.changedTouches[0].clientY;
-          if (delta > 24) openTourInfo();
-        }}
-      >
-        <button
-          onClick={openTourInfo}
-          className="w-full backdrop-blur-md flex flex-col items-center gap-1.5 pt-2.5 pb-3 active:opacity-70 transition-opacity"
-          style={{
-            backgroundColor: th.barBg,
-            borderTop: `1px solid ${th.barBorder}`,
+      {/* ── BOTTOM CARD — floating card style (not edge-to-edge bar) ── */}
+      {!showChat && (
+        <div
+          className="absolute left-3 right-3 z-[1000]"
+          style={{ bottom: 'calc(12px + env(safe-area-inset-bottom, 0px))' }}
+          onTouchStart={(e) => { swipeTouchStartY.current = e.touches[0].clientY; }}
+          onTouchEnd={(e) => {
+            const delta = swipeTouchStartY.current - e.changedTouches[0].clientY;
+            if (delta > 24) openTourInfo();
           }}
         >
-          <div className="w-9 h-[3px] rounded-full" style={{ backgroundColor: th.sheetHandle }} />
-          <span className="font-bold text-base tracking-tight mt-0.5 px-6 text-center leading-snug" style={{ color: th.barText }}>
-            {tour.title}
-          </span>
-          <span className="flex items-center gap-1 text-xs" style={{ color: th.barMuted }}>
-            {tour.welcome_subtitle
-              ? <span className="truncate max-w-[220px]">{tour.welcome_subtitle}</span>
-              : <span>Tap for details</span>
-            }
-            <ChevronUp size={11} className="shrink-0" />
-          </span>
-        </button>
-      </div>
+          <button
+            onClick={openTourInfo}
+            className="w-full backdrop-blur-xl flex items-center gap-3 px-4 py-3 rounded-2xl active:opacity-70 transition-opacity"
+            style={{
+              backgroundColor: th.cardBg,
+              border: `1px solid ${th.cardBorder}`,
+              boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+            }}
+          >
+            {tour.welcome_image_url && (
+              <img src={tour.welcome_image_url} alt="" className="w-9 h-9 rounded-xl object-cover shrink-0" />
+            )}
+            <div className="flex-1 min-w-0 text-left">
+              <div className="font-bold text-sm leading-tight truncate" style={{ color: th.cardText }}>{tour.title}</div>
+              <div className="text-xs mt-0.5 truncate" style={{ color: th.cardMuted }}>
+                {tour.welcome_subtitle || 'Tap for details'}
+              </div>
+            </div>
+            <ChevronUp size={16} className="shrink-0 opacity-50" style={{ color: th.cardMuted }} />
+          </button>
+        </div>
+      )}
 
     </div>
   );

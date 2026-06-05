@@ -56,10 +56,10 @@ export const VOICES: { name: string; description: string; gender: string; sample
   { name: 'Enceladus',    description: 'Smooth, professional',   gender: 'M', sampleUrl: 'https://pzlgiurtjrmkpbjlaabz.supabase.co/storage/v1/object/public/audio/voice-samples/enceladus.wav' },
   { name: 'Gacrux',       description: 'Relaxed, conversational',gender: 'M', sampleUrl: 'https://pzlgiurtjrmkpbjlaabz.supabase.co/storage/v1/object/public/audio/voice-samples/gacrux.wav' },
   { name: 'Rasalgethi',   description: 'Warm, welcoming',        gender: 'M', sampleUrl: 'https://pzlgiurtjrmkpbjlaabz.supabase.co/storage/v1/object/public/audio/voice-samples/rasalgethi.wav' },
-  { name: 'Sadachbia',    description: 'Energetic, punchy',      gender: 'M' },
-  { name: 'Sadaltager',   description: 'Steady, trustworthy',    gender: 'M' },
-  { name: 'Schedar',      description: 'Deep, thoughtful',       gender: 'M' },
-  { name: 'Umbriel',      description: 'Quiet, intense',         gender: 'M' },
+  { name: 'Sadachbia',    description: 'Energetic, punchy',      gender: 'M', sampleUrl: 'https://pzlgiurtjrmkpbjlaabz.supabase.co/storage/v1/object/public/audio/voice-samples/sadachbia.wav' },
+  { name: 'Sadaltager',   description: 'Steady, trustworthy',    gender: 'M', sampleUrl: 'https://pzlgiurtjrmkpbjlaabz.supabase.co/storage/v1/object/public/audio/voice-samples/sadaltager.wav' },
+  { name: 'Schedar',      description: 'Deep, thoughtful',       gender: 'M', sampleUrl: 'https://pzlgiurtjrmkpbjlaabz.supabase.co/storage/v1/object/public/audio/voice-samples/schedar.wav' },
+  { name: 'Umbriel',      description: 'Quiet, intense',         gender: 'M', sampleUrl: 'https://pzlgiurtjrmkpbjlaabz.supabase.co/storage/v1/object/public/audio/voice-samples/umbriel.wav' },
 ];
 
 export const CHARACTER_TEMPLATES: { label: string; icon: string; prompt: string }[] = [
@@ -85,11 +85,13 @@ export const CHARACTER_TEMPLATES: { label: string; icon: string; prompt: string 
   },
 ];
 
-// Sample audio files for testing since we don't have a real backend storage in this demo
+// Ambient preset audio — hosted in Supabase storage.
 export const SAMPLE_AUDIO_FILES = [
-  { label: 'Nature Ambiance', url: 'https://actions.google.com/sounds/v1/ambiences/forest_morning.ogg' },
-  { label: 'City Traffic', url: 'https://actions.google.com/sounds/v1/ambiences/city_traffic.ogg' },
-  { label: 'Jazz Music', url: 'https://actions.google.com/sounds/v1/ambiences/coffee_shop.ogg' },
-  { label: 'Rain', url: 'https://actions.google.com/sounds/v1/weather/rain_heavy_loud.ogg' },
-  { label: 'Thunder', url: 'https://actions.google.com/sounds/v1/weather/thunder_crack.ogg' },
+  { label: 'Rain',          url: 'https://pzlgiurtjrmkpbjlaabz.supabase.co/storage/v1/object/public/audio/ambient-presets/rain.ogg' },
+  { label: 'Heavy Rain',    url: 'https://pzlgiurtjrmkpbjlaabz.supabase.co/storage/v1/object/public/audio/ambient-presets/rain-heavy.ogg' },
+  { label: 'Thunder',       url: 'https://pzlgiurtjrmkpbjlaabz.supabase.co/storage/v1/object/public/audio/ambient-presets/thunder.ogg' },
+  { label: 'Thunder Crack', url: 'https://pzlgiurtjrmkpbjlaabz.supabase.co/storage/v1/object/public/audio/ambient-presets/thunder-crack.ogg' },
+  { label: 'Forest',        url: 'https://pzlgiurtjrmkpbjlaabz.supabase.co/storage/v1/object/public/audio/ambient-presets/forest.wav' },
+  { label: 'Wind',          url: 'https://pzlgiurtjrmkpbjlaabz.supabase.co/storage/v1/object/public/audio/ambient-presets/wind.ogg' },
+  { label: 'Coffee Shop',   url: 'https://pzlgiurtjrmkpbjlaabz.supabase.co/storage/v1/object/public/audio/ambient-presets/coffee-shop.ogg' },
 ];

@@ -1,13 +1,19 @@
+/**
+ * audioService.ts
+ *
+ * Uses HTMLAudioElement for zone audio playback — no CORS or fetch required,
+ * so any publicly accessible URL works. Volume is controlled directly via
+ * audioEl.volume (clamped 0–1). The AudioContext is kept alive solely for
+ * TTS playback in ChatInterface (playBuffer / context).
+ */
+
 interface NodeData {
-  source: AudioBufferSourceNode | null;
-  gain: GainNode;
-  buffer: AudioBuffer | null;
+  audioEl: HTMLAudioElement;
   url: string;
-  /** True after a non-looping audio has played through once in the current visit.
-   *  Resets to false when the user exits the zone (volume drops to 0). */
+  /** True after a non-looping audio has played through once this visit.
+   *  Resets to false when the user exits the zone. */
   played: boolean;
-  /** True after a 'destroy' zone has played through. Never resets — zone is
-   *  silenced for the rest of the session. */
+  /** True after a 'destroy' zone has played through. Never resets. */
   destroyed: boolean;
 }
 
@@ -24,114 +30,87 @@ export class AudioService {
   }
 
   async init() {
-    if (!this.context) return;
-    if (this.context.state === 'suspended') {
+    if (this.context?.state === 'suspended') {
       await this.context.resume();
     }
     this.isUnlocked = true;
   }
 
   async resume() {
-    if (this.context && this.context.state === 'suspended') {
+    if (this.context?.state === 'suspended') {
       await this.context.resume();
     }
   }
 
-  async loadAudio(zoneId: string, url: string) {
-    if (!this.context) return;
-    if (this.nodes.has(zoneId)) return; // Already loaded
+  /**
+   * Call once per zone during startAudio() — which runs inside a user-gesture
+   * handler — so that subsequent play() calls from setInterval are allowed by
+   * the browser's autoplay policy.
+   */
+  loadAudio(zoneId: string, url: string) {
+    if (!url || this.nodes.has(zoneId)) return;
 
     try {
-      const response = await fetch(url);
-      if (!response.ok) {
-        console.warn(`Audio fetch failed for ${zoneId}: ${response.status} ${url}`);
-        return;
-      }
-      const arrayBuffer = await response.arrayBuffer();
-      const audioBuffer = await this.context.decodeAudioData(arrayBuffer);
-
-      const gainNode = this.context.createGain();
-      gainNode.gain.value = 0; // Start silent
-      gainNode.connect(this.context.destination);
-
-      this.nodes.set(zoneId, {
-        source: null,
-        gain: gainNode,
-        buffer: audioBuffer,
-        url,
-        played: false,
-        destroyed: false,
-      });
+      const audioEl = new Audio(url);
+      // preload='none' — stream on demand; avoids any upfront network cost or
+      // accidental playback during initialisation.
+      audioEl.preload = 'none';
+      this.nodes.set(zoneId, { audioEl, url, played: false, destroyed: false });
     } catch (e) {
-      console.error(`Failed to load audio for ${zoneId}`, e);
+      console.error(`Failed to set up audio for zone ${zoneId}:`, e);
     }
   }
 
   updateVolumes(zones: { id: string; volume: number; loop?: boolean; destroyOnEnd?: boolean }[]) {
-    if (!this.context || !this.isUnlocked) return;
-
-    const now = this.context.currentTime;
+    if (!this.isUnlocked) return;
 
     zones.forEach(zone => {
       const nodeData = this.nodes.get(zone.id);
-      if (!nodeData || !nodeData.buffer) return;
+      if (!nodeData) return;
 
-      const { gain } = nodeData;
+      const { audioEl } = nodeData;
 
-      // Destroyed zone: keep gain at 0 and do nothing else
+      // Destroyed zones stay silent for the session.
       if (nodeData.destroyed) {
-        gain.gain.setTargetAtTime(0, now, 0.1);
+        audioEl.volume = 0;
         return;
       }
 
-      // Zone is not active (user outside or inaccessible)
+      // Outside zone (or inaccessible) — stop and reset.
       if (zone.volume <= 0.01) {
-        gain.gain.setTargetAtTime(0, now, 0.1);
-        // Stop the source if it's still running (user left mid-playback)
-        if (nodeData.source) {
-          try { nodeData.source.stop(); } catch (_) {}
-          nodeData.source = null;
+        audioEl.volume = 0;
+        if (!audioEl.paused) {
+          audioEl.pause();
+          audioEl.currentTime = 0;
         }
-        // Reset played so the zone can play again on next entry
         nodeData.played = false;
         return;
       }
 
-      // Zone is active — set the target volume
-      gain.gain.setTargetAtTime(zone.volume, now, 0.1);
+      // Inside zone — HTMLAudioElement.volume must be 0–1.
+      audioEl.volume = Math.min(1, Math.max(0, zone.volume));
 
-      const shouldLoop = zone.loop === true;
+      // Start playback if not already running and not yet played this visit.
+      if (!nodeData.played && audioEl.paused) {
+        audioEl.loop = zone.loop === true;
+        audioEl.play().catch(e => console.warn(`Zone audio play failed (${zone.id}):`, e));
 
-      // Only start a new source if one isn't already playing and it hasn't
-      // played through yet this visit
-      if (!nodeData.source && !nodeData.played) {
-        const newSource = this.context!.createBufferSource();
-        newSource.buffer = nodeData.buffer;
-        newSource.loop = shouldLoop;
-        newSource.connect(gain);
-        newSource.start(0);
-
-        if (!shouldLoop) {
-          // When audio plays through naturally to its end
-          newSource.onended = () => {
-            if (nodeData.source !== newSource) return; // Stale reference
-            nodeData.source = null;
+        if (!zone.loop) {
+          audioEl.onended = () => {
             if (zone.destroyOnEnd) {
               nodeData.destroyed = true;
-              gain.gain.setTargetAtTime(0, this.context!.currentTime, 0.3);
+              audioEl.volume = 0;
             } else {
-              // 'stop': mark as played so it doesn't restart while in zone;
-              // will reset when user exits
+              // 'stop': played once per visit, resets when the user exits.
               nodeData.played = true;
             }
           };
         }
-
-        nodeData.source = newSource;
       }
     });
   }
 
+  /** Play a decoded AudioBuffer directly — used by ChatInterface for TTS. */
   playBuffer(buffer: AudioBuffer) {
     if (!this.context) return;
     const source = this.context.createBufferSource();
@@ -142,14 +121,11 @@ export class AudioService {
 
   stopAll() {
     this.nodes.forEach((data) => {
-      if (data.source) {
-        try {
-          data.source.stop();
-        } catch (_) {}
-        data.source.disconnect();
-        data.source = null;
-      }
+      data.audioEl.pause();
+      data.audioEl.src = '';
     });
+    this.nodes.clear();
+    this.isUnlocked = false;
   }
 }
 

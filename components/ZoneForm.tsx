@@ -118,13 +118,29 @@ type AudioSourceType = 'preset' | 'upload' | 'url';
 export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zonesList }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
-  const [sourceType, setSourceType] = useState<AudioSourceType>('upload');
+  const [sourceType, setSourceType] = useState<AudioSourceType>(() => {
+    if (!zone.media_url || zone.media_url.startsWith('blob:')) return 'upload';
+    if (SAMPLE_AUDIO_FILES.some(f => f.url === zone.media_url)) return 'preset';
+    return 'url';
+  });
   const [fileName, setFileName] = useState<string>('');
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [showAllVoices, setShowAllVoices] = useState(false);
   const [audioUploading, setAudioUploading] = useState(false);
   const [imageUploading, setImageUploading] = useState(false);
   const [playingVoice, setPlayingVoice] = useState<string | null>(null);
   const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Cleanup voice preview audio when the form unmounts to prevent ghost playback
+  useEffect(() => {
+    return () => {
+      if (voiceAudioRef.current) {
+        voiceAudioRef.current.pause();
+        voiceAudioRef.current.src = '';
+        voiceAudioRef.current = null;
+      }
+    };
+  }, []);
 
   const playVoiceSample = (voiceName: string, sampleUrl?: string) => {
     if (!sampleUrl) return;
@@ -149,6 +165,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
     const file = e.target.files?.[0];
     if (!file) return;
     setFileName(file.name);
+    setUploadError(null);
     e.target.value = '';
 
     setAudioUploading(true);
@@ -158,8 +175,9 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
     if (url) {
       onUpdate({ media_url: url });
     } else {
-      // Fallback to blob URL so the builder stays usable even if storage isn't set up yet
-      onUpdate({ media_url: URL.createObjectURL(file) });
+      // Do NOT fall back to a blob: URL — blob URLs can't be persisted to the DB
+      // or played back after a page reload. Show an actionable error instead.
+      setUploadError('Upload failed. Check your storage settings or try a different file.');
     }
   };
 
@@ -499,19 +517,26 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
                 </select>
               )}
               {sourceType === 'upload' && (
-                <div
-                  onClick={() => !audioUploading && fileInputRef.current?.click()}
-                  className={`border border-dashed border-zinc-700 p-4 text-center rounded transition-colors ${audioUploading ? 'cursor-wait opacity-60' : 'cursor-pointer hover:bg-zinc-800'}`}
-                >
-                  <input type="file" ref={fileInputRef} className="hidden" accept="audio/*" onChange={handleFileUpload} />
-                  {audioUploading ? (
-                    <span className="flex items-center justify-center gap-2 text-xs text-zinc-400">
-                      <Loader2 size={13} className="animate-spin" /> Uploading…
-                    </span>
-                  ) : (
-                    <span className="text-xs text-zinc-400">{fileName || 'Click to Upload'}</span>
+                <>
+                  <div
+                    onClick={() => !audioUploading && fileInputRef.current?.click()}
+                    className={`border border-dashed border-zinc-700 p-4 text-center rounded transition-colors ${audioUploading ? 'cursor-wait opacity-60' : 'cursor-pointer hover:bg-zinc-800'}`}
+                  >
+                    <input type="file" ref={fileInputRef} className="hidden" accept="audio/*" onChange={handleFileUpload} />
+                    {audioUploading ? (
+                      <span className="flex items-center justify-center gap-2 text-xs text-zinc-400">
+                        <Loader2 size={13} className="animate-spin" /> Uploading…
+                      </span>
+                    ) : (
+                      <span className="text-xs text-zinc-400">{fileName || 'Click to Upload'}</span>
+                    )}
+                  </div>
+                  {uploadError && (
+                    <p className="flex items-center gap-1.5 text-xs text-red-400 mt-1.5">
+                      <AlertCircle size={12} className="shrink-0" /> {uploadError}
+                    </p>
                   )}
-                </div>
+                </>
               )}
               {sourceType === 'url' && (
                  <input
