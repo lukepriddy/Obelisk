@@ -421,12 +421,12 @@ export const Player: React.FC = () => {
 
         return (
           <div
-            className="absolute inset-0 z-[2000] flex flex-col"
+            className="absolute inset-0 z-[2000] flex flex-col items-center"
             style={{ backgroundColor: bg, fontFamily }}
           >
             {/* ── FIXED HEADER — title always visible ── */}
             <div
-              className="shrink-0 px-5 text-center"
+              className="shrink-0 w-full max-w-sm px-5 text-center"
               style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 28px)', paddingBottom: '16px' }}
             >
               <h1 className="text-3xl font-bold leading-tight" style={{ color: textColor }}>{tour.title}</h1>
@@ -436,7 +436,7 @@ export const Player: React.FC = () => {
             </div>
 
             {/* ── SCROLLABLE MIDDLE — image, description, map, coords ── */}
-            <div className="flex-1 overflow-y-auto px-5" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+            <div className="flex-1 overflow-y-auto w-full max-w-sm px-5" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
               <div className="w-full max-w-sm mx-auto flex flex-col items-center text-center gap-5 pb-4">
 
                 {tour.welcome_image_url && (
@@ -477,7 +477,7 @@ export const Player: React.FC = () => {
 
             {/* ── FIXED FOOTER — Begin button always visible ── */}
             <div
-              className="shrink-0 px-5 flex flex-col gap-3"
+              className="shrink-0 w-full max-w-sm px-5 flex flex-col gap-3"
               style={{ paddingTop: '12px', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }}
             >
               {gpsError && (
@@ -832,7 +832,7 @@ export const Player: React.FC = () => {
       </div>
 
       {/* ── BOTTOM BAR ── */}
-      {audioStarted && !showChat && (
+      {audioStarted && (
         <div
           className="fixed bottom-0 left-0 right-0 z-[1000]"
           style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
