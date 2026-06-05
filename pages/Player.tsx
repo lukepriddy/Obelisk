@@ -63,6 +63,8 @@ export const Player: React.FC = () => {
   // ChatInterface re-mounts for a fresh session.  Re-entering the same
   // zone keeps history alive.
   const [chatKey, setChatKey] = useState(0);
+  // Minimized character card — collapses to a small avatar button so the map is usable
+  const [charCardMinimized, setCharCardMinimized] = useState(false);
   // Stickiness: delay clearing activeCharacterZone so brief exits don't
   // dismiss the "Talk to" button or break an open conversation.
   const charZoneExitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -419,65 +421,76 @@ export const Player: React.FC = () => {
 
         return (
           <div
-            className="absolute inset-0 z-[2000] overflow-y-scroll overscroll-none flex flex-col items-center justify-start px-5"
-            style={{ backgroundColor: bg, fontFamily, paddingTop: 'calc(56px + env(safe-area-inset-top, 0px))', paddingBottom: 'calc(48px + env(safe-area-inset-bottom, 0px))' }}
+            className="absolute inset-0 z-[2000] flex flex-col"
+            style={{ backgroundColor: bg, fontFamily }}
           >
-            <div className="w-full max-w-sm flex flex-col items-center text-center gap-5 py-6">
-
-              {tour.welcome_image_url && (
-                <img src={tour.welcome_image_url} alt={tour.title} className="w-48 h-48 object-cover rounded-2xl shadow-2xl" />
-              )}
-
+            {/* ── FIXED HEADER — title always visible ── */}
+            <div
+              className="shrink-0 px-5 text-center"
+              style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 28px)', paddingBottom: '16px' }}
+            >
               <h1 className="text-3xl font-bold leading-tight" style={{ color: textColor }}>{tour.title}</h1>
-
               {tour.welcome_subtitle && (
-                <p className="text-base font-medium" style={{ color: accent }}>{tour.welcome_subtitle}</p>
+                <p className="text-base font-medium mt-1.5" style={{ color: accent }}>{tour.welcome_subtitle}</p>
               )}
+            </div>
 
-              {tour.description && (
-                <p className="text-sm leading-relaxed opacity-80" style={{ color: textColor }}>{tour.description}</p>
-              )}
+            {/* ── SCROLLABLE MIDDLE — image, description, map, coords ── */}
+            <div className="flex-1 overflow-y-auto px-5" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+              <div className="w-full max-w-sm mx-auto flex flex-col items-center text-center gap-5 pb-4">
 
-              <div className="w-full aspect-square rounded-xl overflow-hidden border border-white/10 shadow-lg">
-                <MapContainer
-                  center={[tour.lat, tour.lng]}
-                  zoom={15}
-                  style={{ width: '100%', height: '100%' }}
-                  zoomControl={true}
-                  scrollWheelZoom={true}
-                  attributionControl={false}
+                {tour.welcome_image_url && (
+                  <img src={tour.welcome_image_url} alt={tour.title} className="w-40 h-40 object-cover rounded-2xl shadow-2xl" />
+                )}
+
+                {tour.description && (
+                  <p className="text-sm leading-relaxed opacity-80" style={{ color: textColor }}>{tour.description}</p>
+                )}
+
+                <div className="w-full aspect-square rounded-xl overflow-hidden border border-white/10 shadow-lg">
+                  <MapContainer
+                    center={[tour.lat, tour.lng]}
+                    zoom={15}
+                    style={{ width: '100%', height: '100%' }}
+                    zoomControl={true}
+                    scrollWheelZoom={true}
+                    attributionControl={false}
+                  >
+                    <TileLayer url={mapStyle.url} />
+                    <Marker position={[tour.lat, tour.lng]} icon={StartMarkerIcon} />
+                    <InvalidateSize />
+                  </MapContainer>
+                </div>
+
+                <button
+                  onClick={copyCoords}
+                  className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-medium border border-white/10 transition-colors"
+                  style={{ color: coordsCopied ? accent : textColor }}
                 >
-                  <TileLayer url={mapStyle.url} />
-                  <Marker position={[tour.lat, tour.lng]} icon={StartMarkerIcon} />
-                  <InvalidateSize />
-                </MapContainer>
+                  {coordsCopied ? <><Check size={14} /> Copied!</> : <><Copy size={14} /> Copy start coordinates</>}
+                </button>
+
+                <p className="text-xs opacity-40" style={{ color: textColor }}>Headphones are recommended.</p>
+
               </div>
+            </div>
 
-              <button
-                onClick={copyCoords}
-                className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-medium border border-white/10 transition-colors"
-                style={{ color: coordsCopied ? accent : textColor }}
-              >
-                {coordsCopied ? <><Check size={14} /> Copied!</> : <><Copy size={14} /> Copy start coordinates</>}
-              </button>
-
-              <p className="text-xs opacity-40" style={{ color: textColor }}>Headphones are recommended.</p>
-
-              {/* GPS error banner */}
+            {/* ── FIXED FOOTER — Begin button always visible ── */}
+            <div
+              className="shrink-0 px-5 flex flex-col gap-3"
+              style={{ paddingTop: '12px', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }}
+            >
               {gpsError && (
                 <div className="w-full rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300 leading-snug text-center">
                   {gpsError}
                 </div>
               )}
-
-              {/* GPS acquiring indicator (GPS mode only, no error) */}
               {!isPreview && !userPos && !gpsError && (
                 <div className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 flex items-center justify-center gap-2 text-sm" style={{ color: textColor }}>
                   <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin opacity-60" />
                   <span className="opacity-60">Waiting for GPS signal…</span>
                 </div>
               )}
-
               <button
                 onClick={startAudio}
                 disabled={!isPreview && !userPos}
@@ -486,7 +499,6 @@ export const Player: React.FC = () => {
               >
                 <PlayCircle size={22} /> Begin
               </button>
-
             </div>
           </div>
         );
@@ -603,8 +615,20 @@ export const Player: React.FC = () => {
             </div>
           )}
 
-          {/* Character card */}
-          {activeCharacterZone && (
+          {/* Character card — minimized: small avatar button; expanded: full card */}
+          {activeCharacterZone && charCardMinimized ? (
+            <button
+              onClick={() => setCharCardMinimized(false)}
+              className="self-end w-14 h-14 rounded-full overflow-hidden animate-in zoom-in-75 duration-200 shadow-2xl"
+              style={{ border: `2px solid ${accent}`, boxShadow: `0 0 0 2px ${accent}40` }}
+              aria-label={`Open ${activeCharacterZone.title}`}
+            >
+              {activeCharacterZone.character_image_url
+                ? <img src={activeCharacterZone.character_image_url} alt={activeCharacterZone.title} className="w-full h-full object-cover" />
+                : <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: accent }}><Mic size={20} color="white" /></div>
+              }
+            </button>
+          ) : activeCharacterZone ? (
             <div
               className="w-full rounded-2xl overflow-hidden animate-in slide-in-from-bottom-3"
               style={{
@@ -614,13 +638,24 @@ export const Player: React.FC = () => {
                 boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
               }}
             >
-              {activeCharacterZone.character_image_url && (
-                <img
-                  src={activeCharacterZone.character_image_url}
-                  alt={activeCharacterZone.title}
-                  className="w-full aspect-square object-cover"
-                />
-              )}
+              {/* Image + minimize button */}
+              <div className="relative">
+                {activeCharacterZone.character_image_url && (
+                  <img
+                    src={activeCharacterZone.character_image_url}
+                    alt={activeCharacterZone.title}
+                    className="w-full aspect-square object-cover"
+                  />
+                )}
+                <button
+                  onClick={() => setCharCardMinimized(true)}
+                  className="absolute top-2 right-2 w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-sm"
+                  style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+                  aria-label="Minimize"
+                >
+                  <X size={14} color="white" />
+                </button>
+              </div>
 
               <div className="px-4 pt-3 pb-4 flex flex-col gap-2.5">
                 <div>
@@ -635,7 +670,7 @@ export const Player: React.FC = () => {
                 </div>
 
                 <button
-                  onClick={() => setShowChat(true)}
+                  onClick={() => { setChatKey(k => k + 1); setShowChat(true); }}
                   className="w-full py-3 rounded-xl font-bold text-white flex items-center justify-center gap-2.5 active:opacity-80 transition-opacity"
                   style={{ backgroundColor: accent, boxShadow: '0 2px 12px rgba(0,0,0,0.25)' }}
                 >
@@ -644,7 +679,7 @@ export const Player: React.FC = () => {
                 </button>
               </div>
             </div>
-          )}
+          ) : null}
         </div>
       )}
 
