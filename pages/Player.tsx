@@ -7,7 +7,7 @@ import { audioService } from '../services/audioService';
 import { getDistance, calculateAttenuation } from '../utils/geo';
 import { Tour, Zone } from '../types';
 import { FONT_STYLES, MAP_STYLES } from '../constants';
-import { PlayCircle, Volume2, Mic, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu } from 'lucide-react';
+import { PlayCircle, Volume2, Mic, Lock, X, KeyRound, Copy, Check, MapPin, ArrowLeft, Menu } from 'lucide-react';
 import { ChatInterface } from '../components/ChatInterface';
 
 // Custom icons
@@ -94,7 +94,6 @@ export const Player: React.FC = () => {
   // Simulation ref to avoid state lag in drag handlers
   const simPosRef = useRef<[number, number] | null>(null);
   // Swipe-up detection on bottom bar
-  const swipeTouchStartY = useRef<number>(0);
 
   useEffect(() => {
     if (tourId) loadTour(tourId);
@@ -573,7 +572,7 @@ export const Player: React.FC = () => {
       {audioStarted && !showChat && (
         <div
           className="absolute left-1/2 -translate-x-1/2 z-[1500] flex flex-col items-end gap-2 w-full max-w-sm px-4"
-          style={{ bottom: 'calc(76px + env(safe-area-inset-bottom, 0px))' }}
+          style={{ bottom: 'calc(16px + env(safe-area-inset-bottom, 0px))' }}
         >
           {/* Now Playing card */}
           {activeZones.length > 0 && (
@@ -796,39 +795,7 @@ export const Player: React.FC = () => {
         </div>
       </div>
 
-      {/* ── BOTTOM CARD — floating card style (not edge-to-edge bar) ── */}
-      {!showChat && (
-        <div
-          className="absolute left-3 right-3 z-[1000]"
-          style={{ bottom: 'calc(12px + env(safe-area-inset-bottom, 0px))' }}
-          onTouchStart={(e) => { swipeTouchStartY.current = e.touches[0].clientY; }}
-          onTouchEnd={(e) => {
-            const delta = swipeTouchStartY.current - e.changedTouches[0].clientY;
-            if (delta > 24) openTourInfo();
-          }}
-        >
-          <button
-            onClick={openTourInfo}
-            className="w-full backdrop-blur-xl flex items-center gap-3 px-4 py-3 rounded-2xl active:opacity-70 transition-opacity"
-            style={{
-              backgroundColor: th.cardBg,
-              border: `1px solid ${th.cardBorder}`,
-              boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-            }}
-          >
-            {tour.welcome_image_url && (
-              <img src={tour.welcome_image_url} alt="" className="w-9 h-9 rounded-xl object-cover shrink-0" />
-            )}
-            <div className="flex-1 min-w-0 text-left">
-              <div className="font-bold text-sm leading-tight truncate" style={{ color: th.cardText }}>{tour.title}</div>
-              <div className="text-xs mt-0.5 truncate" style={{ color: th.cardMuted }}>
-                {tour.welcome_subtitle || 'Tap for details'}
-              </div>
-            </div>
-            <ChevronUp size={16} className="shrink-0 opacity-50" style={{ color: th.cardMuted }} />
-          </button>
-        </div>
-      )}
+      {/* Bottom bar removed — map is full screen. Tour info via ☰ menu. */}
 
     </div>
   );
