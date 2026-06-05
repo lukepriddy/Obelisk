@@ -7,7 +7,7 @@ import { audioService } from '../services/audioService';
 import { getDistance, calculateAttenuation } from '../utils/geo';
 import { Tour, Zone } from '../types';
 import { FONT_STYLES, MAP_STYLES } from '../constants';
-import { PlayCircle, Volume2, Mic, Lock, X, KeyRound, Copy, Check, MapPin, ArrowLeft, Menu } from 'lucide-react';
+import { PlayCircle, Volume2, Mic, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu } from 'lucide-react';
 import { ChatInterface } from '../components/ChatInterface';
 
 // Custom icons
@@ -572,7 +572,7 @@ export const Player: React.FC = () => {
       {audioStarted && !showChat && (
         <div
           className="absolute left-1/2 -translate-x-1/2 z-[1500] flex flex-col items-end gap-2 w-full max-w-sm px-4"
-          style={{ bottom: 'calc(16px + env(safe-area-inset-bottom, 0px))' }}
+          style={{ bottom: 'calc(88px + env(safe-area-inset-bottom, 0px))' }}
         >
           {/* Now Playing card */}
           {activeZones.length > 0 && (
@@ -795,7 +795,34 @@ export const Player: React.FC = () => {
         </div>
       </div>
 
-      {/* Bottom bar removed — map is full screen. Tour info via ☰ menu. */}
+      {/* ── BOTTOM BAR ── */}
+      {!showChat && (
+        <div
+          className="absolute bottom-0 left-0 right-0 z-[1000]"
+          style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+        >
+          <button
+            onClick={openTourInfo}
+            className="w-full backdrop-blur-md flex flex-col items-center gap-1.5 pt-2.5 pb-3 active:opacity-70 transition-opacity"
+            style={{
+              backgroundColor: th.barBg,
+              borderTop: `1px solid ${th.barBorder}`,
+            }}
+          >
+            <div className="w-9 h-[3px] rounded-full" style={{ backgroundColor: th.sheetHandle }} />
+            <span className="font-bold text-base tracking-tight mt-0.5 px-6 text-center leading-snug" style={{ color: th.barText }}>
+              {tour.title}
+            </span>
+            <span className="flex items-center gap-1 text-xs" style={{ color: th.barMuted }}>
+              {tour.welcome_subtitle
+                ? <span className="truncate max-w-[220px]">{tour.welcome_subtitle}</span>
+                : <span>Tap for details</span>
+              }
+              <ChevronUp size={11} className="shrink-0" />
+            </span>
+          </button>
+        </div>
+      )}
 
     </div>
   );
