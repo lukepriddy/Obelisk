@@ -67,14 +67,12 @@ export const Player: React.FC = () => {
   // dismiss the "Talk to" button or break an open conversation.
   const charZoneExitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Tour info sheet — separate mounted/visible states for smooth CSS transition
-  const [tourInfoMounted, setTourInfoMounted] = useState(false);
-  const [tourInfoVisible, setTourInfoVisible] = useState(false);
+  const [tourInfoOpen, setTourInfoOpen] = useState(false);
   const [coordsCopied, setCoordsCopied] = useState(false);
   const sheetDragStartY = useRef<number>(0);
 
-  const openTourInfo  = () => { setTourInfoMounted(true); requestAnimationFrame(() => setTourInfoVisible(true)); };
-  const closeTourInfo = () => { setTourInfoVisible(false); setTimeout(() => setTourInfoMounted(false), 380); };
+  const openTourInfo  = () => setTourInfoOpen(true);
+  const closeTourInfo = () => setTourInfoOpen(false);
 
   // HUD notification
   const [hudNotification, setHudNotification] = useState<{ title: string; message: string } | null>(null);
@@ -492,22 +490,16 @@ export const Player: React.FC = () => {
       })()}
 
       {/* ── TOUR INFO SHEET — smooth CSS transition ── */}
-      {tourInfoMounted && tour && (
+      {tourInfoOpen && tour && (
         <div
-          className="absolute inset-0 z-[3000] flex items-end justify-center"
-          style={{
-            backgroundColor: 'rgba(0,0,0,0.55)',
-            opacity: tourInfoVisible ? 1 : 0,
-            transition: 'opacity 0.3s',
-          }}
+          className="absolute inset-0 z-[3000] flex items-end justify-center animate-in fade-in duration-200"
+          style={{ backgroundColor: 'rgba(0,0,0,0.55)' }}
           onClick={closeTourInfo}
         >
           <div
-            className="w-full max-w-lg flex flex-col rounded-t-3xl shadow-2xl overflow-hidden"
+            className="w-full max-w-lg flex flex-col rounded-t-3xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 duration-300"
             style={{
               backgroundColor: th.sheetBg,
-              transform: tourInfoVisible ? 'translateY(0)' : 'translateY(100%)',
-              transition: 'transform 0.38s cubic-bezier(0.32, 0.72, 0, 1)',
               paddingBottom: 'env(safe-area-inset-bottom, 0px)',
             }}
             onClick={(e) => e.stopPropagation()}
