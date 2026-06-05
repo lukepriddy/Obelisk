@@ -432,23 +432,15 @@ export const Player: React.FC = () => {
 
         return (
           <div
-            className="absolute inset-0 z-[2000] flex flex-col items-center overflow-hidden"
+            className="absolute inset-0 z-[2000] overflow-hidden"
             style={{ backgroundColor: bg, fontFamily }}
           >
-            {/* ── FIXED HEADER — title always visible ── */}
+            {/* ── SCROLL AREA — full height, padded to clear fixed header + footer ── */}
             <div
-              className="shrink-0 w-full max-w-sm px-5 text-center"
-              style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 28px)', paddingBottom: '16px' }}
+              className="absolute inset-0 overflow-y-auto"
+              style={{ scrollbarWidth: 'none', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 90px)', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 110px)' }}
             >
-              <h1 className="text-3xl font-bold leading-tight" style={{ color: textColor }}>{tour.title}</h1>
-              {tour.welcome_subtitle && (
-                <p className="text-base font-medium mt-1.5" style={{ color: accent }}>{tour.welcome_subtitle}</p>
-              )}
-            </div>
-
-            {/* ── SCROLLABLE MIDDLE — image, description, map, coords ── */}
-            <div className="flex-1 min-h-0 overflow-y-auto w-full max-w-sm px-5" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
-              <div className="w-full max-w-sm mx-auto flex flex-col items-center text-center gap-5 pb-4">
+              <div className="w-full max-w-sm mx-auto px-5 flex flex-col items-center text-center gap-5 pb-4">
 
                 {tour.welcome_image_url && (
                   <img src={tour.welcome_image_url} alt={tour.title} className="w-40 h-40 object-cover rounded-2xl shadow-2xl" />
@@ -486,30 +478,53 @@ export const Player: React.FC = () => {
               </div>
             </div>
 
-            {/* ── FIXED FOOTER — Begin button always visible ── */}
+            {/* ── HEADER — absolutely positioned, always on top, solid background ── */}
             <div
-              className="shrink-0 w-full max-w-sm px-5 flex flex-col gap-3"
-              style={{ paddingTop: '12px', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }}
+              className="absolute top-0 left-0 right-0 z-10 text-center"
+              style={{
+                backgroundColor: bg,
+                paddingTop: 'calc(env(safe-area-inset-top, 0px) + 24px)',
+                paddingBottom: '16px',
+              }}
             >
-              {gpsError && (
-                <div className="w-full rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300 leading-snug text-center">
-                  {gpsError}
-                </div>
-              )}
-              {!isPreview && !userPos && !gpsError && (
-                <div className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 flex items-center justify-center gap-2 text-sm" style={{ color: textColor }}>
-                  <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin opacity-60" />
-                  <span className="opacity-60">Waiting for GPS signal…</span>
-                </div>
-              )}
-              <button
-                onClick={startAudio}
-                disabled={!isPreview && !userPos}
-                className="flex items-center justify-center gap-2 text-white w-full py-4 rounded-2xl text-lg font-bold shadow-xl active:scale-95 transition-transform disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
-                style={{ backgroundColor: accent }}
-              >
-                <PlayCircle size={22} /> Begin
-              </button>
+              <div className="w-full max-w-sm mx-auto px-5">
+                <h1 className="text-3xl font-bold leading-tight" style={{ color: textColor }}>{tour.title}</h1>
+                {tour.welcome_subtitle && (
+                  <p className="text-base font-medium mt-1.5" style={{ color: accent }}>{tour.welcome_subtitle}</p>
+                )}
+              </div>
+            </div>
+
+            {/* ── FOOTER — absolutely positioned, always on top, solid background ── */}
+            <div
+              className="absolute bottom-0 left-0 right-0 z-10"
+              style={{
+                backgroundColor: bg,
+                paddingTop: '12px',
+                paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)',
+              }}
+            >
+              <div className="w-full max-w-sm mx-auto px-5 flex flex-col gap-3">
+                {gpsError && (
+                  <div className="w-full rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300 leading-snug text-center">
+                    {gpsError}
+                  </div>
+                )}
+                {!isPreview && !userPos && !gpsError && (
+                  <div className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 flex items-center justify-center gap-2 text-sm" style={{ color: textColor }}>
+                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin opacity-60" />
+                    <span className="opacity-60">Waiting for GPS signal…</span>
+                  </div>
+                )}
+                <button
+                  onClick={startAudio}
+                  disabled={!isPreview && !userPos}
+                  className="flex items-center justify-center gap-2 text-white w-full py-4 rounded-2xl text-lg font-bold shadow-xl active:scale-95 transition-transform disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
+                  style={{ backgroundColor: accent }}
+                >
+                  <PlayCircle size={22} /> Begin
+                </button>
+              </div>
             </div>
           </div>
         );
@@ -842,7 +857,7 @@ export const Player: React.FC = () => {
               </button>
               {showMapPicker && (
                 <div
-                  className="absolute right-0 top-12 rounded-2xl shadow-2xl overflow-hidden z-[2000] w-36"
+                  className="absolute right-0 top-full rounded-2xl shadow-2xl overflow-hidden z-[2000] w-36"
                   style={{ backgroundColor: th.cardBg, border: `1px solid ${th.cardBorder}` }}
                 >
                   {Object.entries(MAP_STYLES).map(([key, val]) => {
