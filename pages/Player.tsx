@@ -7,7 +7,7 @@ import { audioService } from '../services/audioService';
 import { getDistance, calculateAttenuation } from '../utils/geo';
 import { Tour, Zone } from '../types';
 import { FONT_STYLES, MAP_STYLES } from '../constants';
-import { PlayCircle, Volume2, Mic, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu } from 'lucide-react';
+import { PlayCircle, Volume2, Mic, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu, Layers } from 'lucide-react';
 import { ChatInterface } from '../components/ChatInterface';
 
 // Custom icons
@@ -51,6 +51,9 @@ export const Player: React.FC = () => {
   const [audioStarted, setAudioStarted] = useState(false);
   const [simulationMode, setSimulationMode] = useState(isPreview);
   const [activeZones, setActiveZones] = useState<{title: string, volume: number}[]>([]);
+  // Map style — starts at the tour's chosen style, user can override in-session
+  const [mapStyleOverride, setMapStyleOverride] = useState<string | null>(null);
+  const [showMapPicker, setShowMapPicker] = useState(false);
 
   // Character Interaction
   const [activeCharacterZone, setActiveCharacterZone] = useState<Zone | null>(null);
@@ -325,10 +328,12 @@ export const Player: React.FC = () => {
   const mapCenter: [number, number] = userPos ?? [tour.lat, tour.lng];
 
   return (
-    <div className="h-full relative bg-zinc-950 overflow-hidden">
+    <div className="h-full relative bg-zinc-950 overflow-hidden" onClick={() => setShowMapPicker(false)}>
 
       {/* ── FULL-SCREEN MAP ── */}
-      <div className="absolute inset-0">
+      {/* touch-action:none tells the browser to hand ALL touch events to Leaflet,
+          preventing the vertical-scroll ghost that appears during pinch-to-zoom */}
+      <div className="absolute inset-0" style={{ touchAction: 'none' }}>
         <MapContainer
           center={mapCenter}
           zoom={17}
@@ -336,13 +341,19 @@ export const Player: React.FC = () => {
           style={{ height: '100%', width: '100%' }}
           zoomControl={false}
         >
-          <TileLayer
-            key={tour?.map_style || 'dark'}
-            url={(MAP_STYLES[tour?.map_style || 'dark'] || MAP_STYLES.dark).url}
-            attribution={(MAP_STYLES[tour?.map_style || 'dark'] || MAP_STYLES.dark).attribution}
-            maxNativeZoom={19}
-            maxZoom={22}
-          />
+          {(() => {
+            const styleKey = mapStyleOverride || tour?.map_style || 'dark';
+            const styleObj = MAP_STYLES[styleKey] || MAP_STYLES.dark;
+            return (
+              <TileLayer
+                key={styleKey}
+                url={styleObj.url}
+                attribution={styleObj.attribution}
+                maxNativeZoom={19}
+                maxZoom={22}
+              />
+            );
+          })()}
           
           <InvalidateSize />
           {!simulationMode && userPos && <MapRecenter lat={userPos[0]} lng={userPos[1]} />}
@@ -819,6 +830,41 @@ export const Player: React.FC = () => {
                 </span>
               </button>
             )}
+            {/* Map style picker */}
+            <div className="relative">
+              <button
+                onClick={() => setShowMapPicker(p => !p)}
+                className="w-10 h-10 flex items-center justify-center rounded-xl active:opacity-60 transition-opacity"
+                style={{ color: mapStyleOverride ? accent : th.barMuted }}
+                title="Change map style"
+              >
+                <Layers size={18} />
+              </button>
+              {showMapPicker && (
+                <div
+                  className="absolute right-0 top-12 rounded-2xl shadow-2xl overflow-hidden z-[2000] w-36"
+                  style={{ backgroundColor: th.cardBg, border: `1px solid ${th.cardBorder}` }}
+                >
+                  {Object.entries(MAP_STYLES).map(([key, val]) => {
+                    const active = (mapStyleOverride || tour?.map_style || 'dark') === key;
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => { setMapStyleOverride(key); setShowMapPicker(false); }}
+                        className="w-full px-4 py-2.5 text-left text-sm flex items-center justify-between"
+                        style={{
+                          color: active ? accent : th.cardText,
+                          backgroundColor: active ? `${accent}18` : 'transparent',
+                        }}
+                      >
+                        {val.label}
+                        {active && <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: accent }} />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
             <button
               onClick={openTourInfo}
               className="w-10 h-10 flex items-center justify-center rounded-xl active:opacity-60 transition-opacity"
