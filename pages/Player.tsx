@@ -67,12 +67,15 @@ export const Player: React.FC = () => {
   // dismiss the "Talk to" button or break an open conversation.
   const charZoneExitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [tourInfoOpen, setTourInfoOpen] = useState(false);
+  // Tour info sheet — two states so the CSS transition has a painted starting
+  // point before it runs (avoids the mount-flash that animate-in causes).
+  const [tourInfoMounted, setTourInfoMounted] = useState(false);
+  const [tourInfoVisible, setTourInfoVisible] = useState(false);
   const [coordsCopied, setCoordsCopied] = useState(false);
   const sheetDragStartY = useRef<number>(0);
 
-  const openTourInfo  = () => setTourInfoOpen(true);
-  const closeTourInfo = () => setTourInfoOpen(false);
+  const openTourInfo  = () => { setTourInfoMounted(true); requestAnimationFrame(() => setTourInfoVisible(true)); };
+  const closeTourInfo = () => { setTourInfoVisible(false); setTimeout(() => setTourInfoMounted(false), 380); };
 
   // HUD notification
   const [hudNotification, setHudNotification] = useState<{ title: string; message: string } | null>(null);
@@ -490,16 +493,22 @@ export const Player: React.FC = () => {
       })()}
 
       {/* ── TOUR INFO SHEET — smooth CSS transition ── */}
-      {tourInfoOpen && tour && (
+      {tourInfoMounted && tour && (
         <div
-          className="absolute inset-0 z-[3000] flex items-end justify-center animate-in fade-in duration-200"
-          style={{ backgroundColor: 'rgba(0,0,0,0.55)' }}
+          className="absolute inset-0 z-[3000] flex items-end justify-center"
+          style={{
+            backgroundColor: 'rgba(0,0,0,0.55)',
+            opacity: tourInfoVisible ? 1 : 0,
+            transition: 'opacity 0.3s',
+          }}
           onClick={closeTourInfo}
         >
           <div
-            className="w-full max-w-lg flex flex-col rounded-t-3xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 duration-300"
+            className="w-full max-w-lg flex flex-col rounded-t-3xl shadow-2xl overflow-hidden"
             style={{
               backgroundColor: th.sheetBg,
+              transform: tourInfoVisible ? 'translateY(0)' : 'translateY(100%)',
+              transition: 'transform 0.38s cubic-bezier(0.32, 0.72, 0, 1)',
               paddingBottom: 'env(safe-area-inset-bottom, 0px)',
             }}
             onClick={(e) => e.stopPropagation()}
@@ -788,7 +797,7 @@ export const Player: React.FC = () => {
       </div>
 
       {/* ── BOTTOM BAR ── */}
-      {!showChat && (
+      {!showChat && !tourInfoMounted && (
         <div
           className="absolute bottom-0 left-0 right-0 z-[1000]"
           style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
