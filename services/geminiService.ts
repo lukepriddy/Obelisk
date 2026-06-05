@@ -58,6 +58,11 @@ class GeminiService {
       // ── Step 2: TTS ─────────────────────────────────────────────────────────
       let audioBuffer: AudioBuffer | undefined;
 
+      // Ensure the AudioContext is running before TTS (iOS suspends it on inactivity)
+      if (audioService.context?.state === 'suspended') {
+        try { await audioService.context.resume(); } catch {}
+      }
+
       if (aiText.trim().length > 0 && audioService.context) {
         try {
           const { data: ttsData, error: ttsError } = await supabase.functions.invoke(

@@ -4,6 +4,15 @@ import { geminiService } from '../services/geminiService';
 import { audioService } from '../services/audioService';
 import { Mic, Send, Square, ChevronDown } from 'lucide-react';
 
+// Appended to every character system instruction so Gemini never
+// adds stage directions like "(smiles)" or "(pauses solemnly)".
+const NO_STAGE_DIRECTIONS =
+  '\n\nCRITICAL: Respond with spoken words only. ' +
+  'Never include stage directions, action descriptions, or parenthetical ' +
+  'notes about physical actions, expressions, or emotions — e.g. never write ' +
+  '(smiles), (pauses), (My gaze is steady), or anything in parentheses. ' +
+  'Speak only as dialogue, exactly as it would be heard aloud.';
+
 interface ChatInterfaceProps {
   zone: Zone;
   onClose: () => void;
@@ -107,7 +116,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
       try {
         const { text } = await geminiService.generateCharacterResponse(
           [], greetingPrompt,
-          zone.character_prompt || 'You are a helpful assistant.',
+          (zone.character_prompt || 'You are a helpful assistant.') + NO_STAGE_DIRECTIONS,
           zone.voice_style || 'Kore',
         );
         setHistory([{ role: 'model', text }]);
@@ -186,7 +195,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
       const conversationHistory = newHistory.filter(m => m.role === 'user' || m.role === 'model');
       const { text: replyText, audioBuffer } = await geminiService.generateCharacterResponse(
         conversationHistory.slice(0, -1), text,
-        zone.character_prompt || 'You are a helpful assistant.',
+        (zone.character_prompt || 'You are a helpful assistant.') + NO_STAGE_DIRECTIONS,
         zone.voice_style || 'Kore',
       );
 
@@ -265,7 +274,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
       </div>
 
       {/* ── Chat log ── */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-3 min-h-0">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 pt-3 pb-6 flex flex-col gap-3 min-h-0">
         {!isReady && (
           <div className={`flex items-center justify-center gap-2 py-8 ${t.spinnerText}`}>
             <div className={`w-5 h-5 border-2 rounded-full animate-spin ${t.spinnerBorder}`} />

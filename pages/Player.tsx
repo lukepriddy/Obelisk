@@ -495,7 +495,7 @@ export const Player: React.FC = () => {
       {/* ── TOUR INFO SHEET — smooth CSS transition ── */}
       {tourInfoMounted && tour && (
         <div
-          className="absolute inset-0 z-[3000] flex items-end justify-center"
+          className="fixed inset-0 z-[2000] flex items-end justify-center"
           style={{
             backgroundColor: 'rgba(0,0,0,0.55)',
             opacity: tourInfoVisible ? 1 : 0,
@@ -745,7 +745,7 @@ export const Player: React.FC = () => {
 
       {/* ── TOP BAR ── */}
       <div
-        className="absolute top-0 left-0 right-0 z-[1000] backdrop-blur-md"
+        className="fixed top-0 left-0 right-0 z-[1000] backdrop-blur-md"
         style={{
           backgroundColor: th.barBg,
           borderBottom: `1px solid ${th.barBorder}`,
@@ -797,9 +797,9 @@ export const Player: React.FC = () => {
       </div>
 
       {/* ── BOTTOM BAR ── */}
-      {!showChat && (
+      {audioStarted && !showChat && (
         <div
-          className="absolute bottom-0 left-0 right-0 z-[4000]"
+          className="fixed bottom-0 left-0 right-0 z-[1000]"
           style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
         >
           <button
