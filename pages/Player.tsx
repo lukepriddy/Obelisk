@@ -323,7 +323,7 @@ export const Player: React.FC = () => {
   const mapCenter: [number, number] = userPos ?? [tour.lat, tour.lng];
 
   return (
-    <div className="h-full relative bg-zinc-950">
+    <div className="h-full relative bg-zinc-950 overflow-hidden">
 
       {/* ── FULL-SCREEN MAP ── */}
       <div className="absolute inset-0">
@@ -419,7 +419,7 @@ export const Player: React.FC = () => {
 
         return (
           <div
-            className="absolute inset-0 z-[2000] overflow-y-auto flex flex-col items-center justify-start px-5"
+            className="absolute inset-0 z-[2000] overflow-y-scroll overscroll-none flex flex-col items-center justify-start px-5"
             style={{ backgroundColor: bg, fontFamily, paddingTop: 'calc(56px + env(safe-area-inset-top, 0px))', paddingBottom: 'calc(48px + env(safe-area-inset-bottom, 0px))' }}
           >
             <div className="w-full max-w-sm flex flex-col items-center text-center gap-5 py-6">
@@ -804,7 +804,7 @@ export const Player: React.FC = () => {
         >
           <button
             onClick={openTourInfo}
-            className="w-full backdrop-blur-md flex flex-col items-center gap-1.5 pt-2.5 pb-3 active:opacity-70 transition-opacity"
+            className="w-full backdrop-blur-md flex flex-col items-center gap-1.5 pt-2.5 pb-3"
             style={{
               backgroundColor: th.barBg,
               borderTop: `1px solid ${th.barBorder}`,
