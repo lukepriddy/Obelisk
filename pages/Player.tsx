@@ -797,9 +797,9 @@ export const Player: React.FC = () => {
       </div>
 
       {/* ── BOTTOM BAR ── */}
-      {!showChat && !tourInfoMounted && (
+      {!showChat && (
         <div
-          className="absolute bottom-0 left-0 right-0 z-[1000]"
+          className="absolute bottom-0 left-0 right-0 z-[4000]"
           style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
         >
           <button
