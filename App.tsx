@@ -11,23 +11,32 @@ import { MapPin, LogOut } from 'lucide-react';
 
 const AppShell: React.FC<{ user: User | null; onLogout: () => void }> = ({ user, onLogout }) => {
   const location = useLocation();
-  const fullscreen = location.pathname.startsWith('/player/');
+  const fullscreen  = location.pathname.startsWith('/player/');
+  const isEditor    = location.pathname.startsWith('/editor');
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-white">
+    <div className={`flex flex-col h-screen overflow-hidden ${isEditor ? 'bg-zinc-950' : 'bg-white'}`}>
       {!fullscreen && (
-        <header className="bg-white text-zinc-900 px-5 py-3.5 border-b border-zinc-200 z-10 flex justify-between items-center shrink-0">
+        <header className={`px-5 py-3.5 z-10 flex justify-between items-center shrink-0 ${
+          isEditor
+            ? 'bg-zinc-950 text-white border-b border-zinc-800'
+            : 'bg-white text-zinc-900 border-b border-zinc-200'
+        }`}>
           <div className="flex items-center gap-2 font-bold text-lg tracking-tight">
             <MapPin className="text-emerald-500" size={20} />
-            <span className="hidden sm:inline text-zinc-800">Obelisk</span>
+            <span className={`hidden sm:inline ${isEditor ? 'text-white' : 'text-zinc-800'}`}>Obelisk</span>
           </div>
           <div className="flex items-center gap-3">
             {user ? (
               <>
-                <span className="text-sm text-zinc-400 hidden sm:inline">{user.email}</span>
+                <span className={`text-sm hidden sm:inline ${isEditor ? 'text-zinc-400' : 'text-zinc-400'}`}>{user.email}</span>
                 <button
                   onClick={onLogout}
-                  className="p-2 hover:bg-zinc-100 rounded-full transition-colors text-zinc-400 hover:text-zinc-700"
+                  className={`p-2 rounded-full transition-colors ${
+                    isEditor
+                      ? 'hover:bg-zinc-800 text-zinc-400 hover:text-white'
+                      : 'hover:bg-zinc-100 text-zinc-400 hover:text-zinc-700'
+                  }`}
                   title="Sign Out"
                 >
                   <LogOut size={18} />
@@ -40,7 +49,7 @@ const AppShell: React.FC<{ user: User | null; onLogout: () => void }> = ({ user,
         </header>
       )}
 
-      <main className="flex-1 overflow-hidden relative bg-white">
+      <main className={`flex-1 overflow-hidden relative ${isEditor ? 'bg-zinc-950' : 'bg-white'}`}>
         <Routes>
           <Route path="/auth" element={!user ? <Auth /> : <Navigate to="/" />} />
           <Route path="/" element={user ? <Dashboard user={user} /> : <Navigate to="/auth" />} />
