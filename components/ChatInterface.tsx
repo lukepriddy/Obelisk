@@ -152,6 +152,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
 
   const stopRecording = () => {
     if (recognitionRef.current && isRecording) {
+      recognitionRef.current.onresult = null;
       try { recognitionRef.current.stop(); } catch {}
       setIsRecording(false);
     }
