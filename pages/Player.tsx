@@ -71,6 +71,9 @@ export const Player: React.FC = () => {
   // Stickiness: delay clearing activeCharacterZone so brief exits don't
   // dismiss the "Talk to" button or break an open conversation.
   const charZoneExitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Ref mirror of showChat so the interval callback (stale closure) can read
+  // the current value without being listed as a dependency.
+  const showChatRef = useRef(false);
 
   // Tour info sheet — two states so the CSS transition has a painted starting
   // point before it runs (avoids the mount-flash that animate-in causes).
@@ -122,6 +125,21 @@ export const Player: React.FC = () => {
       body.style.width    = prev.width;
     };
   }, []);
+
+  // Keep the ref in sync so the interval callback always has the latest value
+  useEffect(() => { showChatRef.current = showChat; }, [showChat]);
+
+  // When the player closes chat while OUTSIDE the zone, give them a 10s
+  // window (in case they want to re-enter), then clear the persisted zone.
+  useEffect(() => {
+    if (!showChat && activeCharacterZone === null && persistedCharacterZone) {
+      const timer = setTimeout(() => {
+        setPersistedCharacterZone(null);
+        persistedCharZoneRef.current = null;
+      }, 10000);
+      return () => clearTimeout(timer);
+    }
+  }, [showChat, activeCharacterZone, persistedCharacterZone]);
 
   const showHud = (title: string, message: string) => {
     if (hudTimerRef.current) clearTimeout(hudTimerRef.current);
@@ -234,11 +252,22 @@ export const Player: React.FC = () => {
             setShowChat(false);
           }
         } else {
-          // Left the zone — give a 6-second grace period before clearing
+          // Left the zone.
           if (charZoneExitTimerRef.current) clearTimeout(charZoneExitTimerRef.current);
-          charZoneExitTimerRef.current = setTimeout(() => {
-            setActiveCharacterZone(null);
-          }, 6000);
+
+          if (showChatRef.current) {
+            // Mid-conversation — never auto-dismiss while the player is engaged.
+            // Cleanup is handled by the useEffect that watches showChat closing.
+            charZoneExitTimerRef.current = null;
+          } else {
+            // Not chatting — 20s grace period (GPS drifts ±15m near zone edges,
+            // so 6s was too aggressive; 20s prevents false exits).
+            charZoneExitTimerRef.current = setTimeout(() => {
+              setActiveCharacterZone(null);
+              // persistedCharacterZone lives on for 10 more seconds (see useEffect)
+              // so re-entry within that window continues the conversation.
+            }, 20000);
+          }
         }
       }
     }, 200);
