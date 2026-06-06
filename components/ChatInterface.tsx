@@ -18,11 +18,14 @@ interface ChatInterfaceProps {
   onClose: () => void;
   onUnlock?: (zoneId: string) => void;
   theme?: 'dark' | 'light';
+  initialHistory?: ChatMessage[];
+  onHistoryChange?: (history: ChatMessage[]) => void;
 }
 
-export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onUnlock, theme = 'dark' }) => {
-  const [history, setHistory]       = useState<ChatMessage[]>([]);
-  const [isReady, setIsReady]       = useState(false);
+export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onUnlock, theme = 'dark', initialHistory, onHistoryChange }) => {
+  const hasExistingHistory = (initialHistory ?? []).length > 0;
+  const [history, setHistory]       = useState<ChatMessage[]>(initialHistory ?? []);
+  const [isReady, setIsReady]       = useState(hasExistingHistory);
   const [isSending, setIsSending]   = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [errorMsg, setErrorMsg]     = useState<string | null>(null);
@@ -33,9 +36,10 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   const textareaRef    = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<any>(null);
   const micStreamRef   = useRef<MediaStream | null>(null);
-  const hasGreetedRef  = useRef(false);
+  const hasGreetedRef  = useRef(hasExistingHistory);
   const hasUnlockedRef = useRef(false);
   const speakingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isFirstRender  = useRef(true);
 
   // ── Textarea auto-resize ──────────────────────────────────────────────────
   useEffect(() => {
@@ -103,6 +107,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [history, isSending]);
+
+  // ── Sync history to parent so it survives remounts ────────────────────────
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    onHistoryChange?.(history);
+  }, [history]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Greeting on mount ─────────────────────────────────────────────────────
   useEffect(() => {

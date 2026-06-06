@@ -5,7 +5,7 @@ import L from 'leaflet';
 import { getTourById, getZonesByTourId } from '../services/db';
 import { audioService } from '../services/audioService';
 import { getDistance, calculateAttenuation } from '../utils/geo';
-import { Tour, Zone } from '../types';
+import { Tour, Zone, ChatMessage } from '../types';
 import { FONT_STYLES, MAP_STYLES } from '../constants';
 import { PlayCircle, Volume2, Mic, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu, Layers } from 'lucide-react';
 import { ChatInterface } from '../components/ChatInterface';
@@ -68,6 +68,8 @@ export const Player: React.FC = () => {
   const [chatKey, setChatKey] = useState(0);
   // Minimized character card — collapses to a small avatar button so the map is usable
   const [charCardMinimized, setCharCardMinimized] = useState(false);
+  // Chat history lifted here so it survives ChatInterface remounts
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   // Stickiness: delay clearing activeCharacterZone so brief exits don't
   // dismiss the "Talk to" button or break an open conversation.
   const charZoneExitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -248,6 +250,7 @@ export const Player: React.FC = () => {
           if (persistedCharZoneRef.current?.id !== foundCharZone.id) {
             persistedCharZoneRef.current = foundCharZone;
             setPersistedCharacterZone(foundCharZone);
+            setChatHistory([]);
             setChatKey(k => k + 1);
             setShowChat(false);
             setCharCardMinimized(false);
@@ -764,6 +767,8 @@ export const Player: React.FC = () => {
           <ChatInterface
             zone={persistedCharacterZone}
             theme={tour.player_theme || 'dark'}
+            initialHistory={chatHistory}
+            onHistoryChange={setChatHistory}
             onClose={() => { setShowChat(false); setCharCardMinimized(true); }}
             onUnlock={(zoneId) => {
               unlockedZoneIdsRef.current = new Set([...unlockedZoneIdsRef.current, zoneId]);
