@@ -250,6 +250,7 @@ export const Player: React.FC = () => {
             setPersistedCharacterZone(foundCharZone);
             setChatKey(k => k + 1);
             setShowChat(false);
+            setCharCardMinimized(false);
           }
         } else {
           // Left the zone.
@@ -688,9 +689,9 @@ export const Player: React.FC = () => {
           {/* Character card — minimized: small avatar button; expanded: full card */}
           {activeCharacterZone && charCardMinimized ? (
             <button
-              onClick={() => setCharCardMinimized(false)}
-              className="self-end w-14 h-14 rounded-full overflow-hidden animate-in zoom-in-75 duration-200 shadow-2xl"
-              style={{ border: `2px solid ${accent}`, boxShadow: `0 0 0 2px ${accent}40` }}
+              onClick={() => setShowChat(true)}
+              className="self-end w-18 h-18 rounded-full overflow-hidden animate-in zoom-in-75 duration-200 shadow-2xl"
+              style={{ width: 72, height: 72, border: `2px solid ${accent}`, boxShadow: `0 0 0 2px ${accent}40` }}
               aria-label={`Open ${activeCharacterZone.title}`}
             >
               {activeCharacterZone.character_image_url
@@ -719,11 +720,11 @@ export const Player: React.FC = () => {
                 )}
                 <button
                   onClick={() => setCharCardMinimized(true)}
-                  className="absolute top-2 right-2 w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-sm"
+                  className="absolute top-2 right-2 w-11 h-11 rounded-full flex items-center justify-center backdrop-blur-sm"
                   style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
                   aria-label="Minimize"
                 >
-                  <X size={14} color="white" />
+                  <X size={16} color="white" />
                 </button>
               </div>
 
@@ -740,7 +741,7 @@ export const Player: React.FC = () => {
                 </div>
 
                 <button
-                  onClick={() => { setChatKey(k => k + 1); setShowChat(true); }}
+                  onClick={() => setShowChat(true)}
                   className="w-full py-3 rounded-xl font-bold text-white flex items-center justify-center gap-2.5 active:opacity-80 transition-opacity"
                   style={{ backgroundColor: accent, boxShadow: '0 2px 12px rgba(0,0,0,0.25)' }}
                 >
@@ -763,7 +764,7 @@ export const Player: React.FC = () => {
           <ChatInterface
             zone={persistedCharacterZone}
             theme={tour.player_theme || 'dark'}
-            onClose={() => setShowChat(false)}
+            onClose={() => { setShowChat(false); setCharCardMinimized(true); }}
             onUnlock={(zoneId) => {
               unlockedZoneIdsRef.current = new Set([...unlockedZoneIdsRef.current, zoneId]);
               const unlockedZone = zones.find(z => z.id === zoneId);
