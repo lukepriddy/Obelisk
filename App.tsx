@@ -14,12 +14,12 @@ const AppShell: React.FC<{ user: User | null; onLogout: () => void }> = ({ user,
   const fullscreen = location.pathname.startsWith('/player/');
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden">
+    <div className="flex flex-col h-screen overflow-hidden bg-white">
       {!fullscreen && (
-        <header className="bg-zinc-950 text-white px-5 py-3.5 border-b border-zinc-800 z-10 flex justify-between items-center shrink-0">
+        <header className="bg-white text-zinc-900 px-5 py-3.5 border-b border-zinc-200 z-10 flex justify-between items-center shrink-0">
           <div className="flex items-center gap-2 font-bold text-lg tracking-tight">
-            <MapPin className="text-emerald-400" size={20} />
-            <span className="hidden sm:inline">Obelisk</span>
+            <MapPin className="text-emerald-500" size={20} />
+            <span className="hidden sm:inline text-zinc-800">Obelisk</span>
           </div>
           <div className="flex items-center gap-3">
             {user ? (
@@ -27,20 +27,20 @@ const AppShell: React.FC<{ user: User | null; onLogout: () => void }> = ({ user,
                 <span className="text-sm text-zinc-400 hidden sm:inline">{user.email}</span>
                 <button
                   onClick={onLogout}
-                  className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-400 hover:text-white"
+                  className="p-2 hover:bg-zinc-100 rounded-full transition-colors text-zinc-400 hover:text-zinc-700"
                   title="Sign Out"
                 >
                   <LogOut size={18} />
                 </button>
               </>
             ) : (
-              <span className="text-sm text-zinc-500">Guest Mode</span>
+              <span className="text-sm text-zinc-400">Guest Mode</span>
             )}
           </div>
         </header>
       )}
 
-      <main className="flex-1 overflow-hidden relative">
+      <main className="flex-1 overflow-hidden relative bg-white">
         <Routes>
           <Route path="/auth" element={!user ? <Auth /> : <Navigate to="/" />} />
           <Route path="/" element={user ? <Dashboard user={user} /> : <Navigate to="/auth" />} />
