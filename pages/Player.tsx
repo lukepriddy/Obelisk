@@ -243,7 +243,10 @@ export const Player: React.FC = () => {
       if (foundCharZone?.id !== activeCharacterZone?.id) {
         if (foundCharZone) {
           // Entered a character zone — apply immediately, cancel any exit timer
-          if (charZoneExitTimerRef.current) clearTimeout(charZoneExitTimerRef.current);
+          if (charZoneExitTimerRef.current) {
+            clearTimeout(charZoneExitTimerRef.current);
+            charZoneExitTimerRef.current = null;
+          }
           setActiveCharacterZone(foundCharZone);
 
           // If this is a DIFFERENT zone from what's persisted, start a fresh session
@@ -257,17 +260,20 @@ export const Player: React.FC = () => {
           }
         } else {
           // Left the zone.
-          if (charZoneExitTimerRef.current) clearTimeout(charZoneExitTimerRef.current);
-
           if (showChatRef.current) {
             // Mid-conversation — never auto-dismiss while the player is engaged.
-            // Cleanup is handled by the useEffect that watches showChat closing.
-            charZoneExitTimerRef.current = null;
-          } else {
-            // Not chatting — 20s grace period (GPS drifts ±15m near zone edges,
-            // so 6s was too aggressive; 20s prevents false exits).
+            // Cancel any pending exit timer so it doesn't fire mid-chat.
+            if (charZoneExitTimerRef.current) {
+              clearTimeout(charZoneExitTimerRef.current);
+              charZoneExitTimerRef.current = null;
+            }
+          } else if (!charZoneExitTimerRef.current) {
+            // Not chatting and no timer running — start one.
+            // We deliberately do NOT restart the timer if it's already running so
+            // that rapid drag events in sim mode can't keep resetting the window.
             charZoneExitTimerRef.current = setTimeout(() => {
               setActiveCharacterZone(null);
+              charZoneExitTimerRef.current = null;
               // persistedCharacterZone lives on for 10 more seconds (see useEffect)
               // so re-entry within that window continues the conversation.
             }, 20000);
@@ -278,7 +284,8 @@ export const Player: React.FC = () => {
 
     return () => {
       clearInterval(interval);
-      if (charZoneExitTimerRef.current) clearTimeout(charZoneExitTimerRef.current);
+      // Intentionally do NOT clear charZoneExitTimerRef here — the timer must
+      // survive interval restarts that happen when userPos changes (sim dragging).
     };
   }, [audioStarted, userPos, zones, activeCharacterZone]);
 
@@ -758,25 +765,24 @@ export const Player: React.FC = () => {
       )}
 
       {/* ── CHAT INTERFACE ────────────────────────────────────────────────────
-           Keep the component mounted while a character zone is persisted so
-           conversation history and the Gemini session survive briefly leaving
-           the radius. `hidden` (display:none) hides it including its fixed
-           children, preserving state without rendering anything visible.   */}
-      {persistedCharacterZone && (
-        <div key={chatKey} className={showChat ? 'contents' : 'hidden'}>
-          <ChatInterface
-            zone={persistedCharacterZone}
-            theme={tour.player_theme || 'dark'}
-            initialHistory={chatHistory}
-            onHistoryChange={setChatHistory}
-            onClose={() => { setShowChat(false); setCharCardMinimized(true); }}
-            onUnlock={(zoneId) => {
-              unlockedZoneIdsRef.current = new Set([...unlockedZoneIdsRef.current, zoneId]);
-              const unlockedZone = zones.find(z => z.id === zoneId);
-              if (unlockedZone) showHud('Zone Unlocked', `${unlockedZone.title} is now accessible.`);
-            }}
-          />
-        </div>
+           Mounted only while showChat is true. History is lifted to Player
+           state (chatHistory) so it survives unmounts and is restored via
+           initialHistory on the next open. key={chatKey} ensures a fresh
+           mount when the player enters a different character zone.          */}
+      {persistedCharacterZone && showChat && (
+        <ChatInterface
+          key={chatKey}
+          zone={persistedCharacterZone}
+          theme={tour.player_theme || 'dark'}
+          initialHistory={chatHistory}
+          onHistoryChange={setChatHistory}
+          onClose={() => { setShowChat(false); setCharCardMinimized(true); }}
+          onUnlock={(zoneId) => {
+            unlockedZoneIdsRef.current = new Set([...unlockedZoneIdsRef.current, zoneId]);
+            const unlockedZone = zones.find(z => z.id === zoneId);
+            if (unlockedZone) showHud('Zone Unlocked', `${unlockedZone.title} is now accessible.`);
+          }}
+        />
       )}
 
       {/* ── HUD NOTIFICATION — drops below top bar ── */}
