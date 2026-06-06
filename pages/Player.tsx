@@ -390,8 +390,8 @@ export const Player: React.FC = () => {
           preventing the vertical-scroll ghost that appears during pinch-to-zoom */}
       <div className="absolute inset-0" style={{ touchAction: 'none' }}>
         <MapContainer
-          center={mapCenter}
-          zoom={17}
+          center={[tour.lat, tour.lng]}
+          zoom={18}
           maxZoom={22}
           style={{ height: '100%', width: '100%' }}
           zoomControl={false}

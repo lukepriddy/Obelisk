@@ -133,6 +133,10 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
   const [rightPanel, setRightPanel] = useState<RightPanel>('zone');
   const mapRef = useRef<L.Map | null>(null);
   
+  // Editor-only map style — defaults to satellite for precise zone placement.
+  // Independent of tour.map_style (the player setting).
+  const [editorMapStyle, setEditorMapStyle] = useState('satellite');
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedOk, setSavedOk] = useState(false);
@@ -418,9 +422,9 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
             scrollWheelZoom={true}
           >
             <TileLayer
-              key={tour.map_style || 'dark'}
-              url={(MAP_STYLES[tour.map_style || 'dark'] || MAP_STYLES.dark).url}
-              attribution={(MAP_STYLES[tour.map_style || 'dark'] || MAP_STYLES.dark).attribution}
+              key={editorMapStyle}
+              url={(MAP_STYLES[editorMapStyle] || MAP_STYLES.satellite).url}
+              attribution={(MAP_STYLES[editorMapStyle] || MAP_STYLES.satellite).attribution}
               maxNativeZoom={19}
               maxZoom={22}
             />
