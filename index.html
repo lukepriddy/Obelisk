@@ -72,6 +72,27 @@
       /* ── Hide all scrollbars (scroll still works, bar just invisible) ── */
       ::-webkit-scrollbar { width: 0; height: 0; background: transparent; }
       * { scrollbar-width: none; }
+
+      /* ── Landscape lock — show rotate prompt on small screens in landscape ── */
+      /* max-height:500px excludes desktop windows that happen to be wider than tall */
+      #landscape-lock {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 999999;
+        background: #09090b;
+        color: #ffffff;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 20px;
+        text-align: center;
+        padding: 32px;
+        font-family: system-ui, -apple-system, sans-serif;
+      }
+      @media screen and (orientation: landscape) and (max-height: 500px) {
+        #landscape-lock { display: flex; }
+      }
     </style>
   </head>
 
@@ -80,6 +101,16 @@
     always matches the app background, not the browser default white.
   -->
   <body class="h-full">
+    <!-- Landscape lock overlay — shown via CSS media query, no JS needed -->
+    <div id="landscape-lock">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.6">
+        <rect x="4" y="2" width="16" height="20" rx="2"/>
+        <path d="M12 18h.01"/>
+      </svg>
+      <p style="font-size:1rem;font-weight:600;margin:0">Please rotate your device</p>
+      <p style="font-size:0.85rem;opacity:0.5;margin:0">Obelisk works best in portrait mode</p>
+    </div>
+
     <div id="root" class="h-full"></div>
     <script type="module" src="/index.tsx"></script>
 

@@ -108,6 +108,21 @@ export const Player: React.FC = () => {
     };
   }, [tourId]);
 
+  // Lock body scroll while the Player is mounted so iOS can't rubber-band
+  // the page behind the fixed map UI. Restored on unmount.
+  useEffect(() => {
+    const body = document.body;
+    const prev = { overflow: body.style.overflow, position: body.style.position, width: body.style.width };
+    body.style.overflow = 'hidden';
+    body.style.position = 'fixed';
+    body.style.width    = '100%';
+    return () => {
+      body.style.overflow = prev.overflow;
+      body.style.position = prev.position;
+      body.style.width    = prev.width;
+    };
+  }, []);
+
   const showHud = (title: string, message: string) => {
     if (hudTimerRef.current) clearTimeout(hudTimerRef.current);
     setHudNotification({ title, message });
