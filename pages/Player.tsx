@@ -432,13 +432,13 @@ export const Player: React.FC = () => {
 
         return (
           <div
-            className="absolute inset-0 z-[2000] overflow-hidden"
+            className="fixed inset-0 z-[2000] overflow-hidden"
             style={{ backgroundColor: bg, fontFamily }}
           >
             {/* ── SCROLL AREA — full height, padded to clear fixed header + footer ── */}
             <div
               className="absolute inset-0 overflow-y-auto"
-              style={{ scrollbarWidth: 'none', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 90px)', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 110px)' }}
+              style={{ scrollbarWidth: 'none', overscrollBehavior: 'none', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 90px)', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 110px)' }}
             >
               <div className="w-full max-w-sm mx-auto px-5 flex flex-col items-center text-center gap-5 pb-4">
 
