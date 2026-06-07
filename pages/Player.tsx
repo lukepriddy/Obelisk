@@ -68,8 +68,9 @@ export const Player: React.FC = () => {
   const [chatKey, setChatKey] = useState(0);
   // Minimized character card — collapses to a small avatar button so the map is usable
   const [charCardMinimized, setCharCardMinimized] = useState(false);
-  // Chat history lifted here so it survives ChatInterface remounts
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+  // Chat history in a ref so it's always synchronously up to date when
+  // ChatInterface mounts — avoids React state batching gaps.
+  const chatHistoryRef = useRef<ChatMessage[]>([]);
   // Stickiness: delay clearing activeCharacterZone so brief exits don't
   // dismiss the "Talk to" button or break an open conversation.
   const charZoneExitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -253,7 +254,7 @@ export const Player: React.FC = () => {
           if (persistedCharZoneRef.current?.id !== foundCharZone.id) {
             persistedCharZoneRef.current = foundCharZone;
             setPersistedCharacterZone(foundCharZone);
-            setChatHistory([]);
+            chatHistoryRef.current = [];
             setChatKey(k => k + 1);
             setShowChat(false);
             setCharCardMinimized(false);
@@ -765,17 +766,17 @@ export const Player: React.FC = () => {
       )}
 
       {/* ── CHAT INTERFACE ────────────────────────────────────────────────────
-           Mounted only while showChat is true. History is lifted to Player
-           state (chatHistory) so it survives unmounts and is restored via
-           initialHistory on the next open. key={chatKey} ensures a fresh
-           mount when the player enters a different character zone.          */}
+           Mounted only while showChat is true. History lives in chatHistoryRef
+           (a plain ref, not state) so it's always synchronously current when
+           ChatInterface mounts — no React batching gaps. key={chatKey} forces
+           a fresh mount when the player enters a different character zone.   */}
       {persistedCharacterZone && showChat && (
         <ChatInterface
           key={chatKey}
           zone={persistedCharacterZone}
           theme={tour.player_theme || 'dark'}
-          initialHistory={chatHistory}
-          onHistoryChange={setChatHistory}
+          initialHistory={chatHistoryRef.current}
+          onHistoryChange={(h) => { chatHistoryRef.current = h; }}
           onClose={() => { setShowChat(false); setCharCardMinimized(true); }}
           onUnlock={(zoneId) => {
             unlockedZoneIdsRef.current = new Set([...unlockedZoneIdsRef.current, zoneId]);

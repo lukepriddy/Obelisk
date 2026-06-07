@@ -39,7 +39,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   const hasGreetedRef  = useRef(hasExistingHistory);
   const hasUnlockedRef = useRef(false);
   const speakingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isFirstRender  = useRef(true);
 
   // ── Textarea auto-resize ──────────────────────────────────────────────────
   useEffect(() => {
@@ -109,8 +108,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   }, [history, isSending]);
 
   // ── Sync history to parent so it survives remounts ────────────────────────
+  // Always write to the parent ref immediately — no isFirstRender guard needed
+  // because the parent holds history in a plain ref (not state), so calling
+  // onHistoryChange on the initial render with the same initialHistory value
+  // is a harmless no-op write and never triggers a re-render.
   useEffect(() => {
-    if (isFirstRender.current) { isFirstRender.current = false; return; }
     onHistoryChange?.(history);
   }, [history]); // eslint-disable-line react-hooks/exhaustive-deps
 
