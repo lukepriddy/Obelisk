@@ -96,6 +96,18 @@ const EnsureWheelZoom: React.FC = () => {
   return null;
 };
 
+// Tracks the map's current zoom level into a ref so it can be saved with the tour
+const ZoomWatcher: React.FC<{ zoomRef: React.MutableRefObject<number> }> = ({ zoomRef }) => {
+  const map = useMap();
+  useEffect(() => {
+    zoomRef.current = map.getZoom();
+    const onZoom = () => { zoomRef.current = map.getZoom(); };
+    map.on('zoomend', onZoom);
+    return () => { map.off('zoomend', onZoom); };
+  }, [map, zoomRef]);
+  return null;
+};
+
 // Component to handle map interactions based on active tool
 const MapInteraction = ({
   tool,
@@ -136,6 +148,8 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
   // Editor-only map style — defaults to satellite for precise zone placement.
   // Independent of tour.map_style (the player setting).
   const [editorMapStyle, setEditorMapStyle] = useState('satellite');
+  // Tracks the current zoom level; saved with the tour so the player starts here.
+  const editorMapZoomRef = useRef<number>(tour?.start_zoom ?? MAP_DEFAULT_ZOOM);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -297,6 +311,7 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
         is_public: tour.is_public,
         lat: tour.lat,
         lng: tour.lng,
+        start_zoom: editorMapZoomRef.current,
       }),
     ]);
 
@@ -415,7 +430,7 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
          <MapContainer
             ref={mapRef}
             center={tour.lat === 0 && tour.lng === 0 ? MAP_DEFAULT_CENTER : [tour.lat, tour.lng]}
-            zoom={MAP_DEFAULT_ZOOM}
+            zoom={tour.start_zoom ?? MAP_DEFAULT_ZOOM}
             maxZoom={22}
             style={{ height: '100%', width: '100%', background: '#09090b' }}
             zoomControl={false}
@@ -429,6 +444,7 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
               maxZoom={22}
             />
             <EnsureWheelZoom />
+            <ZoomWatcher zoomRef={editorMapZoomRef} />
             <MapInteraction tool={activeTool} onMapClick={handleMapClick} />
             <InvalidateSize trigger={`${selectedZoneId}-${rightPanel}`} />
             

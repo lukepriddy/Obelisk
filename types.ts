@@ -21,6 +21,7 @@ export interface Tour {
   text_color?: string;     // welcome screen text color
   font_style?: string;     // 'sans' | 'serif' | 'mono'
   map_style?: string;      // key into MAP_STYLES
+  start_zoom?: number;    // zoom level saved from editor; player starts here
 
   // Player UI theme — controls chrome colors (bars, cards, sheet)
   // Welcome screen always uses bg_color/text_color regardless of this setting

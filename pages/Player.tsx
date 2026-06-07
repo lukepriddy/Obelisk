@@ -393,7 +393,7 @@ export const Player: React.FC = () => {
       <div className="absolute inset-0" style={{ touchAction: 'none' }}>
         <MapContainer
           center={[tour.lat, tour.lng]}
-          zoom={18}
+          zoom={tour.start_zoom ?? 18}
           maxZoom={22}
           style={{ height: '100%', width: '100%' }}
           zoomControl={false}
@@ -510,7 +510,7 @@ export const Player: React.FC = () => {
                 <div className="w-full aspect-square rounded-xl overflow-hidden border border-white/10 shadow-lg">
                   <MapContainer
                     center={[tour.lat, tour.lng]}
-                    zoom={18}
+                    zoom={tour.start_zoom ?? 18}
                     style={{ width: '100%', height: '100%' }}
                     zoomControl={true}
                     scrollWheelZoom={true}
@@ -668,7 +668,7 @@ export const Player: React.FC = () => {
       {audioStarted && !showChat && (
         <div
           className="absolute left-1/2 -translate-x-1/2 z-[1500] flex flex-col items-end gap-2 w-full max-w-sm px-4"
-          style={{ bottom: 'calc(88px + env(safe-area-inset-bottom, 0px))' }}
+          style={{ bottom: 'calc(104px + env(safe-area-inset-bottom, 0px))' }}
         >
           {/* Now Playing card */}
           {activeZones.length > 0 && (
@@ -698,67 +698,95 @@ export const Player: React.FC = () => {
             </div>
           )}
 
-          {/* Character card: full card on first zone entry; circle after chat opened */}
+          {/* ── Character presence ─────────────────────────────────────────────
+               Two states, one design language:
+               • First entry (chatEverOpened=false): compact encounter card
+               • After first chat (chatEverOpened=true): ambient presence orb
+               Both use a pulsing ring to signal the character is "alive".   */}
           {activeCharacterZone && chatEverOpened ? (
+            /* ── Ambient orb — appears after first conversation ── */
             <button
               onClick={() => setShowChat(true)}
-              className="self-end w-18 h-18 rounded-full overflow-hidden animate-in zoom-in-75 duration-200 shadow-2xl"
-              style={{ width: 72, height: 72, border: `2px solid ${accent}`, boxShadow: `0 0 0 2px ${accent}40` }}
-              aria-label={`Open ${activeCharacterZone.title}`}
+              className="self-end flex flex-col items-center gap-1.5 animate-in zoom-in-75 duration-300"
+              aria-label={`Continue with ${activeCharacterZone.title}`}
             >
-              {activeCharacterZone.character_image_url
-                ? <img src={activeCharacterZone.character_image_url} alt={activeCharacterZone.title} className="w-full h-full object-cover" />
-                : <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: accent }}><Mic size={20} color="white" /></div>
-              }
+              <div className="relative" style={{ width: 80, height: 80 }}>
+                {/* Pulsing outer ring — "the being is present" */}
+                <span
+                  className="absolute inset-0 rounded-full animate-ping"
+                  style={{ backgroundColor: accent, opacity: 0.25 }}
+                />
+                {/* Avatar orb */}
+                <div
+                  className="absolute inset-0 rounded-full overflow-hidden shadow-2xl"
+                  style={{ border: `2px solid ${accent}`, boxShadow: `0 0 20px ${accent}55` }}
+                >
+                  {activeCharacterZone.character_image_url
+                    ? <img src={activeCharacterZone.character_image_url} alt={activeCharacterZone.title} className="w-full h-full object-cover" />
+                    : <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: `${accent}30` }}><Mic size={22} color={accent} /></div>
+                  }
+                </div>
+              </div>
+              <span className="text-xs font-semibold tracking-wide" style={{ color: accent }}>
+                {activeCharacterZone.title}
+              </span>
             </button>
-          ) : activeCharacterZone ? ( // full card — only on first zone entry
+
+          ) : activeCharacterZone ? (
+            /* ── Encounter card — first appearance in zone ── */
             <div
-              className="w-full rounded-2xl overflow-hidden animate-in slide-in-from-bottom-3"
+              className="w-full rounded-2xl animate-in slide-in-from-bottom-4 duration-400"
               style={{
                 backgroundColor: th.cardBg,
-                border: `1px solid ${th.cardBorder}`,
-                backdropFilter: 'blur(14px)',
-                boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                border: `1px solid ${accent}40`,
+                backdropFilter: 'blur(20px)',
+                boxShadow: `0 8px 40px rgba(0,0,0,0.5), 0 0 0 1px ${accent}20`,
               }}
             >
-              {/* Image + minimize button */}
-              <div className="relative">
-                {activeCharacterZone.character_image_url && (
-                  <img
-                    src={activeCharacterZone.character_image_url}
-                    alt={activeCharacterZone.title}
-                    className="w-full aspect-square object-cover"
+              {/* Avatar + pulse ring */}
+              <div className="flex flex-col items-center pt-6 pb-2">
+                <div className="relative mb-3" style={{ width: 88, height: 88 }}>
+                  <span
+                    className="absolute inset-0 rounded-full animate-ping"
+                    style={{ backgroundColor: accent, opacity: 0.2 }}
                   />
+                  <div
+                    className="absolute inset-0 rounded-full overflow-hidden shadow-xl"
+                    style={{ border: `2px solid ${accent}`, boxShadow: `0 0 24px ${accent}44` }}
+                  >
+                    {activeCharacterZone.character_image_url
+                      ? <img src={activeCharacterZone.character_image_url} alt={activeCharacterZone.title} className="w-full h-full object-cover" />
+                      : <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: `${accent}25` }}><Mic size={26} color={accent} /></div>
+                    }
+                  </div>
+                </div>
+                <h3 className="font-bold text-base tracking-tight" style={{ color: th.cardText }}>
+                  {activeCharacterZone.title}
+                </h3>
+                {(activeCharacterZone.character_bio || activeCharacterZone.description) && (
+                  <p className="text-xs mt-1.5 text-center px-6 leading-relaxed" style={{ color: th.cardMuted }}>
+                    {activeCharacterZone.character_bio || activeCharacterZone.description}
+                  </p>
                 )}
-                <button
-                  onClick={() => setChatEverOpened(true)}
-                  className="absolute top-2 right-2 w-11 h-11 rounded-full flex items-center justify-center backdrop-blur-sm"
-                  style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
-                  aria-label="Minimize"
-                >
-                  <X size={16} color="white" />
-                </button>
               </div>
 
-              <div className="px-4 pt-3 pb-4 flex flex-col gap-2.5">
-                <div>
-                  <h3 className="font-bold text-base leading-tight" style={{ color: th.cardText }}>
-                    {activeCharacterZone.title}
-                  </h3>
-                  {(activeCharacterZone.character_bio || activeCharacterZone.description) && (
-                    <p className="text-sm mt-1.5 leading-relaxed" style={{ color: th.cardMuted }}>
-                      {activeCharacterZone.character_bio || activeCharacterZone.description}
-                    </p>
-                  )}
-                </div>
-
+              {/* Actions */}
+              <div className="px-4 pt-2 pb-5 flex gap-2">
+                <button
+                  onClick={() => setChatEverOpened(true)}
+                  className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-opacity active:opacity-60"
+                  style={{ backgroundColor: `${accent}20`, border: `1px solid ${accent}40` }}
+                  aria-label="Dismiss"
+                >
+                  <X size={14} color={accent} />
+                </button>
                 <button
                   onClick={() => { setChatEverOpened(true); setShowChat(true); }}
-                  className="w-full py-3 rounded-xl font-bold text-white flex items-center justify-center gap-2.5 active:opacity-80 transition-opacity"
-                  style={{ backgroundColor: accent, boxShadow: '0 2px 12px rgba(0,0,0,0.25)' }}
+                  className="flex-1 py-2.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 active:opacity-80 transition-opacity"
+                  style={{ backgroundColor: accent, boxShadow: `0 2px 16px ${accent}55` }}
                 >
-                  <Mic size={16} />
-                  {`Talk to ${activeCharacterZone.title}`}
+                  <Mic size={15} color="white" />
+                  <span className="text-white">Speak to {activeCharacterZone.title}</span>
                 </button>
               </div>
             </div>

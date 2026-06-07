@@ -276,7 +276,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
         <div className="flex-1 min-w-0">
           <h3 className={`font-semibold text-sm leading-tight truncate ${t.headerText}`}>{zone.title}</h3>
           <p className={`text-[10px] uppercase tracking-wider mt-0.5 ${t.headerMuted}`}>
-            {isSpeaking ? 'Speaking...' : isSending ? 'Thinking...' : !isReady ? 'Starting...' : 'Ready'}
+            {isSpeaking ? 'Speaking...' : (!isReady || isSending) ? 'Thinking...' : 'Ready'}
           </p>
         </div>
         <button
@@ -290,13 +290,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
 
       {/* ── Chat log ── */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 pt-3 pb-6 flex flex-col gap-3 min-h-0">
-        {!isReady && (
-          <div className={`flex items-center justify-center gap-2 py-8 ${t.spinnerText}`}>
-            <div className={`w-5 h-5 border-2 rounded-full animate-spin ${t.spinnerBorder}`} />
-            <span className="text-sm">Connecting to {zone.title}…</span>
-          </div>
-        )}
-
         {errorMsg && (
           <div className={`text-sm px-4 py-3 rounded-2xl text-center border ${t.errorBg}`}>
             {errorMsg}
@@ -313,7 +306,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
           </div>
         ))}
 
-        {isSending && (
+        {/* Typing indicator — shows while greeting is loading OR AI is responding */}
+        {(!isReady || isSending) && (
           <div className="flex justify-start">
             <div className={`px-4 py-3 rounded-2xl rounded-bl-md flex gap-1.5 items-center ${t.typingBg}`}>
               <span className={`w-1.5 h-1.5 rounded-full animate-bounce ${t.typingDot}`} style={{ animationDelay: '0ms' }} />
