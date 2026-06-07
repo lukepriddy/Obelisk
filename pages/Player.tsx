@@ -418,7 +418,7 @@ export const Player: React.FC = () => {
           {/* Zones */}
           {zones.map(zone => {
              const isActive = activeZones.find(az => az.title === zone.title) || (activeCharacterZone?.id === zone.id);
-             if (!zone.is_visible && !simulationMode) return null;
+             if (!zone.is_visible) return null;
 
              const isChar = zone.type === 'character';
              const isLocked = zone.lock_type === 'passphrase';
@@ -670,34 +670,6 @@ export const Player: React.FC = () => {
           className="absolute left-1/2 -translate-x-1/2 z-[1500] flex flex-col items-end gap-2 w-full max-w-sm px-4"
           style={{ bottom: 'calc(104px + env(safe-area-inset-bottom, 0px))' }}
         >
-          {/* Now Playing card */}
-          {activeZones.length > 0 && (
-            <div
-              className="w-full px-4 py-2.5 rounded-2xl"
-              style={{
-                backgroundColor: th.cardBg,
-                border: `1px solid ${th.cardBorder}`,
-                backdropFilter: 'blur(14px)',
-                boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
-              }}
-            >
-              <div className="flex items-center gap-2 mb-1.5">
-                <Volume2 className="animate-pulse shrink-0" size={12} style={{ color: accent }} />
-                <span className="font-bold uppercase text-[9px] tracking-widest" style={{ color: accent }}>Now Playing</span>
-              </div>
-              <div className="space-y-1">
-                {activeZones.map((az, idx) => (
-                  <div key={idx} className="flex justify-between items-center gap-3">
-                    <span className="text-xs truncate" style={{ color: th.cardText }}>{az.title}</span>
-                    <div className="w-16 h-1 rounded-full overflow-hidden shrink-0" style={{ backgroundColor: `${accent}33` }}>
-                      <div className="h-full transition-all duration-300" style={{ width: `${az.volume}%`, backgroundColor: accent }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
           {/* ── Character presence ─────────────────────────────────────────────
                Two states, one design language:
                • First entry (chatEverOpened=false): compact encounter card
@@ -714,7 +686,7 @@ export const Player: React.FC = () => {
                 {/* Pulsing outer ring — "the being is present" */}
                 <span
                   className="absolute inset-0 rounded-full animate-ping"
-                  style={{ backgroundColor: accent, opacity: 0.25 }}
+                  style={{ backgroundColor: accent, opacity: 0.25, animationDuration: '2.5s' }}
                 />
                 {/* Avatar orb */}
                 <div
@@ -727,9 +699,6 @@ export const Player: React.FC = () => {
                   }
                 </div>
               </div>
-              <span className="text-xs font-semibold tracking-wide" style={{ color: accent }}>
-                {activeCharacterZone.title}
-              </span>
             </button>
 
           ) : activeCharacterZone ? (
@@ -748,7 +717,7 @@ export const Player: React.FC = () => {
                 <div className="relative mb-3" style={{ width: 88, height: 88 }}>
                   <span
                     className="absolute inset-0 rounded-full animate-ping"
-                    style={{ backgroundColor: accent, opacity: 0.2 }}
+                    style={{ backgroundColor: accent, opacity: 0.2, animationDuration: '2.5s' }}
                   />
                   <div
                     className="absolute inset-0 rounded-full overflow-hidden shadow-xl"
@@ -791,6 +760,34 @@ export const Player: React.FC = () => {
               </div>
             </div>
           ) : null}
+
+          {/* Now Playing card — rendered below character presence so it sits closer to the bottom bar */}
+          {activeZones.length > 0 && (
+            <div
+              className="w-full px-4 py-2.5 rounded-2xl"
+              style={{
+                backgroundColor: th.cardBg,
+                border: `1px solid ${th.cardBorder}`,
+                backdropFilter: 'blur(14px)',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+              }}
+            >
+              <div className="flex items-center gap-2 mb-1.5">
+                <Volume2 className="animate-pulse shrink-0" size={12} style={{ color: accent }} />
+                <span className="font-bold uppercase text-[9px] tracking-widest" style={{ color: accent }}>Now Playing</span>
+              </div>
+              <div className="space-y-1">
+                {activeZones.map((az, idx) => (
+                  <div key={idx} className="flex justify-between items-center gap-3">
+                    <span className="text-xs truncate" style={{ color: th.cardText }}>{az.title}</span>
+                    <div className="w-16 h-1 rounded-full overflow-hidden shrink-0" style={{ backgroundColor: `${accent}33` }}>
+                      <div className="h-full transition-all duration-300" style={{ width: `${az.volume}%`, backgroundColor: accent }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
