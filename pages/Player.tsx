@@ -66,8 +66,9 @@ export const Player: React.FC = () => {
   // ChatInterface re-mounts for a fresh session.  Re-entering the same
   // zone keeps history alive.
   const [chatKey, setChatKey] = useState(0);
-  // Minimized character card — collapses to a small avatar button so the map is usable
-  const [charCardMinimized, setCharCardMinimized] = useState(false);
+  // Once the player opens chat for the first time in a zone session, we never
+  // show the full character card again — only the circle.  Reset on new zone.
+  const [chatEverOpened, setChatEverOpened] = useState(false);
   // Stickiness: delay clearing activeCharacterZone so brief exits don't
   // dismiss the "Talk to" button or break an open conversation.
   const charZoneExitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -249,11 +250,15 @@ export const Player: React.FC = () => {
 
           // If this is a DIFFERENT zone from what's persisted, start a fresh session
           if (persistedCharZoneRef.current?.id !== foundCharZone.id) {
+            // Clear the old zone's saved chat history so it doesn't bleed through
+            if (persistedCharZoneRef.current?.id) {
+              try { sessionStorage.removeItem(`obelisk_chat_${persistedCharZoneRef.current.id}`); } catch {}
+            }
             persistedCharZoneRef.current = foundCharZone;
             setPersistedCharacterZone(foundCharZone);
             setChatKey(k => k + 1);
             setShowChat(false);
-            setCharCardMinimized(false);
+            setChatEverOpened(false);
           }
         } else {
           // Left the zone.
@@ -693,8 +698,8 @@ export const Player: React.FC = () => {
             </div>
           )}
 
-          {/* Character card — minimized: small avatar button; expanded: full card */}
-          {activeCharacterZone && charCardMinimized ? (
+          {/* Character card: full card on first zone entry; circle after chat opened */}
+          {activeCharacterZone && chatEverOpened ? (
             <button
               onClick={() => setShowChat(true)}
               className="self-end w-18 h-18 rounded-full overflow-hidden animate-in zoom-in-75 duration-200 shadow-2xl"
@@ -706,7 +711,7 @@ export const Player: React.FC = () => {
                 : <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: accent }}><Mic size={20} color="white" /></div>
               }
             </button>
-          ) : activeCharacterZone ? (
+          ) : activeCharacterZone ? ( // full card — only on first zone entry
             <div
               className="w-full rounded-2xl overflow-hidden animate-in slide-in-from-bottom-3"
               style={{
@@ -726,7 +731,7 @@ export const Player: React.FC = () => {
                   />
                 )}
                 <button
-                  onClick={() => setCharCardMinimized(true)}
+                  onClick={() => setChatEverOpened(true)}
                   className="absolute top-2 right-2 w-11 h-11 rounded-full flex items-center justify-center backdrop-blur-sm"
                   style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
                   aria-label="Minimize"
@@ -748,12 +753,12 @@ export const Player: React.FC = () => {
                 </div>
 
                 <button
-                  onClick={() => setShowChat(true)}
+                  onClick={() => { setChatEverOpened(true); setShowChat(true); }}
                   className="w-full py-3 rounded-xl font-bold text-white flex items-center justify-center gap-2.5 active:opacity-80 transition-opacity"
                   style={{ backgroundColor: accent, boxShadow: '0 2px 12px rgba(0,0,0,0.25)' }}
                 >
                   <Mic size={16} />
-                  {persistedCharacterZone?.id === activeCharacterZone?.id ? 'Continue conversation' : `Talk to ${activeCharacterZone.title}`}
+                  {`Talk to ${activeCharacterZone.title}`}
                 </button>
               </div>
             </div>
@@ -762,17 +767,16 @@ export const Player: React.FC = () => {
       )}
 
       {/* ── CHAT INTERFACE ────────────────────────────────────────────────────
-           Always mounted while persistedCharacterZone is set so the greeting
-           fires exactly once and conversation state is never lost on minimize.
-           visible={showChat} CSS-hides it without unmounting.
-           key={chatKey} forces a remount only when entering a DIFFERENT zone. */}
-      {persistedCharacterZone && (
+           Mounted only while showChat is true. History is persisted in
+           sessionStorage (keyed by zone.id) inside ChatInterface itself, so
+           reopening always restores the exact conversation — no greeting re-fires.
+           key={chatKey} forces a fresh mount only when entering a new zone.   */}
+      {persistedCharacterZone && showChat && (
         <ChatInterface
           key={chatKey}
           zone={persistedCharacterZone}
           theme={tour.player_theme || 'dark'}
-          visible={showChat}
-          onClose={() => { setShowChat(false); setCharCardMinimized(true); }}
+          onClose={() => setShowChat(false)}
           onUnlock={(zoneId) => {
             unlockedZoneIdsRef.current = new Set([...unlockedZoneIdsRef.current, zoneId]);
             const unlockedZone = zones.find(z => z.id === zoneId);

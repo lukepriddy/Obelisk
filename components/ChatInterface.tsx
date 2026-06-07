@@ -18,25 +18,30 @@ interface ChatInterfaceProps {
   onClose: () => void;
   onUnlock?: (zoneId: string) => void;
   theme?: 'dark' | 'light';
-  /** When false the panel is CSS-hidden but stays mounted — conversation
-   *  state is fully preserved so the player can resume without a new greeting. */
-  visible?: boolean;
 }
 
-export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onUnlock, theme = 'dark', visible = true }) => {
-  const [history, setHistory]       = useState<ChatMessage[]>([]);
-  const [isReady, setIsReady]       = useState(false);
-  const [isSending, setIsSending]   = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [errorMsg, setErrorMsg]     = useState<string | null>(null);
-  const [inputText, setInputText]   = useState('');
+export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onUnlock, theme = 'dark' }) => {
+  // ── History via sessionStorage — survives any remount within the same tab ──
+  const storageKey = `obelisk_chat_${zone.id}`;
+  const loadHistory = (): ChatMessage[] => {
+    try { const s = sessionStorage.getItem(storageKey); return s ? JSON.parse(s) : []; }
+    catch { return []; }
+  };
+  const savedHistory                  = loadHistory();
+  const hasExistingHistory            = savedHistory.length > 0;
+  const [history, setHistory]         = useState<ChatMessage[]>(savedHistory);
+  const [isReady, setIsReady]         = useState(hasExistingHistory);
+  const [isSending, setIsSending]     = useState(false);
+  const [isSpeaking, setIsSpeaking]   = useState(false);
+  const [errorMsg, setErrorMsg]       = useState<string | null>(null);
+  const [inputText, setInputText]     = useState('');
   const [isRecording, setIsRecording] = useState(false);
 
   const scrollRef      = useRef<HTMLDivElement>(null);
   const textareaRef    = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<any>(null);
   const micStreamRef   = useRef<MediaStream | null>(null);
-  const hasGreetedRef  = useRef(false);
+  const hasGreetedRef  = useRef(hasExistingHistory); // skip greeting if history loaded
   const hasUnlockedRef = useRef(false);
   const speakingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -107,16 +112,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [history, isSending]);
 
-  // ── Scroll to bottom when the panel is revealed after being hidden ───────
+  // ── Persist history to sessionStorage on every change ───────────────────
   useEffect(() => {
-    if (visible) {
-      // Defer one frame so the browser has repainted the visible container
-      // before we measure scrollHeight.
-      requestAnimationFrame(() => {
-        if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-      });
-    }
-  }, [visible]);
+    try { sessionStorage.setItem(storageKey, JSON.stringify(history)); }
+    catch {}
+  }, [history, storageKey]);
 
   // ── Greeting on mount ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -253,7 +253,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
         md:rounded-2xl md:border md:shadow-2xl
         ${t.root}
       `}
-      style={!visible ? { display: 'none' } : undefined}
     >
       {/* ── Drag handle — also a close affordance ── */}
       <button
