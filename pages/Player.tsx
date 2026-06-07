@@ -5,7 +5,7 @@ import L from 'leaflet';
 import { getTourById, getZonesByTourId } from '../services/db';
 import { audioService } from '../services/audioService';
 import { getDistance, calculateAttenuation } from '../utils/geo';
-import { Tour, Zone, ChatMessage } from '../types';
+import { Tour, Zone } from '../types';
 import { FONT_STYLES, MAP_STYLES } from '../constants';
 import { PlayCircle, Volume2, Mic, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu, Layers } from 'lucide-react';
 import { ChatInterface } from '../components/ChatInterface';
@@ -68,9 +68,6 @@ export const Player: React.FC = () => {
   const [chatKey, setChatKey] = useState(0);
   // Minimized character card — collapses to a small avatar button so the map is usable
   const [charCardMinimized, setCharCardMinimized] = useState(false);
-  // Chat history in a ref so it's always synchronously up to date when
-  // ChatInterface mounts — avoids React state batching gaps.
-  const chatHistoryRef = useRef<ChatMessage[]>([]);
   // Stickiness: delay clearing activeCharacterZone so brief exits don't
   // dismiss the "Talk to" button or break an open conversation.
   const charZoneExitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -254,7 +251,6 @@ export const Player: React.FC = () => {
           if (persistedCharZoneRef.current?.id !== foundCharZone.id) {
             persistedCharZoneRef.current = foundCharZone;
             setPersistedCharacterZone(foundCharZone);
-            chatHistoryRef.current = [];
             setChatKey(k => k + 1);
             setShowChat(false);
             setCharCardMinimized(false);
@@ -509,7 +505,7 @@ export const Player: React.FC = () => {
                 <div className="w-full aspect-square rounded-xl overflow-hidden border border-white/10 shadow-lg">
                   <MapContainer
                     center={[tour.lat, tour.lng]}
-                    zoom={15}
+                    zoom={18}
                     style={{ width: '100%', height: '100%' }}
                     zoomControl={true}
                     scrollWheelZoom={true}
@@ -766,17 +762,16 @@ export const Player: React.FC = () => {
       )}
 
       {/* ── CHAT INTERFACE ────────────────────────────────────────────────────
-           Mounted only while showChat is true. History lives in chatHistoryRef
-           (a plain ref, not state) so it's always synchronously current when
-           ChatInterface mounts — no React batching gaps. key={chatKey} forces
-           a fresh mount when the player enters a different character zone.   */}
-      {persistedCharacterZone && showChat && (
+           Always mounted while persistedCharacterZone is set so the greeting
+           fires exactly once and conversation state is never lost on minimize.
+           visible={showChat} CSS-hides it without unmounting.
+           key={chatKey} forces a remount only when entering a DIFFERENT zone. */}
+      {persistedCharacterZone && (
         <ChatInterface
           key={chatKey}
           zone={persistedCharacterZone}
           theme={tour.player_theme || 'dark'}
-          initialHistory={chatHistoryRef.current}
-          onHistoryChange={(h) => { chatHistoryRef.current = h; }}
+          visible={showChat}
           onClose={() => { setShowChat(false); setCharCardMinimized(true); }}
           onUnlock={(zoneId) => {
             unlockedZoneIdsRef.current = new Set([...unlockedZoneIdsRef.current, zoneId]);

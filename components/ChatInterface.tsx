@@ -18,14 +18,14 @@ interface ChatInterfaceProps {
   onClose: () => void;
   onUnlock?: (zoneId: string) => void;
   theme?: 'dark' | 'light';
-  initialHistory?: ChatMessage[];
-  onHistoryChange?: (history: ChatMessage[]) => void;
+  /** When false the panel is CSS-hidden but stays mounted — conversation
+   *  state is fully preserved so the player can resume without a new greeting. */
+  visible?: boolean;
 }
 
-export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onUnlock, theme = 'dark', initialHistory, onHistoryChange }) => {
-  const hasExistingHistory = (initialHistory ?? []).length > 0;
-  const [history, setHistory]       = useState<ChatMessage[]>(initialHistory ?? []);
-  const [isReady, setIsReady]       = useState(hasExistingHistory);
+export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onUnlock, theme = 'dark', visible = true }) => {
+  const [history, setHistory]       = useState<ChatMessage[]>([]);
+  const [isReady, setIsReady]       = useState(false);
   const [isSending, setIsSending]   = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [errorMsg, setErrorMsg]     = useState<string | null>(null);
@@ -36,7 +36,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   const textareaRef    = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<any>(null);
   const micStreamRef   = useRef<MediaStream | null>(null);
-  const hasGreetedRef  = useRef(hasExistingHistory);
+  const hasGreetedRef  = useRef(false);
   const hasUnlockedRef = useRef(false);
   const speakingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -107,14 +107,16 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [history, isSending]);
 
-  // ── Sync history to parent so it survives remounts ────────────────────────
-  // Always write to the parent ref immediately — no isFirstRender guard needed
-  // because the parent holds history in a plain ref (not state), so calling
-  // onHistoryChange on the initial render with the same initialHistory value
-  // is a harmless no-op write and never triggers a re-render.
+  // ── Scroll to bottom when the panel is revealed after being hidden ───────
   useEffect(() => {
-    onHistoryChange?.(history);
-  }, [history]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (visible) {
+      // Defer one frame so the browser has repainted the visible container
+      // before we measure scrollHeight.
+      requestAnimationFrame(() => {
+        if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      });
+    }
+  }, [visible]);
 
   // ── Greeting on mount ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -251,6 +253,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
         md:rounded-2xl md:border md:shadow-2xl
         ${t.root}
       `}
+      style={!visible ? { display: 'none' } : undefined}
     >
       {/* ── Drag handle — also a close affordance ── */}
       <button
