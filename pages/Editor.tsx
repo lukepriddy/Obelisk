@@ -154,6 +154,7 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedOk, setSavedOk] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [undoStack, setUndoStack] = useState<Array<{ type: 'create' | 'delete'; zone: Zone }>>([]);
 
@@ -194,6 +195,9 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
     const tourData = await getTourById(id);
     if (!tourData) { navigate('/'); return; }
     setTour(tourData);
+    // Sync the zoom ref now that we have the saved value — without this,
+    // saving before the user zooms would reset start_zoom to MAP_DEFAULT_ZOOM.
+    editorMapZoomRef.current = tourData.start_zoom ?? MAP_DEFAULT_ZOOM;
     const zonesData = await getZonesByTourId(id);
     setZones(zonesData);
     setLoading(false);
@@ -287,39 +291,45 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
   };
 
   const saveTour = async () => {
-    if (!tour) return;
+    if (!tour || saving) return; // guard against concurrent saves (e.g. Cmd+S spam)
     setSaving(true);
+    setSaveError(null);
 
     // Flush all pending zone updates in parallel with the tour save.
     const zoneSaves = Array.from(pendingZoneUpdatesRef.current.entries()).map(
       ([id, updates]) => dbUpdateZone(id, updates)
     );
 
-    await Promise.all([
-      ...zoneSaves,
-      dbUpdateTour(tour.id, {
-        title: tour.title,
-        description: tour.description,
-        welcome_subtitle: tour.welcome_subtitle,
-        welcome_image_url: tour.welcome_image_url,
-        accent_color: tour.accent_color,
-        bg_color: tour.bg_color,
-        text_color: tour.text_color,
-        font_style: tour.font_style,
-        map_style: tour.map_style,
-        player_theme: tour.player_theme,
-        is_public: tour.is_public,
-        lat: tour.lat,
-        lng: tour.lng,
-        start_zoom: editorMapZoomRef.current,
-      }),
-    ]);
-
-    pendingZoneUpdatesRef.current.clear(); // Only cleared after all writes confirm
-    setSaving(false);
-    setHasUnsavedChanges(false);
-    setSavedOk(true);
-    setTimeout(() => setSavedOk(false), 2000);
+    try {
+      await Promise.all([
+        ...zoneSaves,
+        dbUpdateTour(tour.id, {
+          title: tour.title,
+          description: tour.description,
+          welcome_subtitle: tour.welcome_subtitle,
+          welcome_image_url: tour.welcome_image_url,
+          accent_color: tour.accent_color,
+          bg_color: tour.bg_color,
+          text_color: tour.text_color,
+          font_style: tour.font_style,
+          map_style: tour.map_style,
+          player_theme: tour.player_theme,
+          is_public: tour.is_public,
+          lat: tour.lat,
+          lng: tour.lng,
+          start_zoom: editorMapZoomRef.current,
+        }),
+      ]);
+      pendingZoneUpdatesRef.current.clear();
+      setHasUnsavedChanges(false);
+      setSavedOk(true);
+      setTimeout(() => setSavedOk(false), 2000);
+    } catch (err) {
+      console.error('saveTour failed:', err);
+      setSaveError('Save failed — check your connection and try again.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (loading || !tour) return <div className="flex justify-center items-center h-full bg-zinc-950 text-emerald-500"><Loader2 className="animate-spin"/></div>;
@@ -408,19 +418,23 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
                    <Info size={18} />
                  </button>
                  <div className="flex items-center gap-2">
-                   {hasUnsavedChanges && !saving && (
+                   {saveError && (
+                     <span className="text-xs text-red-400 font-medium max-w-[160px] truncate" title={saveError}>{saveError}</span>
+                   )}
+                   {hasUnsavedChanges && !saving && !saveError && (
                      <span className="text-xs text-amber-400 font-medium animate-pulse">Unsaved changes</span>
                    )}
-                   {savedOk && !hasUnsavedChanges && (
+                   {savedOk && !hasUnsavedChanges && !saveError && (
                      <span className="text-xs text-emerald-400 font-medium">Saved ✓</span>
                    )}
                    <button
                      onClick={saveTour}
+                     disabled={saving}
                      title="Save (⌘S)"
-                     className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded text-white text-xs font-semibold transition-all ${hasUnsavedChanges ? 'bg-amber-500 hover:bg-amber-400 shadow-lg shadow-amber-900/40' : 'bg-emerald-600 hover:bg-emerald-500'}`}
+                     className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded text-white text-xs font-semibold transition-all disabled:opacity-60 ${saveError ? 'bg-red-600 hover:bg-red-500' : hasUnsavedChanges ? 'bg-amber-500 hover:bg-amber-400 shadow-lg shadow-amber-900/40' : 'bg-emerald-600 hover:bg-emerald-500'}`}
                    >
                      {saving ? <Loader2 className="animate-spin" size={14}/> : <Save size={14}/>}
-                     Save
+                     {saveError ? 'Retry' : 'Save'}
                    </button>
                  </div>
              </div>

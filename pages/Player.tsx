@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { MapContainer, TileLayer, Marker, Circle, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Circle, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import { getTourById, getZonesByTourId } from '../services/db';
 import { audioService } from '../services/audioService';
@@ -18,12 +18,18 @@ const UserIcon = L.divIcon({
   iconAnchor: [8, 8]
 });
 
-// Map controller to center on user
-const MapRecenter = ({ lat, lng }: { lat: number, lng: number }) => {
+// Map controller — only re-centers when `enabled` (user hasn't manually panned away).
+const MapRecenter = ({ lat, lng, enabled }: { lat: number; lng: number; enabled: boolean }) => {
   const map = useMap();
   useEffect(() => {
-    map.setView([lat, lng], map.getZoom());
-  }, [lat, lng, map]);
+    if (enabled) map.setView([lat, lng], map.getZoom());
+  }, [lat, lng, map, enabled]);
+  return null;
+};
+
+// Detects a user-initiated drag so we can pause auto-follow.
+const DragDetector = ({ onDrag }: { onDrag: () => void }) => {
+  useMapEvents({ dragstart: onDrag });
   return null;
 };
 
@@ -75,6 +81,12 @@ export const Player: React.FC = () => {
   // Ref mirror of showChat so the interval callback (stale closure) can read
   // the current value without being listed as a dependency.
   const showChatRef = useRef(false);
+  // Ref mirror of activeCharacterZone — lets the audio loop read the current
+  // zone without depending on it (which would restart the interval on every entry/exit).
+  const activeCharZoneRef = useRef<Zone | null>(null);
+
+  // Map follow mode — set to false when user manually pans; "Follow" button restores it.
+  const [followUser, setFollowUser] = useState(true);
 
   // Tour info sheet — two states so the CSS transition has a painted starting
   // point before it runs (avoids the mount-flash that animate-in causes).
@@ -109,8 +121,15 @@ export const Player: React.FC = () => {
     if (tourId) loadTour(tourId);
     return () => {
       audioService.stopAll();
+      // Clear all timers so they don't fire against unmounted component state.
+      if (hudTimerRef.current)          clearTimeout(hudTimerRef.current);
+      if (charZoneExitTimerRef.current) clearTimeout(charZoneExitTimerRef.current);
     };
   }, [tourId]);
+
+  // Keep the ref in sync so the audio-loop closure always has the latest zone
+  // without needing activeCharacterZone in the interval's dependency array.
+  useEffect(() => { activeCharZoneRef.current = activeCharacterZone; }, [activeCharacterZone]);
 
   // Lock body scroll while the Player is mounted so iOS can't rubber-band
   // the page behind the fixed map UI. Restored on unmount.
@@ -239,7 +258,7 @@ export const Player: React.FC = () => {
       audioService.updateVolumes(audioUpdates);
       setActiveZones(activeState);
 
-      if (foundCharZone?.id !== activeCharacterZone?.id) {
+      if (foundCharZone?.id !== activeCharZoneRef.current?.id) {
         if (foundCharZone) {
           // Entered a character zone — apply immediately, cancel any exit timer
           if (charZoneExitTimerRef.current) {
@@ -289,7 +308,10 @@ export const Player: React.FC = () => {
       // Intentionally do NOT clear charZoneExitTimerRef here — the timer must
       // survive interval restarts that happen when userPos changes (sim dragging).
     };
-  }, [audioStarted, userPos, zones, activeCharacterZone]);
+    // activeCharacterZone intentionally excluded — we read it via activeCharZoneRef
+    // so the interval doesn't restart on every zone entry/exit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audioStarted, userPos, zones]);
 
   // GPS Watcher
   useEffect(() => {
@@ -311,7 +333,7 @@ export const Player: React.FC = () => {
           setGpsError('Could not get your location. Please try again or check your device settings.');
         }
       },
-      { enableHighAccuracy: true }
+      { enableHighAccuracy: true, maximumAge: 5000 }
     );
     return () => navigator.geolocation.clearWatch(watchId);
   }, [simulationMode]);
@@ -413,7 +435,11 @@ export const Player: React.FC = () => {
           })()}
           
           <InvalidateSize />
-          {!simulationMode && userPos && <MapRecenter lat={userPos[0]} lng={userPos[1]} />}
+          {!simulationMode && userPos && (
+            <MapRecenter lat={userPos[0]} lng={userPos[1]} enabled={followUser} />
+          )}
+          {/* Pause auto-follow whenever the user manually pans the map */}
+          {!simulationMode && <DragDetector onDrag={() => setFollowUser(false)} />}
 
           {/* Zones */}
           {zones.map(zone => {
@@ -914,6 +940,18 @@ export const Player: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-1 shrink-0">
+            {/* Re-center button — appears when the user has panned away from their dot */}
+            {audioStarted && !simulationMode && userPos && !followUser && (
+              <button
+                onClick={() => setFollowUser(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg active:opacity-60 transition-opacity animate-in fade-in duration-200"
+                style={{ color: accent }}
+                title="Re-center on my location"
+              >
+                <MapPin size={12} />
+                <span className="text-[10px] font-bold uppercase tracking-wide">Follow</span>
+              </button>
+            )}
             {isPreview && (
               <button
                 onClick={() => setSimulationMode(!simulationMode)}

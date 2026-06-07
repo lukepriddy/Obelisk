@@ -45,6 +45,21 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   const hasUnlockedRef = useRef(false);
   const speakingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // ── Cleanup on unmount — stop mic and any dangling timers ────────────────
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.onresult = null;
+        try { recognitionRef.current.stop(); } catch {}
+      }
+      if (micStreamRef.current) {
+        micStreamRef.current.getTracks().forEach(t => t.stop());
+        micStreamRef.current = null;
+      }
+      if (speakingTimerRef.current) clearTimeout(speakingTimerRef.current);
+    };
+  }, []); // runs once on mount; cleanup fires on unmount
+
   // ── Textarea auto-resize ──────────────────────────────────────────────────
   useEffect(() => {
     const el = textareaRef.current;

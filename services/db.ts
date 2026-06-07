@@ -79,7 +79,7 @@ export const updateTour = async (tourId: string, updates: Partial<Tour>): Promis
     .update(updates)
     .eq('id', tourId);
 
-  if (error) console.error('updateTour:', error);
+  if (error) { console.error('updateTour:', error); throw error; }
 };
 
 export const deleteTour = async (tourId: string): Promise<boolean> => {
@@ -118,7 +118,7 @@ export const updateZone = async (zoneId: string, updates: Partial<Zone>): Promis
     .update(updates)
     .eq('id', zoneId);
 
-  if (error) console.error('updateZone:', error);
+  if (error) { console.error('updateZone:', error); throw error; }
 };
 
 export const deleteZone = async (zoneId: string): Promise<void> => {

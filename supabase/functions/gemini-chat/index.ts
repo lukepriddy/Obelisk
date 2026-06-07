@@ -27,6 +27,14 @@ Deno.serve(async (req) => {
     return new Response('ok', { headers: cors });
   }
 
+  // Fail fast if the secret was never set — avoids an opaque 400 from Gemini.
+  if (!GEMINI_API_KEY) {
+    return new Response(JSON.stringify({ error: 'Service not configured' }), {
+      status: 503,
+      headers: { ...cors, 'Content-Type': 'application/json' },
+    });
+  }
+
   try {
     const body = await req.json();
     const { type } = body;
@@ -39,8 +47,16 @@ Deno.serve(async (req) => {
         systemInstruction: string;
       };
 
+      // Input guard — prevent runaway context and oversized messages.
+      if (!userMessage || typeof userMessage !== 'string' || userMessage.length > 2000) {
+        return new Response(JSON.stringify({ error: 'Invalid or oversized message' }), {
+          status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
+        });
+      }
+      const safeHistory = Array.isArray(history) ? history.slice(-40) : [];
+
       const contents = [
-        ...history.map(h => ({ role: h.role, parts: [{ text: h.text }] })),
+        ...safeHistory.map((h: { role: string; text: string }) => ({ role: h.role, parts: [{ text: h.text }] })),
         { role: 'user', parts: [{ text: userMessage }] },
       ];
 
