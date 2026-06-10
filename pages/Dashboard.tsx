@@ -5,14 +5,20 @@ import {
   createTour as dbCreateTour,
   deleteTour as dbDeleteTour,
   getZoneCountsByTourIds,
+  getZonesByTourId,
   duplicateTour as dbDuplicateTour,
+  getAnalyticsByTourIds,
+  getApiKeys,
+  saveApiKeys,
 } from '../services/db';
-import { Tour, User } from '../types';
+import { Tour, User, TourAnalytics } from '../types';
 import {
   Plus, Play, Edit2, Map, Link2, Check, Trash2, AlertTriangle,
   MapPin, LogOut, BarChart2, Globe, Lock, Copy, Search,
-  ChevronDown, Layers, Clock, SortAsc,
+  ChevronDown, Layers, Clock, SortAsc, TrendingUp, Users, Timer,
+  ChevronRight, Sparkles, Settings, KeyRound, Eye, EyeOff, Loader2,
 } from 'lucide-react';
+import { GenerateExperienceModal } from '../components/GenerateExperienceModal';
 
 interface DashboardProps {
   user: User;
@@ -71,29 +77,99 @@ const StatCard: React.FC<{ label: string; value: number | string; icon: React.Re
 export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
   const [tours, setTours]             = useState<Tour[]>([]);
   const [zoneCounts, setZoneCounts]   = useState<Record<string, number>>({});
+  const [analytics, setAnalytics]     = useState<Record<string, TourAnalytics>>({});
+  const [expandedAnalytics, setExpandedAnalytics] = useState<string | null>(null);
   const [creating, setCreating]       = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [copiedId, setCopiedId]       = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deletingId, setDeletingId]   = useState<string | null>(null);
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
-  const [activeNav, setActiveNav]     = useState<'tours' | 'analytics'>('tours');
+  const [activeNav, setActiveNav]     = useState<'tours' | 'analytics' | 'settings'>('tours');
   const [search, setSearch]           = useState('');
   const [sort, setSort]               = useState<SortKey>('newest');
   const [filter, setFilter]           = useState<FilterKey>('all');
   const [loadingTours, setLoadingTours] = useState(true);
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
+  // Settings — ElevenLabs API key
+  const [elevenKey, setElevenKey]         = useState('');
+  const [elevenKeySaved, setElevenKeySaved] = useState(false);   // a key exists in the DB
+  const [showElevenKey, setShowElevenKey] = useState(false);
+  const [savingKey, setSavingKey]         = useState(false);
+  const [keyMessage, setKeyMessage]       = useState<string | null>(null);
+  // zone_id → title, loaded lazily when a tour row is expanded in analytics
+  const [zoneNames, setZoneNames]       = useState<Record<string, string>>({});
 
   const navigate = useNavigate();
 
+  // When a tour row is expanded in analytics, fetch its zone titles once
+  useEffect(() => {
+    if (!expandedAnalytics) return;
+    const a = analytics[expandedAnalytics];
+    if (!a || !a.zone_visits.length) return;
+    // Only fetch if any zone in this tour is still unknown
+    const missing = a.zone_visits.some(({ zone_id }) => !(zone_id in zoneNames));
+    if (!missing) return;
+    getZonesByTourId(expandedAnalytics).then(zones => {
+      setZoneNames(prev => {
+        const next = { ...prev };
+        zones.forEach(z => { next[z.id] = z.title; });
+        return next;
+      });
+    });
+  }, [expandedAnalytics]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => { loadTours(); }, []);
+
+  // Load saved API keys when Settings is opened
+  useEffect(() => {
+    if (activeNav !== 'settings') return;
+    getApiKeys(user.id).then(keys => {
+      setElevenKeySaved(!!keys?.elevenlabs_key);
+    });
+  }, [activeNav]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleSaveElevenKey = async () => {
+    if (!elevenKey.trim()) return;
+    setSavingKey(true);
+    setKeyMessage(null);
+    const ok = await saveApiKeys(user.id, { elevenlabs_key: elevenKey.trim() });
+    setSavingKey(false);
+    if (ok) {
+      setElevenKeySaved(true);
+      setElevenKey('');
+      setShowElevenKey(false);
+      setKeyMessage('Key saved.');
+    } else {
+      setKeyMessage('Failed to save — please try again.');
+    }
+  };
+
+  const handleRemoveElevenKey = async () => {
+    setSavingKey(true);
+    setKeyMessage(null);
+    const ok = await saveApiKeys(user.id, { elevenlabs_key: null });
+    setSavingKey(false);
+    if (ok) {
+      setElevenKeySaved(false);
+      setKeyMessage('Key removed.');
+    } else {
+      setKeyMessage('Failed to remove — please try again.');
+    }
+  };
 
   const loadTours = async () => {
     setLoadingTours(true);
     const data = await getToursByUser(user.id);
     setTours(data);
     if (data.length) {
-      const counts = await getZoneCountsByTourIds(data.map(t => t.id));
+      const ids = data.map(t => t.id);
+      const [counts, analyticsData] = await Promise.all([
+        getZoneCountsByTourIds(ids),
+        getAnalyticsByTourIds(ids),
+      ]);
       setZoneCounts(counts);
+      setAnalytics(analyticsData);
     }
     setLoadingTours(false);
   };
@@ -168,8 +244,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
     const newTour = await dbDuplicateTour(tourId, user.id);
     if (newTour) {
       setTours(prev => [newTour, ...prev]);
-      const counts = await getZoneCountsByTourIds([newTour.id]);
+      const [counts, analyticsData] = await Promise.all([
+        getZoneCountsByTourIds([newTour.id]),
+        getAnalyticsByTourIds([newTour.id]),
+      ]);
       setZoneCounts(prev => ({ ...prev, ...counts }));
+      setAnalytics(prev => ({ ...prev, ...analyticsData }));
     } else {
       alert('Could not duplicate. Please try again.');
     }
@@ -179,6 +259,26 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
   const formatDate = (iso: string) => {
     const d = new Date(iso);
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  const formatRelative = (iso: string) => {
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins  = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days  = Math.floor(diff / 86400000);
+    if (mins  <  2) return 'just now';
+    if (mins  < 60) return `${mins}m ago`;
+    if (hours < 24) return `${hours}h ago`;
+    if (days  <  7) return `${days}d ago`;
+    return formatDate(iso);
+  };
+
+  const formatDuration = (secs: number | null) => {
+    if (secs === null) return '—';
+    if (secs < 60) return `${Math.round(secs)}s`;
+    const m = Math.floor(secs / 60);
+    const s = Math.round(secs % 60);
+    return s > 0 ? `${m}m ${s}s` : `${m}m`;
   };
 
   // ── Render ───────────────────────────────────────────────────────────────
@@ -208,8 +308,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
           <NavItem
             icon={<BarChart2 size={16} />}
             label="Analytics"
-            disabled
-            badge="Soon"
+            active={activeNav === 'analytics'}
+            onClick={() => setActiveNav('analytics')}
+          />
+          <NavItem
+            icon={<Settings size={16} />}
+            label="Settings"
+            active={activeNav === 'settings'}
+            onClick={() => setActiveNav('settings')}
           />
         </nav>
 
@@ -248,14 +354,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
                   <h1 className="text-2xl font-bold text-white tracking-tight">Your Experiences</h1>
                   <p className="text-sm text-zinc-500 mt-0.5">Build and manage location-based narratives</p>
                 </div>
-                <button
-                  onClick={createTour}
-                  disabled={creating}
-                  className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-60 text-zinc-950 font-bold px-4 py-2.5 rounded-xl transition-colors text-sm"
-                >
-                  <Plus size={16} />
-                  {creating ? 'Creating…' : 'New Experience'}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowGenerateModal(true)}
+                    className="flex items-center gap-2 bg-transparent border border-indigo-500/50 hover:border-indigo-400 hover:bg-indigo-500/10 text-indigo-300 hover:text-indigo-200 font-semibold px-4 py-2.5 rounded-xl transition-colors text-sm"
+                  >
+                    <Sparkles size={15} />
+                    Generate with AI
+                  </button>
+                  <button
+                    onClick={createTour}
+                    disabled={creating}
+                    className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-60 text-zinc-950 font-bold px-4 py-2.5 rounded-xl transition-colors text-sm"
+                  >
+                    <Plus size={16} />
+                    {creating ? 'Creating…' : 'New Experience'}
+                  </button>
+                </div>
               </div>
 
               {createError && (
@@ -397,12 +512,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
                           </span>
                         </div>
 
-                        {/* Zone count */}
-                        <div className="absolute top-2.5 right-2.5">
+                        {/* Zone count + play count */}
+                        <div className="absolute top-2.5 right-2.5 flex flex-col items-end gap-1">
                           <span className="flex items-center gap-1 text-[10px] font-bold bg-black/50 text-zinc-300 px-2 py-1 rounded-lg backdrop-blur-sm border border-white/10">
                             <MapPin size={9} />
                             {zoneCounts[tour.id] ?? 0} {(zoneCounts[tour.id] ?? 0) === 1 ? 'zone' : 'zones'}
                           </span>
+                          {(analytics[tour.id]?.total_plays ?? 0) > 0 && (
+                            <span className="flex items-center gap-1 text-[10px] font-bold bg-black/50 text-indigo-300 px-2 py-1 rounded-lg backdrop-blur-sm border border-white/10">
+                              <TrendingUp size={9} />
+                              {analytics[tour.id].total_plays} {analytics[tour.id].total_plays === 1 ? 'play' : 'plays'}
+                            </span>
+                          )}
                         </div>
                       </div>
 
@@ -499,30 +620,232 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
             </>
           )}
 
-          {/* ── ANALYTICS VIEW (placeholder) ── */}
-          {activeNav === 'analytics' && (
-            <div className="flex flex-col items-center justify-center py-24 text-center">
-              <div className="w-20 h-20 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mb-5">
-                <BarChart2 size={32} className="text-indigo-400" />
-              </div>
-              <h2 className="font-bold text-white text-xl mb-2">Analytics coming soon</h2>
-              <p className="text-zinc-500 text-sm max-w-sm leading-relaxed mb-6">
-                When player session tracking is enabled, you'll see total plays, zone visit rates,
-                average session length, and engagement heatmaps per experience.
-              </p>
-              <div className="grid grid-cols-3 gap-4 max-w-lg w-full opacity-40 pointer-events-none select-none">
-                {['Total plays', 'Avg. session', 'Zone visits'].map(l => (
-                  <div key={l} className="bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-5">
-                    <p className="text-2xl font-bold text-white">—</p>
-                    <p className="text-xs text-zinc-500 mt-0.5">{l}</p>
+          {/* ── ANALYTICS VIEW ── */}
+          {activeNav === 'analytics' && (() => {
+            const totalPlays     = Object.values(analytics).reduce((s, a) => s + a.total_plays, 0);
+            const totalVisits    = Object.values(analytics).reduce((s, a) => s + a.zone_visits.reduce((sv, v) => sv + v.visit_count, 0), 0);
+            const allLastPlayed  = Object.values(analytics).map(a => a.last_played).filter(Boolean) as string[];
+            const latestPlay     = allLastPlayed.length
+              ? allLastPlayed.sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0]
+              : null;
+
+            return (
+              <>
+                {/* Header */}
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h1 className="text-2xl font-bold text-white tracking-tight">Analytics</h1>
+                    <p className="text-sm text-zinc-500 mt-0.5">Real plays from the player URL — preview sessions excluded</p>
                   </div>
-                ))}
+                </div>
+
+                {/* Global stats */}
+                <div className="grid grid-cols-3 gap-4 mb-7">
+                  <StatCard label="Total plays" value={totalPlays} icon={<TrendingUp size={18} className="text-indigo-400" />} color="bg-indigo-500/10" />
+                  <StatCard label="Zone visits" value={totalVisits} icon={<MapPin size={18} className="text-emerald-400" />} color="bg-emerald-500/10" />
+                  <StatCard label="Last activity" value={latestPlay ? formatRelative(latestPlay) : '—'} icon={<Timer size={18} className="text-amber-400" />} color="bg-amber-500/10" />
+                </div>
+
+                {/* No data yet */}
+                {totalPlays === 0 && (
+                  <div className="flex flex-col items-center justify-center py-20 bg-zinc-900/40 rounded-2xl border border-dashed border-zinc-800">
+                    <BarChart2 size={32} className="text-zinc-700 mb-3" />
+                    <p className="font-semibold text-zinc-400 mb-1">No plays yet</p>
+                    <p className="text-sm text-zinc-600 max-w-xs text-center">
+                      Share a player link with real visitors. Data appears here as soon as someone taps "Begin Experience".
+                    </p>
+                  </div>
+                )}
+
+                {/* Per-tour breakdown */}
+                {tours.length > 0 && totalPlays > 0 && (
+                  <div className="flex flex-col gap-3">
+                    {tours.map(tour => {
+                      const a = analytics[tour.id];
+                      if (!a) return null;
+                      const isExpanded = expandedAnalytics === tour.id;
+
+                      return (
+                        <div key={tour.id} className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+                          {/* Row */}
+                          <button
+                            onClick={() => setExpandedAnalytics(isExpanded ? null : tour.id)}
+                            className="w-full flex items-center gap-4 px-5 py-4 hover:bg-zinc-800/50 transition-colors text-left"
+                          >
+                            {/* Cover thumb */}
+                            <div className="w-10 h-10 rounded-xl bg-zinc-800 shrink-0 overflow-hidden border border-zinc-700">
+                              {tour.welcome_image_url
+                                ? <img src={tour.welcome_image_url} alt="" className="w-full h-full object-cover" />
+                                : <Map size={18} className="text-zinc-600 m-auto mt-2.5" />}
+                            </div>
+
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-white text-sm truncate">{tour.title}</p>
+                              <p className="text-xs text-zinc-500 mt-0.5">
+                                {a.last_played ? `Last played ${formatRelative(a.last_played)}` : 'Never played'}
+                              </p>
+                            </div>
+
+                            {/* Stats */}
+                            <div className="flex items-center gap-6 shrink-0">
+                              <div className="text-center hidden sm:block">
+                                <p className="text-lg font-bold text-white leading-none">{a.total_plays}</p>
+                                <p className="text-[10px] text-zinc-500 mt-0.5">plays</p>
+                              </div>
+                              <div className="text-center hidden sm:block">
+                                <p className="text-lg font-bold text-white leading-none">
+                                  {a.zone_visits.reduce((s, v) => s + v.visit_count, 0)}
+                                </p>
+                                <p className="text-[10px] text-zinc-500 mt-0.5">zone visits</p>
+                              </div>
+                              <div className="text-center hidden md:block">
+                                <p className="text-lg font-bold text-white leading-none">{formatDuration(a.avg_duration_seconds)}</p>
+                                <p className="text-[10px] text-zinc-500 mt-0.5">avg session</p>
+                              </div>
+                              <ChevronRight
+                                size={16}
+                                className={`text-zinc-600 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                              />
+                            </div>
+                          </button>
+
+                          {/* Zone breakdown (expanded) */}
+                          {isExpanded && (
+                            <div className="border-t border-zinc-800 px-5 py-4">
+                              <p className="text-xs font-bold uppercase tracking-wider text-zinc-500 mb-3">Zone visits</p>
+                              {a.zone_visits.length === 0 ? (
+                                <p className="text-sm text-zinc-600">No zone visits recorded yet.</p>
+                              ) : (
+                                <div className="flex flex-col gap-2">
+                                  {a.zone_visits.map(({ zone_id, visit_count }) => {
+                                    const maxCount = a.zone_visits[0]?.visit_count ?? 1;
+                                    const pct = Math.round((visit_count / maxCount) * 100);
+                                    const label = zoneNames[zone_id] ?? zone_id.slice(0, 8) + '…';
+                                    return (
+                                      <div key={zone_id} className="flex items-center gap-3">
+                                        <span className="text-xs text-zinc-400 w-32 truncate shrink-0">{label}</span>
+                                        <div className="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                                          <div
+                                            className="h-full bg-indigo-500 rounded-full transition-all"
+                                            style={{ width: `${pct}%` }}
+                                          />
+                                        </div>
+                                        <span className="text-xs font-bold text-zinc-300 w-6 text-right shrink-0">{visit_count}</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            );
+          })()}
+
+          {/* ── SETTINGS VIEW ── */}
+          {activeNav === 'settings' && (
+            <>
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h1 className="text-2xl font-bold text-white tracking-tight">Settings</h1>
+                  <p className="text-sm text-zinc-500 mt-0.5">API keys and account preferences</p>
+                </div>
               </div>
-            </div>
+
+              {/* API Keys card */}
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 max-w-xl">
+                <div className="flex items-center gap-2.5 mb-1">
+                  <div className="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-500/25 flex items-center justify-center">
+                    <KeyRound size={14} className="text-amber-400" />
+                  </div>
+                  <h2 className="font-bold text-white text-sm">API Keys</h2>
+                </div>
+                <p className="text-xs text-zinc-500 mb-5 leading-relaxed">
+                  Your keys are stored securely and only used server-side — they never reach players' browsers.
+                  Usage is billed to your own provider accounts.
+                </p>
+
+                {/* ElevenLabs */}
+                <div className="border-t border-zinc-800 pt-4">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider">ElevenLabs</label>
+                    {elevenKeySaved && (
+                      <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/25 px-2 py-0.5 rounded-full">
+                        <Check size={9} /> Key saved
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-zinc-600 mb-3">
+                    Powers AI voiceover generation in audio zones. Get a key at elevenlabs.io → Profile → API Keys.
+                  </p>
+
+                  <div className="flex gap-2">
+                    <div className="flex items-center gap-2 flex-1 bg-zinc-800 border border-zinc-700 focus-within:border-zinc-500 rounded-xl px-3 transition-colors">
+                      <input
+                        type={showElevenKey ? 'text' : 'password'}
+                        value={elevenKey}
+                        onChange={e => setElevenKey(e.target.value)}
+                        placeholder={elevenKeySaved ? 'Enter a new key to replace the saved one' : 'sk_…'}
+                        className="flex-1 bg-transparent text-sm text-zinc-200 py-2.5 placeholder-zinc-600 focus:outline-none"
+                        autoComplete="off"
+                      />
+                      <button
+                        onClick={() => setShowElevenKey(v => !v)}
+                        className="text-zinc-500 hover:text-zinc-300 transition-colors"
+                        aria-label={showElevenKey ? 'Hide key' : 'Show key'}
+                      >
+                        {showElevenKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                    </div>
+                    <button
+                      onClick={handleSaveElevenKey}
+                      disabled={!elevenKey.trim() || savingKey}
+                      className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-sm font-bold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {savingKey ? <Loader2 size={14} className="animate-spin" /> : 'Save'}
+                    </button>
+                  </div>
+
+                  {elevenKeySaved && (
+                    <button
+                      onClick={handleRemoveElevenKey}
+                      disabled={savingKey}
+                      className="text-[11px] text-zinc-600 hover:text-red-400 mt-2 transition-colors disabled:opacity-40"
+                    >
+                      Remove saved key
+                    </button>
+                  )}
+
+                  {keyMessage && (
+                    <p className={`text-xs mt-2 ${keyMessage.includes('Failed') ? 'text-red-400' : 'text-emerald-400'}`}>
+                      {keyMessage}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </>
           )}
 
         </div>
       </main>
+
+      {/* ── GENERATE EXPERIENCE MODAL ───────────────────────────────────────── */}
+      {showGenerateModal && (
+        <GenerateExperienceModal
+          userId={user.id}
+          onClose={() => setShowGenerateModal(false)}
+          onBuilt={(tourId) => {
+            setShowGenerateModal(false);
+            navigate(`/editor/${tourId}`);
+            loadTours();
+          }}
+        />
+      )}
     </div>
   );
 };

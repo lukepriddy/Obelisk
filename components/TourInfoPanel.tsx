@@ -13,9 +13,27 @@ const ACCENT_PRESETS = ['#10b981','#6366f1','#f59e0b','#ef4444','#3b82f6','#ec48
 const BG_PRESETS     = ['#0f172a','#111827','#ffffff','#fafaf9','#1e293b','#18181b'];
 const TEXT_PRESETS   = ['#ffffff','#f1f5f9','#1e293b','#0f172a','#94a3b8','#d1fae5'];
 
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+
+function validateImageFile(file: File): string | null {
+  const name = file.name.toLowerCase();
+  if (name.endsWith('.heic') || name.endsWith('.heif') ||
+      file.type === 'image/heic' || file.type === 'image/heif') {
+    return "iPhone HEIC photos aren't supported. In Photos, tap Share → Options → turn on \"Most Compatible\" to export as JPEG.";
+  }
+  if (file.type && !ALLOWED_IMAGE_TYPES.includes(file.type)) {
+    return `Unsupported format (${file.type}). Please use JPEG, PNG, WebP, or GIF.`;
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    return 'Image is too large (max 10 MB). Please resize it and try again.';
+  }
+  return null;
+}
+
 export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({ tour, onUpdate }) => {
   const [tab, setTab] = useState<'edit' | 'preview'>('edit');
   const [imageUploading, setImageUploading] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const accent  = tour.accent_color || '#10b981';
@@ -27,10 +45,20 @@ export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({ tour, onUpdate }) 
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = '';
+    setImageError(null);
+
+    const validationError = validateImageFile(file);
+    if (validationError) { setImageError(validationError); return; }
+
     setImageUploading(true);
     const url = await uploadImage(file, tour.id);
     setImageUploading(false);
-    onUpdate({ welcome_image_url: url ?? URL.createObjectURL(file) });
+
+    if (!url) {
+      setImageError('Upload failed — check your connection and try again.');
+      return;
+    }
+    onUpdate({ welcome_image_url: url });
   };
 
   return (
@@ -145,10 +173,13 @@ export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({ tour, onUpdate }) 
                 type="text"
                 className="flex-1 bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
                 value={tour.welcome_image_url || ''}
-                onChange={(e) => onUpdate({ welcome_image_url: e.target.value })}
+                onChange={(e) => { setImageError(null); onUpdate({ welcome_image_url: e.target.value }); }}
                 placeholder="or paste URL..."
               />
             </div>
+            {imageError && (
+              <p className="mt-1.5 text-xs text-red-400 leading-snug">{imageError}</p>
+            )}
             {tour.welcome_image_url && (
               <div className="mt-2 flex justify-center">
                 <img

@@ -2,12 +2,12 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Circle, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
-import { getTourById, getZonesByTourId } from '../services/db';
+import { getTourById, getZonesByTourId, startSession, endSession, recordZoneVisit } from '../services/db';
 import { audioService } from '../services/audioService';
 import { getDistance, calculateAttenuation } from '../utils/geo';
 import { Tour, Zone } from '../types';
 import { FONT_STYLES, MAP_STYLES } from '../constants';
-import { PlayCircle, Volume2, Mic, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu, Layers } from 'lucide-react';
+import { PlayCircle, Volume2, Mic, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu, Layers, Locate } from 'lucide-react';
 import { ChatInterface } from '../components/ChatInterface';
 
 // Custom icons
@@ -53,10 +53,11 @@ export const Player: React.FC = () => {
   const [zones, setZones] = useState<Zone[]>([]);
   const [userPos, setUserPos] = useState<[number, number] | null>(null);
   const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [audioStarted, setAudioStarted] = useState(false);
   const [simulationMode, setSimulationMode] = useState(isPreview);
-  const [activeZones, setActiveZones] = useState<{title: string, volume: number}[]>([]);
+  const [activeZones, setActiveZones] = useState<{id: string, title: string, volume: number}[]>([]);
   // Map style — starts at the tour's chosen style, user can override in-session
   const [mapStyleOverride, setMapStyleOverride] = useState<string | null>(null);
   const [showMapPicker, setShowMapPicker] = useState(false);
@@ -88,6 +89,7 @@ export const Player: React.FC = () => {
   // Map follow mode — set to false when user manually pans; "Follow" button restores it.
   const [followUser, setFollowUser] = useState(true);
 
+
   // Tour info sheet — two states so the CSS transition has a painted starting
   // point before it runs (avoids the mount-flash that animate-in causes).
   const [tourInfoMounted, setTourInfoMounted] = useState(false);
@@ -115,6 +117,11 @@ export const Player: React.FC = () => {
 
   // Simulation ref to avoid state lag in drag handlers
   const simPosRef = useRef<[number, number] | null>(null);
+
+  // Analytics: session ID for the current play; null in preview mode or before Begin.
+  const sessionIdRef = useRef<string | null>(null);
+  // Tracks which zone IDs have already been recorded this session so we don't double-count.
+  const recordedVisitsRef = useRef<Set<string>>(new Set());
   // Swipe-up detection on bottom bar
 
   useEffect(() => {
@@ -124,6 +131,8 @@ export const Player: React.FC = () => {
       // Clear all timers so they don't fire against unmounted component state.
       if (hudTimerRef.current)          clearTimeout(hudTimerRef.current);
       if (charZoneExitTimerRef.current) clearTimeout(charZoneExitTimerRef.current);
+      // End analytics session (best-effort — covers back-button and SPA navigation).
+      if (sessionIdRef.current) endSession(sessionIdRef.current);
     };
   }, [tourId]);
 
@@ -196,8 +205,8 @@ export const Player: React.FC = () => {
 
     const interval = setInterval(() => {
       const currentPos = simPosRef.current || userPos;
-      const audioUpdates: { id: string; volume: number; loop?: boolean; destroyOnEnd?: boolean }[] = [];
-      const activeState: {title: string, volume: number}[] = [];
+      const audioUpdates: { id: string; volume: number; loop?: boolean; destroyOnEnd?: boolean; exitBehavior?: 'stop' | 'pause' | 'keep' }[] = [];
+      const activeState: { id: string; title: string; volume: number }[] = [];
       let foundCharZone: Zone | null = null;
       const currentZoneIds = new Set<string>();
 
@@ -223,6 +232,12 @@ export const Player: React.FC = () => {
               visitedZoneIdsRef.current = new Set([...visitedZoneIdsRef.current, zone.id]);
               if (zone.entry_message && zone.type !== 'character') showHud(zone.title, zone.entry_message);
             }
+
+            // Analytics: record first visit to each zone (once per session).
+            if (sessionIdRef.current && !recordedVisitsRef.current.has(zone.id) && tourId) {
+              recordedVisitsRef.current.add(zone.id);
+              recordZoneVisit(sessionIdRef.current, zone.id, tourId);
+            }
           }
 
           // Only activate zone if it's accessible
@@ -234,7 +249,7 @@ export const Player: React.FC = () => {
                 ? calculateAttenuation(dist, zone.radius)
                 : 1.0;
               volume = volume * (zone.volume ?? 1.0);
-              activeState.push({ title: zone.title, volume: Math.round(volume * 100) });
+              activeState.push({ id: zone.id, title: zone.title, volume: Math.round(volume * 100) });
             }
           }
         }
@@ -250,6 +265,7 @@ export const Player: React.FC = () => {
             volume,
             loop: zone.on_end === 'loop',
             destroyOnEnd: zone.on_end === 'destroy',
+            exitBehavior: zone.on_exit,
           });
         }
       });
@@ -329,18 +345,20 @@ export const Player: React.FC = () => {
           setGpsError('Location access was denied. Please enable location services and reload to play this experience.');
         } else if (err.code === err.POSITION_UNAVAILABLE) {
           setGpsError('Your location could not be determined. Please check your GPS signal and try again.');
+        } else if (err.code === err.TIMEOUT) {
+          setGpsError('GPS is taking too long. Try stepping outside or checking your location settings.');
         } else {
-          setGpsError('Could not get your location. Please try again or check your device settings.');
+          setGpsError('Could not get your location. Please check your device settings and try again.');
         }
       },
-      { enableHighAccuracy: true, maximumAge: 5000 }
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 }
     );
     return () => navigator.geolocation.clearWatch(watchId);
   }, [simulationMode]);
 
   const loadTour = async (id: string) => {
     const t = await getTourById(id);
-    if (!t) { navigate('/'); return; }
+    if (!t) { setNotFound(true); setLoading(false); return; }
     setTour(t);
     const z = await getZonesByTourId(id);
     setZones(z);
@@ -360,7 +378,29 @@ export const Player: React.FC = () => {
     await audioService.init();
     zones.filter(z => z.type === 'audio').forEach(z => audioService.loadAudio(z.id, z.media_url));
     setAudioStarted(true);
+    // Start analytics session — skip in preview mode so creator test-runs don't pollute data.
+    if (!isPreview && tour?.id) {
+      startSession(tour.id).then(id => { sessionIdRef.current = id; });
+    }
   };
+
+  if (notFound) return (
+    <div className="flex flex-col h-screen items-center justify-center bg-zinc-950 px-6 text-center gap-4">
+      <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center">
+        <MapPin size={28} className="text-zinc-600" />
+      </div>
+      <h2 className="text-white font-bold text-lg">Experience not found</h2>
+      <p className="text-zinc-500 text-sm max-w-xs leading-relaxed">
+        This experience may have been removed or made private. Check your link and try again.
+      </p>
+      <button
+        onClick={() => navigate(-1 as any)}
+        className="mt-1 px-6 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl font-semibold text-sm transition-colors"
+      >
+        Go Back
+      </button>
+    </div>
+  );
 
   if (loading || !tour) return (
     <div className="flex h-screen items-center justify-center bg-zinc-950 text-white">
@@ -443,7 +483,7 @@ export const Player: React.FC = () => {
 
           {/* Zones */}
           {zones.map(zone => {
-             const isActive = activeZones.find(az => az.title === zone.title) || (activeCharacterZone?.id === zone.id);
+             const isActive = activeZones.find(az => az.id === zone.id) || (activeCharacterZone?.id === zone.id);
              if (!zone.is_visible) return null;
 
              const isChar = zone.type === 'character';
@@ -515,15 +555,32 @@ export const Player: React.FC = () => {
 
         return (
           <div
-            className="fixed inset-0 z-[2000] overflow-hidden"
+            className="fixed inset-0 z-[2000] flex flex-col overflow-hidden"
             style={{ backgroundColor: bg, fontFamily }}
           >
-            {/* ── SCROLL AREA — full height, padded to clear fixed header + footer ── */}
+            {/* ── HEADER — natural height, flex shrink-0 ── */}
             <div
-              className="absolute inset-0 overflow-y-auto"
-              style={{ scrollbarWidth: 'none', overscrollBehavior: 'none', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 90px)', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 110px)' }}
+              className="shrink-0 text-center"
+              style={{
+                backgroundColor: bg,
+                paddingTop: 'calc(env(safe-area-inset-top, 0px) + 24px)',
+                paddingBottom: '16px',
+              }}
             >
-              <div className="w-full max-w-sm mx-auto px-5 flex flex-col items-center text-center gap-5 pb-4">
+              <div className="w-full max-w-sm mx-auto px-5">
+                <h1 className="text-3xl font-bold leading-tight" style={{ color: textColor }}>{tour.title}</h1>
+                {tour.welcome_subtitle && (
+                  <p className="text-base font-medium mt-1.5" style={{ color: accent }}>{tour.welcome_subtitle}</p>
+                )}
+              </div>
+            </div>
+
+            {/* ── SCROLL AREA — takes all remaining space between header and footer ── */}
+            <div
+              className="flex-1 overflow-y-auto"
+              style={{ scrollbarWidth: 'none', overscrollBehavior: 'none' }}
+            >
+              <div className="w-full max-w-sm mx-auto px-5 flex flex-col items-center text-center gap-5 py-4">
 
                 {tour.welcome_image_url && (
                   <img src={tour.welcome_image_url} alt={tour.title} className="w-40 h-40 object-cover rounded-2xl shadow-2xl" />
@@ -540,7 +597,6 @@ export const Player: React.FC = () => {
                     style={{ width: '100%', height: '100%' }}
                     zoomControl={true}
                     scrollWheelZoom={true}
-                    attributionControl={false}
                   >
                     <TileLayer url={mapStyle.url} />
                     <Marker position={[tour.lat, tour.lng]} icon={StartMarkerIcon} />
@@ -561,26 +617,9 @@ export const Player: React.FC = () => {
               </div>
             </div>
 
-            {/* ── HEADER — absolutely positioned, always on top, solid background ── */}
+            {/* ── FOOTER — natural height, flex shrink-0 ── */}
             <div
-              className="absolute top-0 left-0 right-0 z-10 text-center"
-              style={{
-                backgroundColor: bg,
-                paddingTop: 'calc(env(safe-area-inset-top, 0px) + 24px)',
-                paddingBottom: '16px',
-              }}
-            >
-              <div className="w-full max-w-sm mx-auto px-5">
-                <h1 className="text-3xl font-bold leading-tight" style={{ color: textColor }}>{tour.title}</h1>
-                {tour.welcome_subtitle && (
-                  <p className="text-base font-medium mt-1.5" style={{ color: accent }}>{tour.welcome_subtitle}</p>
-                )}
-              </div>
-            </div>
-
-            {/* ── FOOTER — absolutely positioned, always on top, solid background ── */}
-            <div
-              className="absolute bottom-0 left-0 right-0 z-10"
+              className="shrink-0"
               style={{
                 backgroundColor: bg,
                 paddingTop: '12px',
@@ -836,6 +875,31 @@ export const Player: React.FC = () => {
         />
       )}
 
+      {/* ── LOCATE BUTTON — floats over map top-right when user has panned away ── */}
+      {audioStarted && !simulationMode && userPos && !followUser && (
+        <button
+          onClick={() => setFollowUser(true)}
+          title="Re-center on my location"
+          className="absolute z-[1400] animate-in fade-in duration-200 active:scale-90 transition-transform"
+          style={{
+            top: `calc(${TOP_BAR + 10}px + env(safe-area-inset-top, 0px))`,
+            right: '12px',
+            width: '36px',
+            height: '36px',
+            borderRadius: '10px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: th.cardBg,
+            border: `1px solid ${accent}40`,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+            color: accent,
+          }}
+        >
+          <Locate size={16} />
+        </button>
+      )}
+
       {/* ── HUD NOTIFICATION — drops below top bar ── */}
       {hudNotification && (
         <div
@@ -940,18 +1004,6 @@ export const Player: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-1 shrink-0">
-            {/* Re-center button — appears when the user has panned away from their dot */}
-            {audioStarted && !simulationMode && userPos && !followUser && (
-              <button
-                onClick={() => setFollowUser(true)}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg active:opacity-60 transition-opacity animate-in fade-in duration-200"
-                style={{ color: accent }}
-                title="Re-center on my location"
-              >
-                <MapPin size={12} />
-                <span className="text-[10px] font-bold uppercase tracking-wide">Follow</span>
-              </button>
-            )}
             {isPreview && (
               <button
                 onClick={() => setSimulationMode(!simulationMode)}

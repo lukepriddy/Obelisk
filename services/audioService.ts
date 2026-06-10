@@ -61,7 +61,7 @@ export class AudioService {
     }
   }
 
-  updateVolumes(zones: { id: string; volume: number; loop?: boolean; destroyOnEnd?: boolean }[]) {
+  updateVolumes(zones: { id: string; volume: number; loop?: boolean; destroyOnEnd?: boolean; exitBehavior?: 'stop' | 'pause' | 'keep' }[]) {
     if (!this.isUnlocked) return;
 
     zones.forEach(zone => {
@@ -76,9 +76,22 @@ export class AudioService {
         return;
       }
 
-      // Outside zone (or inaccessible) — stop and reset.
+      // Outside zone — behaviour depends on the zone's on_exit setting.
       if (zone.volume <= 0.01) {
         audioEl.volume = 0;
+        const exit = zone.exitBehavior ?? 'stop';
+        if (exit === 'keep') {
+          // Triggered audio plays to completion regardless of zone exit.
+          // Leave it running — volume is 0 but the element keeps advancing.
+          return;
+        }
+        if (exit === 'pause') {
+          // Pause at current position; resume from here on re-entry.
+          if (!audioEl.paused) audioEl.pause();
+          nodeData.played = false; // allows .play() on re-entry
+          return;
+        }
+        // 'stop' (default): pause and rewind to start.
         if (!audioEl.paused) {
           audioEl.pause();
           audioEl.currentTime = 0;

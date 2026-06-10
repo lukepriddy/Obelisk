@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { Zone, ZoneExitBehavior, ZoneEndBehavior } from '../types';
 import { SAMPLE_AUDIO_FILES, VOICES, CHARACTER_TEMPLATES } from '../constants';
 import { uploadAudio, uploadImage } from '../services/storageService';
+import { supabase } from '../services/supabaseClient';
 import { Music, AlertCircle, Clock, Volume2, EyeOff, Radio, PlayCircle, Upload, Link as LinkIcon, FileAudio, ListMusic, Bot, MessageSquare, Lock, Unlock, GitBranch, Bell, Sparkles, KeySquare, ImageIcon, X, Trash2, Play, Pause, Loader2 } from 'lucide-react';
 
 // ── Mini audio preview player ───────────────────────────────────────────────
@@ -113,7 +114,14 @@ interface ZoneFormProps {
   zonesList?: Zone[];
 }
 
-type AudioSourceType = 'preset' | 'upload' | 'url';
+type AudioSourceType = 'preset' | 'upload' | 'url' | 'ai';
+
+interface ElevenVoice {
+  voice_id: string;
+  name: string;
+  category: string;
+  preview_url: string | null;
+}
 
 export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zonesList }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -125,11 +133,62 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
   });
   const [fileName, setFileName] = useState<string>('');
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [imageUploadError, setImageUploadError] = useState<string | null>(null);
   const [showAllVoices, setShowAllVoices] = useState(false);
   const [audioUploading, setAudioUploading] = useState(false);
   const [imageUploading, setImageUploading] = useState(false);
   const [playingVoice, setPlayingVoice] = useState<string | null>(null);
   const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // AI voiceover (ElevenLabs)
+  const [ttsScript, setTtsScript]             = useState('');
+  const [ttsVoiceId, setTtsVoiceId]           = useState('');
+  const [ttsVoices, setTtsVoices]             = useState<ElevenVoice[] | null>(null);
+  const [ttsVoicesError, setTtsVoicesError]   = useState<string | null>(null);
+  const [ttsLoadingVoices, setTtsLoadingVoices] = useState(false);
+  const [ttsGenerating, setTtsGenerating]     = useState(false);
+  const [ttsError, setTtsError]               = useState<string | null>(null);
+  const [ttsDone, setTtsDone]                 = useState(false);
+
+  // Load the creator's ElevenLabs voices the first time the AI tab opens
+  useEffect(() => {
+    if (sourceType !== 'ai' || ttsVoices !== null || ttsLoadingVoices) return;
+    setTtsLoadingVoices(true);
+    setTtsVoicesError(null);
+    supabase.functions.invoke('elevenlabs-tts', { body: { type: 'voices' } })
+      .then(({ data, error }) => {
+        if (error || !data?.voices) {
+          // Edge function returns a friendly message for missing/invalid keys
+          setTtsVoicesError(data?.message || 'Could not load voices. Add your ElevenLabs API key in Dashboard → Settings.');
+        } else {
+          setTtsVoices(data.voices as ElevenVoice[]);
+          if (data.voices.length > 0) setTtsVoiceId(data.voices[0].voice_id);
+        }
+      })
+      .catch(() => setTtsVoicesError('Could not load voices. Add your ElevenLabs API key in Dashboard → Settings.'))
+      .finally(() => setTtsLoadingVoices(false));
+  }, [sourceType]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const generateVoiceover = async () => {
+    if (!ttsScript.trim() || !ttsVoiceId || ttsGenerating) return;
+    setTtsGenerating(true);
+    setTtsError(null);
+    setTtsDone(false);
+    try {
+      const { data, error } = await supabase.functions.invoke('elevenlabs-tts', {
+        body: { type: 'generate', text: ttsScript.trim(), voiceId: ttsVoiceId, tourId: zone.tour_id },
+      });
+      if (error || !data?.url) {
+        setTtsError(data?.message || 'Voice generation failed — please try again.');
+      } else {
+        onUpdate({ media_url: data.url });
+        setTtsDone(true);
+      }
+    } catch {
+      setTtsError('Voice generation failed — please try again.');
+    }
+    setTtsGenerating(false);
+  };
 
   // Cleanup voice preview audio when the form unmounts to prevent ghost playback
   useEffect(() => {
@@ -263,7 +322,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
                 </button>
               ))}
             </div>
-            <p className="text-[10px] text-zinc-500 mt-1.5">Tap to load a starting prompt. You can customise it after.</p>
+            <p className="text-[10px] text-zinc-500 mt-1.5">Tap to load a starting prompt. You can customize it after.</p>
           </div>
 
           {/* Character Image */}
@@ -280,10 +339,18 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
                 const file = e.target.files?.[0];
                 if (!file) return;
                 e.target.value = '';
+                setImageUploadError(null);
+                const name = file.name.toLowerCase();
+                if (name.endsWith('.heic') || name.endsWith('.heif') || file.type === 'image/heic' || file.type === 'image/heif') {
+                  setImageUploadError("iPhone HEIC photos aren't supported. In Photos, tap Share → Options → \"Most Compatible\" to export as JPEG.");
+                  return;
+                }
+                if (file.size > 10 * 1024 * 1024) { setImageUploadError('Image too large (max 10 MB).'); return; }
                 setImageUploading(true);
                 const url = await uploadImage(file, zone.tour_id);
                 setImageUploading(false);
-                onUpdate({ character_image_url: url ?? URL.createObjectURL(file) });
+                if (!url) { setImageUploadError('Upload failed — check your connection and try again.'); return; }
+                onUpdate({ character_image_url: url });
               }}
             />
             {zone.character_image_url ? (
@@ -320,7 +387,10 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
                 </span>
               </button>
             )}
-            <p className="text-[10px] text-zinc-500 mt-1.5">Shown on the character card and in the chat header.</p>
+            {imageUploadError && (
+              <p className="text-xs text-red-400 mt-1.5 leading-snug">{imageUploadError}</p>
+            )}
+            {!imageUploadError && <p className="text-[10px] text-zinc-500 mt-1.5">Shown on the character card and in the chat header.</p>}
           </div>
 
           {/* Player-Facing Bio */}
@@ -460,8 +530,8 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
           {/* Radius + Visibility */}
           <div className="border-t border-zinc-800 pt-4">
             <div className="flex justify-between text-xs font-bold text-zinc-400 uppercase mb-1">
-              <span>Interaction Radius (m)</span>
-              <span>{zone.radius}m</span>
+              <span>Interaction Radius</span>
+              <span>{Math.round(zone.radius * 3.28084)} ft</span>
             </div>
             <input
               type="range"
@@ -499,6 +569,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
             </label>
             <div className="flex bg-zinc-800 rounded p-1 mb-3">
               <button onClick={() => setSourceType('upload')} className={`flex-1 py-1 text-xs rounded ${sourceType === 'upload' ? 'bg-emerald-600 text-white' : 'text-zinc-400'}`}>Upload</button>
+              <button onClick={() => setSourceType('ai')} className={`flex-1 py-1 text-xs rounded flex items-center justify-center gap-1 ${sourceType === 'ai' ? 'bg-indigo-600 text-white' : 'text-zinc-400'}`}><Sparkles size={10} /> AI Voice</button>
               <button onClick={() => setSourceType('url')} className={`flex-1 py-1 text-xs rounded ${sourceType === 'url' ? 'bg-emerald-600 text-white' : 'text-zinc-400'}`}>Link</button>
               <button onClick={() => setSourceType('preset')} className={`flex-1 py-1 text-xs rounded ${sourceType === 'preset' ? 'bg-emerald-600 text-white' : 'text-zinc-400'}`}>Preset</button>
             </div>
@@ -538,6 +609,98 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
                   )}
                 </>
               )}
+              {sourceType === 'ai' && (
+                <div className="space-y-3">
+                  {ttsLoadingVoices && (
+                    <p className="flex items-center gap-2 text-xs text-zinc-400 py-2">
+                      <Loader2 size={13} className="animate-spin" /> Loading your ElevenLabs voices…
+                    </p>
+                  )}
+
+                  {ttsVoicesError && (
+                    <p className="flex items-start gap-1.5 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded p-2.5 leading-relaxed">
+                      <AlertCircle size={12} className="shrink-0 mt-0.5" /> {ttsVoicesError}
+                    </p>
+                  )}
+
+                  {ttsVoices && ttsVoices.length > 0 && (
+                    <>
+                      {/* Script */}
+                      <div>
+                        <div className="flex items-baseline justify-between mb-1">
+                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Voiceover script</label>
+                          <span className={`text-[10px] tabular-nums ${ttsScript.length > 9000 ? 'text-amber-400' : 'text-zinc-600'}`}>
+                            {ttsScript.length}/10000
+                          </span>
+                        </div>
+                        <textarea
+                          value={ttsScript}
+                          onChange={e => { setTtsScript(e.target.value.slice(0, 10000)); setTtsDone(false); }}
+                          rows={4}
+                          placeholder="Write what the voice should say when the player enters this zone…"
+                          className="w-full bg-zinc-900 border border-zinc-700 rounded p-2.5 text-xs text-white placeholder-zinc-600 leading-relaxed resize-none focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+
+                      {/* Voice picker */}
+                      <div>
+                        <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Voice</label>
+                        <div className="flex gap-2">
+                          <select
+                            value={ttsVoiceId}
+                            onChange={e => setTtsVoiceId(e.target.value)}
+                            className="flex-1 bg-zinc-900 border border-zinc-700 rounded p-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                          >
+                            {ttsVoices.map(v => (
+                              <option key={v.voice_id} value={v.voice_id}>
+                                {v.name}{v.category === 'premade' ? '' : ` (${v.category})`}
+                              </option>
+                            ))}
+                          </select>
+                          {(() => {
+                            const v = ttsVoices.find(x => x.voice_id === ttsVoiceId);
+                            return v?.preview_url ? (
+                              <button
+                                onClick={() => playVoiceSample(v.name, v.preview_url!)}
+                                className="px-2.5 rounded bg-zinc-900 border border-zinc-700 text-zinc-400 hover:text-white transition-colors"
+                                title="Preview voice"
+                              >
+                                {playingVoice === v.name ? <Pause size={12} /> : <Play size={12} />}
+                              </button>
+                            ) : null;
+                          })()}
+                        </div>
+                      </div>
+
+                      {/* Generate */}
+                      <button
+                        onClick={generateVoiceover}
+                        disabled={!ttsScript.trim() || ttsGenerating}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {ttsGenerating
+                          ? <><Loader2 size={13} className="animate-spin" /> Generating voiceover…</>
+                          : <><Sparkles size={13} /> Generate Voiceover</>}
+                      </button>
+
+                      {ttsError && (
+                        <p className="flex items-start gap-1.5 text-xs text-red-400">
+                          <AlertCircle size={12} className="shrink-0 mt-0.5" /> {ttsError}
+                        </p>
+                      )}
+                      {ttsDone && (
+                        <p className="text-xs text-emerald-400">
+                          Voiceover saved as this zone's audio — preview it below. Generate again to replace it.
+                        </p>
+                      )}
+
+                      <p className="text-[10px] text-zinc-600 leading-relaxed">
+                        Generated once and saved with your experience — playback never uses your API quota.
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
               {sourceType === 'url' && (
                  <input
                    type="text"
@@ -574,8 +737,8 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
             
             <div>
               <div className="flex justify-between text-xs font-bold text-zinc-400 uppercase mb-1">
-                <span>Radius (m)</span>
-                <span>{zone.radius}m</span>
+                <span>Radius</span>
+                <span>{Math.round(zone.radius * 3.28084)} ft</span>
               </div>
               <input
                 type="range"

@@ -3,7 +3,7 @@
  * Drop-in replacement for mockSupabase; same helper signatures.
  */
 import { supabase } from './supabaseClient';
-import { Tour, Zone } from '../types';
+import { Tour, Zone, TourAnalytics } from '../types';
 
 const DEFAULT_ZONE_PROPS = {
   type: 'audio' as const,
@@ -189,6 +189,111 @@ export const duplicateTour = async (tourId: string, ownerId: string): Promise<To
   }
 
   return newTour as Tour;
+};
+
+// ── Analytics helpers ─────────────────────────────────────────────────────────
+
+/** Creates a player session when "Begin Experience" is tapped. Returns the new session ID. */
+export const startSession = async (tourId: string): Promise<string | null> => {
+  const { data, error } = await supabase
+    .from('player_sessions')
+    .insert({ tour_id: tourId })
+    .select('id')
+    .single();
+  if (error) { console.error('startSession:', error); return null; }
+  return (data as any).id as string;
+};
+
+/** Sets ended_at on the session. Best-effort — called on component unmount. */
+export const endSession = async (sessionId: string): Promise<void> => {
+  const { error } = await supabase
+    .from('player_sessions')
+    .update({ ended_at: new Date().toISOString() })
+    .eq('id', sessionId);
+  if (error) console.error('endSession:', error);
+};
+
+/** Records a single zone visit (call once per zone per session). */
+export const recordZoneVisit = async (
+  sessionId: string,
+  zoneId: string,
+  tourId: string,
+): Promise<void> => {
+  const { error } = await supabase
+    .from('zone_visits')
+    .insert({ session_id: sessionId, zone_id: zoneId, tour_id: tourId });
+  if (error) console.error('recordZoneVisit:', error);
+};
+
+/** Fetches aggregated analytics for a set of tour IDs in two queries. */
+export const getAnalyticsByTourIds = async (tourIds: string[]): Promise<Record<string, TourAnalytics>> => {
+  if (!tourIds.length) return {};
+
+  const [{ data: sessions }, { data: visits }] = await Promise.all([
+    supabase
+      .from('player_sessions')
+      .select('id, tour_id, started_at, ended_at')
+      .in('tour_id', tourIds),
+    supabase
+      .from('zone_visits')
+      .select('tour_id, zone_id')
+      .in('tour_id', tourIds),
+  ]);
+
+  const result: Record<string, TourAnalytics> = {};
+
+  for (const id of tourIds) {
+    const ts = (sessions ?? []).filter((s: any) => s.tour_id === id);
+    const vs = (visits  ?? []).filter((v: any) => v.tour_id === id);
+
+    // Zone visit counts
+    const zoneCounts: Record<string, number> = {};
+    vs.forEach((v: any) => { zoneCounts[v.zone_id] = (zoneCounts[v.zone_id] ?? 0) + 1; });
+
+    // Average duration (completed sessions only)
+    const completed = ts.filter((s: any) => s.ended_at);
+    const avgDuration = completed.length
+      ? completed.reduce((sum: number, s: any) =>
+          sum + (new Date(s.ended_at).getTime() - new Date(s.started_at).getTime()) / 1000, 0)
+        / completed.length
+      : null;
+
+    // Most recent session
+    const sorted = [...ts].sort((a: any, b: any) =>
+      new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
+
+    result[id] = {
+      tour_id: id,
+      total_plays: ts.length,
+      last_played: sorted[0]?.started_at ?? null,
+      avg_duration_seconds: avgDuration,
+      zone_visits: Object.entries(zoneCounts)
+        .map(([zone_id, visit_count]) => ({ zone_id, visit_count }))
+        .sort((a, b) => b.visit_count - a.visit_count),
+    };
+  }
+
+  return result;
+};
+
+// ── API keys (BYOK — creators store their own provider keys) ────────────────
+
+export const getApiKeys = async (userId: string): Promise<{ elevenlabs_key: string | null } | null> => {
+  const { data, error } = await supabase
+    .from('api_keys')
+    .select('elevenlabs_key')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) { console.error('getApiKeys:', error); return null; }
+  return data;
+};
+
+export const saveApiKeys = async (userId: string, keys: { elevenlabs_key?: string | null }): Promise<boolean> => {
+  const { error } = await supabase
+    .from('api_keys')
+    .upsert({ user_id: userId, ...keys, updated_at: new Date().toISOString() });
+  if (error) { console.error('saveApiKeys:', error); return false; }
+  return true;
 };
 
 export { supabase };

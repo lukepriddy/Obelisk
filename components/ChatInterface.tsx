@@ -13,6 +13,16 @@ const NO_STAGE_DIRECTIONS =
   '(smiles), (pauses), (My gaze is steady), or anything in parentheses. ' +
   'Speak only as dialogue, exactly as it would be heard aloud.';
 
+// Soft limits — voice goes silent first, then text winds down gracefully.
+const VOICE_LIMIT = 20;  // TTS responses before character "loses voice"
+const TEXT_LIMIT  = 50;  // further text-only replies before conversation ends
+
+// Injected as model messages (not from the API) when limits are hit.
+const VOICE_GONE_MSG =
+  "My voice... it seems to be fading on me. I'll need to reach you through words alone from here — but I'm still with you.";
+const CHAT_END_MSG =
+  "I must leave you here for now. It's been a rare pleasure. Carry what we've shared with you.";
+
 interface ChatInterfaceProps {
   zone: Zone;
   onClose: () => void;
@@ -37,6 +47,14 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   const [inputText, setInputText]     = useState('');
   const [isRecording, setIsRecording] = useState(false);
 
+  // ── Rate limits: voice fades at 20, text ends at 50 more ─────────────────
+  // Derived from saved history so state survives remounts within the same tab.
+  const savedModelCount = savedHistory.filter((m: ChatMessage) => m.role === 'model').length;
+  const [voiceEnded, setVoiceEnded] = useState(savedModelCount > VOICE_LIMIT);
+  const [chatLocked, setChatLocked] = useState(savedModelCount > VOICE_LIMIT + 1 + TEXT_LIMIT);
+  const voiceCountRef = useRef(Math.min(savedModelCount, VOICE_LIMIT));
+  const textCountRef  = useRef(Math.max(0, savedModelCount - VOICE_LIMIT - 1));
+
   const scrollRef      = useRef<HTMLDivElement>(null);
   const textareaRef    = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -59,6 +77,30 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
       if (speakingTimerRef.current) clearTimeout(speakingTimerRef.current);
     };
   }, []); // runs once on mount; cleanup fires on unmount
+
+  // ── Release mic when page is backgrounded (clears iOS Dynamic Island) ────
+  // When the user minimises the browser we stop the recording immediately so
+  // the mic indicator disappears.  On return they simply tap the mic again.
+  useEffect(() => {
+    const releaseMic = () => {
+      if (micStreamRef.current) {
+        micStreamRef.current.getTracks().forEach(t => t.stop());
+        micStreamRef.current = null;
+      }
+    };
+    const handleVisibility = () => {
+      if (document.hidden) {
+        if (recognitionRef.current) {
+          recognitionRef.current.onresult = null;
+          try { recognitionRef.current.stop(); } catch {}
+        }
+        releaseMic();
+        setIsRecording(false);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
 
   // ── Textarea auto-resize ──────────────────────────────────────────────────
   useEffect(() => {
@@ -174,17 +216,31 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
       }
       setInputText(final || interim);
     };
-    recognition.onend  = () => setIsRecording(false);
-    recognition.onerror = () => setIsRecording(false);
+    // Always release the MediaStream when recognition ends so the mic
+    // indicator clears — whether the user stopped it, it timed out, or errored.
+    const releaseMic = () => {
+      if (micStreamRef.current) {
+        micStreamRef.current.getTracks().forEach(t => t.stop());
+        micStreamRef.current = null;
+      }
+      setIsRecording(false);
+    };
+    recognition.onend   = releaseMic;
+    recognition.onerror = releaseMic;
     recognitionRef.current = recognition;
   };
 
   const stopRecording = () => {
-    if (recognitionRef.current && isRecording) {
+    if (recognitionRef.current) {
       recognitionRef.current.onresult = null;
       try { recognitionRef.current.stop(); } catch {}
-      setIsRecording(false);
     }
+    // Always release the raw MediaStream so the mic indicator clears
+    if (micStreamRef.current) {
+      micStreamRef.current.getTracks().forEach(t => t.stop());
+      micStreamRef.current = null;
+    }
+    setIsRecording(false);
   };
 
   const toggleMic = async () => {
@@ -209,7 +265,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   // ── Send message ──────────────────────────────────────────────────────────
   const sendMessage = async () => {
     const text = inputText.trim();
-    if (!text || isSending) return;
+    if (!text || isSending || chatLocked) return;
 
     // Stop any active recording BEFORE clearing the input so onresult
     // can't race and refill the input after we clear it.
@@ -238,7 +294,24 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
         onUnlock(zone.avatar_unlock_zone_id);
       }
 
-      if (audioBuffer) await playAudio(audioBuffer);
+      if (!voiceEnded) {
+        // ── Voice phase ──
+        if (audioBuffer) await playAudio(audioBuffer);
+        voiceCountRef.current++;
+        if (voiceCountRef.current >= VOICE_LIMIT) {
+          // Character "loses voice" — inject in-character transition message (text only)
+          setHistory(prev => [...prev, { role: 'model', text: VOICE_GONE_MSG }]);
+          setVoiceEnded(true);
+        }
+      } else {
+        // ── Text-only phase ──
+        textCountRef.current++;
+        if (textCountRef.current >= TEXT_LIMIT) {
+          // Gentle farewell, then lock
+          setHistory(prev => [...prev, { role: 'model', text: CHAT_END_MSG }]);
+          setChatLocked(true);
+        }
+      }
     } catch (err) {
       console.warn('sendMessage failed:', err);
       setErrorMsg('Something went wrong. Try again.');
@@ -254,8 +327,13 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
     onClose();
   };
 
-  const isLoading = !isReady || isSending;
-  const dotState  = isSpeaking ? 'speaking' : isLoading ? 'loading' : 'ready';
+  const isLoading  = !isReady || isSending;
+  const dotState   = isSpeaking ? 'speaking' : isLoading ? 'loading' : 'ready';
+  const statusText = chatLocked  ? 'Conversation ended'
+    : isSpeaking                 ? 'Speaking...'
+    : isLoading                  ? 'Thinking...'
+    : voiceEnded                 ? 'Text only'
+    : 'Ready';
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -291,7 +369,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
         <div className="flex-1 min-w-0">
           <h3 className={`font-semibold text-sm leading-tight truncate ${t.headerText}`}>{zone.title}</h3>
           <p className={`text-[10px] uppercase tracking-wider mt-0.5 ${t.headerMuted}`}>
-            {isSpeaking ? 'Speaking...' : (!isReady || isSending) ? 'Thinking...' : 'Ready'}
+            {statusText}
           </p>
         </div>
         <button
@@ -341,7 +419,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
         <div className="flex items-end gap-2">
           <button
             onClick={toggleMic}
-            disabled={isLoading}
+            disabled={isLoading || chatLocked}
             className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all ${
               isRecording ? 'bg-red-500 text-white' : `${t.micBtn} disabled:opacity-40`
             }`}
@@ -352,10 +430,10 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
           <textarea
             ref={textareaRef}
             className={`flex-1 border rounded-2xl px-3.5 py-2.5 focus:outline-none resize-none leading-snug disabled:opacity-40 ${t.inputField}`}
-            placeholder={!isReady ? 'Starting…' : isSending ? 'Thinking…' : 'Message…'}
+            placeholder={chatLocked ? 'Conversation ended' : !isReady ? 'Starting…' : isSending ? 'Thinking…' : 'Message…'}
             value={inputText}
             rows={1}
-            disabled={isLoading}
+            disabled={isLoading || chatLocked}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
             style={{ fontSize: '16px', overflowY: 'hidden' }}
@@ -363,9 +441,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
 
           <button
             onClick={sendMessage}
-            disabled={!inputText.trim() || isLoading}
+            disabled={!inputText.trim() || isLoading || chatLocked}
             className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all ${
-              inputText.trim() && !isLoading ? t.sendActive : t.sendInactive
+              inputText.trim() && !isLoading && !chatLocked ? t.sendActive : t.sendInactive
             }`}
           >
             <Send size={15} />

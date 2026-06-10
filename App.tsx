@@ -4,6 +4,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Editor } from './pages/Editor';
 import { Player } from './pages/Player';
 import { Auth } from './pages/Auth';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { supabase } from './services/db';
 import { auth } from './services/db';
 import { User } from './types';
@@ -54,7 +55,7 @@ const AppShell: React.FC<{ user: User | null; onLogout: () => void }> = ({ user,
           <Route path="/auth" element={!user ? <Auth /> : <Navigate to="/" />} />
           <Route path="/" element={user ? <Dashboard user={user} onLogout={onLogout} /> : <Navigate to="/auth" />} />
           <Route path="/editor/:tourId?" element={user ? <Editor user={user} /> : <Navigate to="/auth" />} />
-          <Route path="/player/:tourId" element={<Player />} />
+          <Route path="/player/:tourId" element={<ErrorBoundary><Player /></ErrorBoundary>} />
         </Routes>
       </main>
     </div>

@@ -3,11 +3,12 @@
  * Proxies both text generation and TTS calls to the Gemini API.
  * The API key is stored as a Supabase secret and never sent to the browser.
  *
- * Deploy:
- *   supabase functions deploy gemini-chat --no-verify-jwt
- *
- * Set secret:
- *   supabase secrets set GEMINI_API_KEY=<your-key>
+ * Anonymous by design — players don't sign in. Abuse controls:
+ *   • CORS locked to the app's origins (blocks drive-by browser abuse)
+ *   • chat input capped at 2,000 chars, history at 40 turns
+ *   • TTS input capped at 4,000 chars (longest possible character reply),
+ *     voice name validated — this endpoint runs on the app's own key
+ *   • errors returned to clients are generic; details stay in logs
  */
 
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') ?? '';
@@ -15,19 +16,31 @@ const TEXT_MODEL     = 'gemini-2.5-flash';
 const TTS_MODEL      = 'gemini-2.5-flash-preview-tts';
 const GEMINI_BASE    = 'https://generativelanguage.googleapis.com/v1beta/models';
 
-const cors = {
-  'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
+const ALLOWED_ORIGINS = [
+  'https://obelisk-main.vercel.app',
+  'http://localhost:3000',
+  'http://localhost:5173',
+];
+
+function corsFor(req: Request) {
+  const origin = req.headers.get('Origin') ?? '';
+  const ok = ALLOWED_ORIGINS.includes(origin) ||
+    /^https:\/\/obelisk-main-[a-z0-9]+-lukepriddys-projects\.vercel\.app$/.test(origin);
+  return {
+    'Access-Control-Allow-Origin': ok ? origin : ALLOWED_ORIGINS[0],
+    'Vary': 'Origin',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  };
+}
 
 Deno.serve(async (req) => {
-  // Preflight
+  const cors = corsFor(req);
+
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: cors });
   }
 
-  // Fail fast if the secret was never set — avoids an opaque 400 from Gemini.
   if (!GEMINI_API_KEY) {
     return new Response(JSON.stringify({ error: 'Service not configured' }), {
       status: 503,
@@ -78,8 +91,8 @@ Deno.serve(async (req) => {
       if (!res.ok) {
         console.error('Gemini text error:', JSON.stringify(data));
         return new Response(
-          JSON.stringify({ error: data.error?.message ?? 'Gemini text error' }),
-          { status: res.status, headers: { ...cors, 'Content-Type': 'application/json' } }
+          JSON.stringify({ error: 'Generation failed' }),
+          { status: 502, headers: { ...cors, 'Content-Type': 'application/json' } }
         );
       }
 
@@ -96,6 +109,18 @@ Deno.serve(async (req) => {
         voiceStyle: string;
       };
 
+      // This endpoint runs on the app's own Gemini key. Character replies are
+      // capped at 800 output tokens (≈4,000 chars), so anything longer than
+      // that is not legitimate traffic.
+      if (!textToSpeak || typeof textToSpeak !== 'string' || textToSpeak.length > 4000) {
+        return new Response(JSON.stringify({ error: 'Invalid or oversized text' }), {
+          status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
+        });
+      }
+      const safeVoice = typeof voiceStyle === 'string' && /^[A-Za-z]{2,24}$/.test(voiceStyle)
+        ? voiceStyle
+        : 'Kore';
+
       const res = await fetch(
         `${GEMINI_BASE}/${TTS_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
         {
@@ -107,7 +132,7 @@ Deno.serve(async (req) => {
               responseModalities: ['AUDIO'],
               speechConfig: {
                 voiceConfig: {
-                  prebuiltVoiceConfig: { voiceName: voiceStyle || 'Kore' },
+                  prebuiltVoiceConfig: { voiceName: safeVoice },
                 },
               },
             },
@@ -120,8 +145,8 @@ Deno.serve(async (req) => {
       if (!res.ok) {
         console.error('Gemini TTS error:', JSON.stringify(data));
         return new Response(
-          JSON.stringify({ error: data.error?.message ?? 'Gemini TTS error' }),
-          { status: res.status, headers: { ...cors, 'Content-Type': 'application/json' } }
+          JSON.stringify({ error: 'TTS failed' }),
+          { status: 502, headers: { ...cors, 'Content-Type': 'application/json' } }
         );
       }
 
@@ -138,7 +163,7 @@ Deno.serve(async (req) => {
 
   } catch (err) {
     console.error('Edge function error:', err);
-    return new Response(JSON.stringify({ error: String(err) }), {
+    return new Response(JSON.stringify({ error: 'Request failed' }), {
       status: 500,
       headers: { ...cors, 'Content-Type': 'application/json' },
     });

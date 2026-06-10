@@ -82,3 +82,13 @@ export interface ChatMessage {
   role: 'user' | 'model';
   text: string;
 }
+
+// ── Analytics ─────────────────────────────────────────────────────────────────
+
+export interface TourAnalytics {
+  tour_id: string;
+  total_plays: number;
+  last_played: string | null;            // ISO timestamp of most recent session
+  avg_duration_seconds: number | null;   // null when no completed sessions exist
+  zone_visits: { zone_id: string; visit_count: number }[]; // sorted desc by count
+}

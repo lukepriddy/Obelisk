@@ -91,11 +91,7 @@ class GeminiService {
 
     } catch (e: any) {
       console.error('Gemini error:', e);
-      const msg = e?.message ?? String(e);
-      if (msg.includes('404') || msg.includes('NOT_FOUND')) {
-        return { text: 'Error: The AI model is currently unavailable.' };
-      }
-      return { text: `Error connecting to AI: ${msg}` };
+      return { text: "I'm having some trouble right now. Give me a moment and try again." };
     }
   }
 
