@@ -82,7 +82,12 @@ Deno.serve(async (req) => {
       if (!res.ok) {
         const detail = await res.text();
         console.error('ElevenLabs voices error:', res.status, detail.slice(0, 300));
-        return json({ error: 'voices_failed', message: res.status === 401 ? 'ElevenLabs rejected the API key. Check it in Settings.' : 'Could not load voices.' }, 502);
+        return json({
+          error: 'voices_failed',
+          message: res.status === 401
+            ? 'ElevenLabs rejected the API key — make sure it has the "Text to Speech" and "Voices: Read" permissions, or use a key with full access. Update it in Dashboard → Settings.'
+            : 'Could not load voices.',
+        }, 502);
       }
       const data = await res.json();
       const voices = (data.voices ?? []).map((v: any) => ({
@@ -125,7 +130,7 @@ Deno.serve(async (req) => {
         const detail = await res.text();
         console.error('ElevenLabs TTS error:', res.status, detail.slice(0, 300));
         const message =
-          res.status === 401 ? 'ElevenLabs rejected the API key. Check it in Settings.' :
+          res.status === 401 ? 'ElevenLabs rejected the API key — make sure it has the "Text to Speech" permission, or use a key with full access. Update it in Dashboard → Settings.' :
           res.status === 429 ? 'ElevenLabs rate limit or quota reached. Check your ElevenLabs account.' :
           'Voice generation failed.';
         return json({ error: 'tts_failed', message }, 502);

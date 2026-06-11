@@ -123,6 +123,20 @@ interface ElevenVoice {
   preview_url: string | null;
 }
 
+// supabase-js returns data=null on non-2xx — the server's real message lives in
+// error.context (a Response). Pull it out so users see actionable errors.
+async function fnErrorMessage(error: unknown, data: { message?: string } | null): Promise<string | null> {
+  if (data?.message) return data.message;
+  try {
+    const ctx = (error as { context?: Response })?.context;
+    if (ctx && typeof ctx.json === 'function') {
+      const j = await ctx.json();
+      return j?.message || null;
+    }
+  } catch { /* fall through */ }
+  return null;
+}
+
 export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zonesList }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -156,10 +170,10 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
     setTtsLoadingVoices(true);
     setTtsVoicesError(null);
     supabase.functions.invoke('elevenlabs-tts', { body: { type: 'voices' } })
-      .then(({ data, error }) => {
+      .then(async ({ data, error }) => {
         if (error || !data?.voices) {
-          // Edge function returns a friendly message for missing/invalid keys
-          setTtsVoicesError(data?.message || 'Could not load voices. Add your ElevenLabs API key in Dashboard → Settings.');
+          const msg = await fnErrorMessage(error, data);
+          setTtsVoicesError(msg || 'Could not load voices. Add your ElevenLabs API key in Dashboard → Settings.');
         } else {
           setTtsVoices(data.voices as ElevenVoice[]);
           if (data.voices.length > 0) setTtsVoiceId(data.voices[0].voice_id);
@@ -179,7 +193,8 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
         body: { type: 'generate', text: ttsScript.trim(), voiceId: ttsVoiceId, tourId: zone.tour_id },
       });
       if (error || !data?.url) {
-        setTtsError(data?.message || 'Voice generation failed — please try again.');
+        const msg = await fnErrorMessage(error, data);
+        setTtsError(msg || 'Voice generation failed — please try again.');
       } else {
         onUpdate({ media_url: data.url });
         setTtsDone(true);
@@ -277,7 +292,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
         <div className="mb-4">
           <label className="block text-xs font-bold text-zinc-400 uppercase mb-1">Description</label>
           <textarea
-            className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none resize-none"
+            className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none resize-y"
             rows={2}
             value={zone.description || ''}
             onChange={(e) => onUpdate({ description: e.target.value })}
@@ -292,7 +307,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
           <Bell size={14} /> Entry Message
         </label>
         <textarea
-          className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none resize-none"
+          className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none resize-y"
           rows={2}
           value={zone.entry_message || ''}
           onChange={(e) => onUpdate({ entry_message: e.target.value })}
@@ -399,7 +414,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
               <MessageSquare size={14} /> Player-Facing Description
             </label>
             <textarea
-              className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-white focus:border-indigo-500 focus:outline-none resize-none min-h-[130px]"
+              className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-white focus:border-indigo-500 focus:outline-none resize-y min-h-[130px]"
               value={zone.character_bio || ''}
               onChange={(e) => onUpdate({ character_bio: e.target.value })}
               placeholder="e.g. A weathered lighthouse keeper who has watched ships come and go for forty years. He knows every secret the harbour holds."
@@ -413,7 +428,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
               <MessageSquare size={14} /> Persona & Instructions
             </label>
             <textarea
-              className="w-full bg-zinc-800 border border-indigo-500/50 rounded px-3 py-2 text-sm text-white focus:border-indigo-500 focus:outline-none resize-none min-h-[130px]"
+              className="w-full bg-zinc-800 border border-indigo-500/50 rounded px-3 py-2 text-sm text-white focus:border-indigo-500 focus:outline-none resize-y min-h-[130px]"
               value={zone.character_prompt || ''}
               onChange={(e) => onUpdate({ character_prompt: e.target.value })}
               placeholder="Example: You are a grumpy troll living under this bridge. You demand a riddle to pass. Keep your answers short and in character."
@@ -429,7 +444,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
               Opening Line <span className="normal-case font-normal text-zinc-500">(optional)</span>
             </label>
             <textarea
-              className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-white focus:border-indigo-500 focus:outline-none resize-none"
+              className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-white focus:border-indigo-500 focus:outline-none resize-y"
               rows={2}
               value={zone.greeting_message || ''}
               onChange={(e) => onUpdate({ greeting_message: e.target.value })}
@@ -569,7 +584,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
             </label>
             <div className="flex bg-zinc-800 rounded p-1 mb-3">
               <button onClick={() => setSourceType('upload')} className={`flex-1 py-1 text-xs rounded ${sourceType === 'upload' ? 'bg-emerald-600 text-white' : 'text-zinc-400'}`}>Upload</button>
-              <button onClick={() => setSourceType('ai')} className={`flex-1 py-1 text-xs rounded flex items-center justify-center gap-1 ${sourceType === 'ai' ? 'bg-indigo-600 text-white' : 'text-zinc-400'}`}><Sparkles size={10} /> AI Voice</button>
+              <button onClick={() => setSourceType('ai')} className={`flex-1 py-1 text-xs rounded ${sourceType === 'ai' ? 'bg-indigo-600 text-white' : 'text-zinc-400'}`}>AI Voice</button>
               <button onClick={() => setSourceType('url')} className={`flex-1 py-1 text-xs rounded ${sourceType === 'url' ? 'bg-emerald-600 text-white' : 'text-zinc-400'}`}>Link</button>
               <button onClick={() => setSourceType('preset')} className={`flex-1 py-1 text-xs rounded ${sourceType === 'preset' ? 'bg-emerald-600 text-white' : 'text-zinc-400'}`}>Preset</button>
             </div>
@@ -638,7 +653,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
                           onChange={e => { setTtsScript(e.target.value.slice(0, 10000)); setTtsDone(false); }}
                           rows={4}
                           placeholder="Write what the voice should say when the player enters this zone…"
-                          className="w-full bg-zinc-900 border border-zinc-700 rounded p-2.5 text-xs text-white placeholder-zinc-600 leading-relaxed resize-none focus:outline-none focus:border-indigo-500"
+                          className="w-full bg-zinc-900 border border-zinc-700 rounded p-2.5 text-xs text-white placeholder-zinc-600 leading-relaxed resize-y focus:outline-none focus:border-indigo-500"
                         />
                       </div>
 
