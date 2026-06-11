@@ -98,6 +98,7 @@ const MapRefCapture: React.FC<{ mapRef: React.MutableRefObject<L.Map | null> }> 
 
 const STEPS = [
   'Scanning the area for locations…',
+  'Researching local history…',
   'Reading your brief…',
   'Crafting the narrative arc…',
   'Placing characters and zones…',
@@ -229,7 +230,7 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
 
     stepTimerRef.current = setInterval(() => {
       setGenStep(prev => Math.min(prev + 1, STEPS.length - 1));
-    }, 1800);
+    }, 3200);
 
     try {
       let pdfBase64: string | undefined;
@@ -665,7 +666,7 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
               </div>
             </div>
             <p className="text-zinc-600 text-xs text-center max-w-xs">
-              Scanning real-world locations and crafting your narrative. This usually takes 15–30 seconds.
+              Researching real local history and crafting your narrative. This usually takes 20–40 seconds.
             </p>
           </div>
         )}

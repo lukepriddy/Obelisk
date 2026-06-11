@@ -1,13 +1,18 @@
 /**
  * generate-experience edge function
  *
- * Two request types:
- *   type: 'generate' — query Overpass for real-world POIs, then call Gemini to
- *                      produce a structured experience draft JSON.
- *   type: 'refine'   — apply creator feedback to an existing draft.
+ * Two-stage pipeline:
+ *   Stage 1 — RESEARCH: Gemini with Google Search grounding builds a factual
+ *             dossier about the area (real history, people, lore). Plain text;
+ *             non-fatal if it fails.
+ *   Stage 2 — DESIGN: Gemini in strict-JSON mode crafts the experience from
+ *             the dossier + distance-annotated POIs + the creator's material.
  *
- * PDF material (optional): accepted as base64 inline_data and passed directly
- * to Gemini — no server-side parsing library needed.
+ * Request types:
+ *   type: 'generate' — Overpass POIs → research → design draft
+ *   type: 'refine'   — apply creator feedback to an existing draft
+ *
+ * PDF material (optional): passed as inline_data to the design stage.
  *
  * Deployed with verify_jwt — creator-only feature, billed to the creator's
  * own Gemini key (platform key as fallback).
@@ -57,41 +62,63 @@ function corsFor(req: Request) {
   };
 }
 
-// ── Overpass helper ──────────────────────────────────────────────────────────
+// ── Geo helpers ───────────────────────────────────────────────────────────────
+
+function distMeters(aLat: number, aLng: number, bLat: number, bLng: number): number {
+  const R = 6371000;
+  const dLat = (bLat - aLat) * Math.PI / 180;
+  const dLng = (bLng - aLng) * Math.PI / 180;
+  const s = Math.sin(dLat / 2) ** 2 +
+    Math.cos(aLat * Math.PI / 180) * Math.cos(bLat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return Math.round(2 * R * Math.asin(Math.sqrt(s)));
+}
+
+function compass(aLat: number, aLng: number, bLat: number, bLng: number): string {
+  const dLng = (bLng - aLng) * Math.PI / 180;
+  const y = Math.sin(dLng) * Math.cos(bLat * Math.PI / 180);
+  const x = Math.cos(aLat * Math.PI / 180) * Math.sin(bLat * Math.PI / 180) -
+    Math.sin(aLat * Math.PI / 180) * Math.cos(bLat * Math.PI / 180) * Math.cos(dLng);
+  const deg = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+  return ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(deg / 45) % 8];
+}
+
+// ── Overpass: wide-net POI harvest with distance annotations ─────────────────
+
+interface Poi { name: string; lat: number; lng: number; tags: string; dist: number; dir: string }
 
 async function queryOverpass(
   startLat: number, startLng: number,
   endLat?: number,  endLng?: number,
   radiusMeters = 500,
-): Promise<{ name: string; lat: number; lng: number; tags: string }[]> {
+): Promise<Poi[]> {
 
   const r = Math.max(100, Math.min(radiusMeters, 2000));
 
-  // Build node + way filters around one or two anchor points
   const pointFilters: [number, number][] = [[startLat, startLng]];
   if (endLat != null && endLng != null) pointFilters.push([endLat, endLng]);
 
   const lines: string[] = [];
   for (const [la, lo] of pointFilters) {
     const a = `around:${r},${la},${lo}`;
-    lines.push(
-      `node["name"]["tourism"](${a});`,
-      `node["name"]["historic"](${a});`,
-      `node["name"]["amenity"~"^(bar|cafe|library|place_of_worship|theatre|cinema|arts_centre|community_centre|museum)$"](${a});`,
-      `node["name"]["leisure"~"^(park|garden|nature_reserve|bandstand)$"](${a});`,
-      `way["name"]["historic"](${a});`,
-      `way["name"]["tourism"](${a});`,
-      `way["name"]["leisure"~"^(park|garden|nature_reserve)$"](${a});`,
-      `way["name"]["amenity"~"^(place_of_worship|theatre|museum|library)$"](${a});`,
-    );
+    for (const el of ['node', 'way']) {
+      lines.push(
+        `${el}["name"]["tourism"](${a});`,
+        `${el}["name"]["historic"](${a});`,
+        `${el}["name"]["amenity"~"^(bar|cafe|pub|restaurant|library|place_of_worship|theatre|cinema|arts_centre|community_centre|museum|fountain|marketplace|townhall|clock)$"](${a});`,
+        `${el}["name"]["leisure"~"^(park|garden|nature_reserve|bandstand|marina|playground)$"](${a});`,
+        `${el}["name"]["man_made"~"^(lighthouse|windmill|water_tower|pier|tower|obelisk)$"](${a});`,
+        `${el}["name"]["natural"~"^(spring|peak|beach|cliff|tree)$"](${a});`,
+        `${el}["name"]["place"~"^(square)$"](${a});`,
+      );
+    }
   }
 
-  // 8-second Overpass timeout — fail fast so Gemini always gets plenty of budget
-  const query = `[out:json][timeout:8];\n(\n${lines.join('\n')}\n);\nout center 50;`;
+  // 8-second Overpass timeout — fail fast so Gemini keeps most of the budget
+  const query = `[out:json][timeout:8];\n(\n${lines.join('\n')}\n);\nout center 60;`;
 
   try {
     const controller = new AbortController();
-    const abort = setTimeout(() => controller.abort(), 9000); // JS-level hard cap
+    const abort = setTimeout(() => controller.abort(), 9000);
     const res = await fetch(OVERPASS_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -102,7 +129,7 @@ async function queryOverpass(
     if (!res.ok) return [];
 
     const data = await res.json();
-    const results: { name: string; lat: number; lng: number; tags: string }[] = [];
+    const results: Poi[] = [];
     const seen = new Set<string>();
 
     for (const el of (data.elements ?? [])) {
@@ -118,20 +145,82 @@ async function queryOverpass(
       } else continue;
 
       const relevantTags = Object.entries(el.tags ?? {})
-        .filter(([k]: [string, unknown]) => ['tourism', 'historic', 'amenity', 'leisure', 'building'].includes(k))
+        .filter(([k]: [string, unknown]) =>
+          ['tourism', 'historic', 'amenity', 'leisure', 'man_made', 'natural', 'place', 'building'].includes(k))
         .map(([k, v]: [string, unknown]) => `${k}=${v}`)
         .join(', ');
 
-      results.push({ name, lat: elLat, lng: elLng, tags: relevantTags });
+      results.push({
+        name, lat: elLat, lng: elLng, tags: relevantTags,
+        dist: distMeters(startLat, startLng, elLat, elLng),
+        dir: compass(startLat, startLng, elLat, elLng),
+      });
     }
 
+    // Nearest first — gives the model a natural route-building order
+    results.sort((a, b) => a.dist - b.dist);
     return results.slice(0, 40);
   } catch {
     return [];
   }
 }
 
-// ── Gemini system instruction ─────────────────────────────────────────────────
+// ── Stage 1: grounded research ────────────────────────────────────────────────
+
+async function researchArea(
+  apiKey: string,
+  lat: number, lng: number,
+  poiNames: string[],
+  brief: string,
+): Promise<string> {
+  const prompt = [
+    'You are a meticulous local-history researcher for a location-based storytelling app.',
+    '',
+    `AREA CENTER: ${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+    poiNames.length > 0 ? `NEARBY NAMED PLACES: ${poiNames.slice(0, 15).join('; ')}` : 'NEARBY NAMED PLACES: (none found on the map)',
+    brief ? `CREATOR'S THEME: ${brief.slice(0, 500)}` : '',
+    '',
+    'Search the web and produce a compact factual dossier (max 450 words) covering:',
+    '• What this area is — town/neighborhood character, era, atmosphere',
+    '• Real history of the named places: dates, events, people, original uses',
+    '• Notable people connected to this area, one line each on why they matter',
+    '• Local legends, folklore, odd facts, and vivid sensory details',
+    '• Anything directly relevant to the creator\'s theme',
+    '',
+    'Only include facts you found or know with high confidence; mark anything uncertain "(unverified)".',
+    'Plain text bullets. No preamble.',
+  ].filter(Boolean).join('\n');
+
+  try {
+    const res = await fetch(
+      `${GEMINI_BASE}/${TEXT_MODEL}:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          tools: [{ google_search: {} }],
+          generationConfig: { maxOutputTokens: 4096, temperature: 0.3, thinkingConfig: { thinkingBudget: 0 } },
+        }),
+      }
+    );
+    if (!res.ok) {
+      console.error('Research stage failed:', res.status, (await res.text()).slice(0, 300));
+      return '';
+    }
+    const data = await res.json();
+    const text = (data.candidates?.[0]?.content?.parts ?? [])
+      .map((p: { text?: string }) => p.text ?? '')
+      .join(' ')
+      .trim();
+    return text.slice(0, 6000);
+  } catch (e) {
+    console.error('Research stage error:', e);
+    return '';
+  }
+}
+
+// ── Stage 2: design system instruction ───────────────────────────────────────
 
 const VOICE_OPTIONS =
   'Kore (firm/clear/F), Aoede (smooth/breezy/F), Leda (warm/friendly/F), ' +
@@ -139,30 +228,50 @@ const VOICE_OPTIONS =
   'Fenrir (intense/excitable/M), Puck (playful/youthful/M), Charon (deep/authoritative/M), ' +
   'Orus (confident/steady/M), Enceladus (smooth/professional/M), Gacrux (relaxed/conversational/M)';
 
-const SYSTEM_INSTRUCTION = `You are an expert designer of immersive location-based narrative walking experiences.
-Given real GPS coordinates of real-world places and a creator's brief, you craft compelling story experiences.
+const SYSTEM_INSTRUCTION = `You are a world-class designer of location-based immersive narrative walking experiences — equal parts game designer, immersive-theater director, and master tour guide. Players walk a real place with headphones on; zones trigger by GPS.
 
-STRICT RULES:
-1. ONLY use lat/lng coordinates from the AVAILABLE LOCATIONS list. Never invent coordinates.
-   If no locations are listed, place all zones at or very near the START coordinate.
-2. If the creator provided a document or notes, their material takes absolute priority over your own ideas.
-   Extract characters, themes, and story beats from their material wherever possible.
-3. Design 5–8 zones. Mix types: audio zones and character zones. Use locked (passphrase) zones sparingly.
-4. Sequence zones so the experience flows naturally from START toward END.
-5. Each zone must have a clear narrative purpose — set-up, rising tension, encounter, revelation, resolution.
-6. Character prompts: 2–3 sentences in second-person ("You are…"), covering personality, knowledge, and speech style.
-7. Radius: 15–40 m for most zones. Locked zones can be up to 60 m.
-8. Audio zones are placeholders — write a vivid description of what audio the creator should add there
-   (e.g. "Ambient 1890s piano music fading in as the player approaches the old saloon").
-9. Voice styles — pick to match character personality: ${VOICE_OPTIONS}
-10. Return ONLY valid JSON. No markdown code fences, no explanations, no text before or after the JSON object.
+INPUTS YOU RECEIVE
+- The creator's brief and possibly a reference document — their material takes ABSOLUTE priority over your own ideas
+- A RESEARCH DOSSIER of real, verified facts about the area (from live web search; may be empty)
+- AVAILABLE LOCATIONS: real places with exact coordinates, each annotated with distance and direction from START
 
-JSON SCHEMA (return exactly this shape — all fields required, use null where not applicable):
+LOCATION SELECTION
+1. ONLY use lat/lng values from AVAILABLE LOCATIONS. Never invent coordinates — except under FALLBACK below.
+2. Build a walkable route: open near START and finish near END (if given). Prefer hops of 80–400 m between consecutive zones; avoid backtracking. Use the distance/direction annotations to sequence sensibly.
+3. Pick places with narrative affordance — let a location's real character (its tags and dossier history) amplify the story beat you place there. Favor variety over clustering.
+4. Keep zones at least 50 m apart unless a deliberate nested reveal requires overlap.
+
+FALLBACK — when AVAILABLE LOCATIONS is empty
+Design a walking loop anyway: offset zones 0.0008–0.0020 degrees from START in varied directions so consecutive zones sit 80–200 m apart and the route curls back toward START. NEVER stack multiple zones on one coordinate.
+
+STORY CRAFT
+5. Three-act arc across the zones: hook & promise → rising discoveries and complications → climax & resolution. Each zone is ONE beat with a clear job.
+6. entry_message is a hook, not a summary: 1–2 sentences of intrigue that make the player want to engage right now.
+7. Mine the RESEARCH DOSSIER: weave real names, dates, events, and textures into the story so the place itself seems to speak. Blend fact and fiction deliberately — real texture, invented drama. Empty dossier? Build a self-consistent fiction from the creator's material.
+8. Plant and pay off: an early zone plants a detail (a name, object, phrase); a later zone pays it off.
+
+CHARACTERS (type "character")
+9. Every character gets a distinct VOICE (diction, rhythm, attitude), a WANT (what they're after from the player), and a SECRET (revealed only if the player probes the right way). Encode all three in character_prompt: second person ("You are…"), 3–5 sentences, including 2–3 real local details they can reference.
+10. greeting_message: their actual opening line, fully in voice, at most 2 sentences. character_bio: an evocative player-facing teaser with no spoilers.
+11. Voice style — match personality: ${VOICE_OPTIONS}
+
+LOCKED ZONES (locked: true)
+12. Use 0–2. The passphrase MUST be discoverable inside the experience: write it into an earlier character's SECRET or an earlier audio zone's content, and make that earlier zone's text actually contain it. lock_hint points to the right earlier zone without revealing the answer. Passphrases are single memorable words or short phrases a player can type.
+
+AUDIO ZONES (type "audio")
+13. description doubles as a production note: specify mood, era, instrumentation, ambience, or a voiceover script direction vividly enough that the creator can produce or AI-generate it immediately.
+
+OUTPUT
+14. 5–8 zones, unless the creator's material clearly calls for a different count.
+15. radius is in meters: 15–40 for most zones, up to 60 for locked zones.
+16. Return ONLY valid JSON matching the schema below. No markdown fences, no commentary.
+
+JSON SCHEMA (exact shape — all fields present, null where not applicable):
 {
   "title": "string",
   "subtitle": "string",
   "description": "string (2–3 sentences, player-facing)",
-  "summary": "string (1–2 sentences for the creator: what you built and why)",
+  "summary": "string (2–3 sentences for the creator: what you built, which real facts you used, and why)",
   "zones": [
     {
       "order": number,
@@ -188,7 +297,6 @@ JSON SCHEMA (return exactly this shape — all fields required, use null where n
 // ── Shared draft parser ───────────────────────────────────────────────────────
 
 function parseDraft(raw: string): unknown {
-  // Strip accidental markdown fences
   const cleaned = raw
     .replace(/^```json\s*/i, '')
     .replace(/^```\s*/i, '')
@@ -231,38 +339,49 @@ Deno.serve(async (req) => {
         });
       }
 
-      // 1. Query Overpass for real POIs
+      // 1. Real POIs with distance annotations
       const locations = await queryOverpass(startLat, startLng, endLat, endLng, radiusMeters ?? 500);
+
+      // 2. Grounded research dossier (non-fatal if it fails)
+      const dossier = await researchArea(
+        apiKey, startLat, startLng,
+        locations.map(l => l.name),
+        brief?.trim() ?? '',
+      );
 
       const locationList = locations.length > 0
         ? locations.map((l, i) =>
-            `${i + 1}. "${l.name}" — lat: ${l.lat.toFixed(6)}, lng: ${l.lng.toFixed(6)}${l.tags ? ` (${l.tags})` : ''}`
+            `${i + 1}. "${l.name}" — lat: ${l.lat.toFixed(6)}, lng: ${l.lng.toFixed(6)} — ${l.dist} m ${l.dir} of START${l.tags ? ` (${l.tags})` : ''}`
           ).join('\n')
-        : `No named POIs found. Place all zones near START: ${startLat.toFixed(6)}, ${startLng.toFixed(6)}`;
+        : '(none found — use the FALLBACK layout rules)';
 
-      // 2. Build user prompt
+      const endNote = endLat != null && endLng != null
+        ? `END LOCATION: ${endLat.toFixed(6)}, ${endLng.toFixed(6)} — ${distMeters(startLat, startLng, endLat, endLng)} m ${compass(startLat, startLng, endLat, endLng)} of START`
+        : 'No end location specified — curl the route back toward START or end at the most striking location.';
+
+      // 3. Design prompt
       const userPrompt = [
-        brief?.trim() ? `CREATOR'S BRIEF:\n${brief.trim()}` : 'No brief provided — create an original experience for this location.',
+        brief?.trim() ? `CREATOR'S BRIEF:\n${brief.trim()}` : 'No brief provided — invent an original experience that fits this specific place.',
         '',
         `START LOCATION: ${startLat.toFixed(6)}, ${startLng.toFixed(6)}`,
-        endLat != null && endLng != null
-          ? `END LOCATION: ${endLat.toFixed(6)}, ${endLng.toFixed(6)}`
-          : 'No end location specified — end the experience near the richest cluster of zones.',
+        endNote,
+        '',
+        'RESEARCH DOSSIER (real facts from live web search):',
+        dossier || '(research unavailable — rely on the creator\'s material and plausible, clearly fictional invention)',
         '',
         'AVAILABLE LOCATIONS (use these exact coordinates only):',
         locationList,
         '',
-        'Design an immersive experience using the above. Return the JSON now.',
+        'Design the experience now. Return ONLY the JSON.',
       ].join('\n');
 
-      // 3. Build Gemini content parts (PDF first if provided, then text)
       const parts: unknown[] = [];
       if (pdfBase64 && pdfMimeType) {
         parts.push({ inline_data: { mime_type: pdfMimeType, data: pdfBase64 } });
       }
       parts.push({ text: userPrompt });
 
-      // 4. Call Gemini
+      // 4. Design call (strict JSON)
       const res = await fetch(
         `${GEMINI_BASE}/${TEXT_MODEL}:generateContent?key=${apiKey}`,
         {
