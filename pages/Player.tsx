@@ -609,7 +609,9 @@ export const Player: React.FC = () => {
                   className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-medium border border-white/10 transition-colors"
                   style={{ color: coordsCopied ? accent : textColor }}
                 >
-                  {coordsCopied ? <><Check size={14} /> Copied!</> : <><Copy size={14} /> Copy start coordinates</>}
+                  {coordsCopied
+                    ? <span key="copied" className="flex items-center justify-center gap-2 w-full"><Check size={14} /> Copied!</span>
+                    : <span key="coords" className="flex items-center justify-center gap-2 w-full"><Copy size={14} /> Copy start coordinates</span>}
                 </button>
 
                 <p className="text-xs opacity-40" style={{ color: textColor }}>Headphones are recommended.</p>
@@ -721,7 +723,9 @@ export const Player: React.FC = () => {
                   color: coordsCopied ? accent : th.sheetMuted,
                 }}
               >
-                {coordsCopied ? <><Check size={14} /> Copied!</> : <><MapPin size={14} /> {tour.lat.toFixed(5)}, {tour.lng.toFixed(5)}</>}
+                {coordsCopied
+                  ? <span key="copied" className="flex items-center justify-center gap-2 w-full"><Check size={14} /> Copied!</span>
+                  : <span key="coords" className="flex items-center justify-center gap-2 w-full"><MapPin size={14} /> {tour.lat.toFixed(5)}, {tour.lng.toFixed(5)}</span>}
               </button>
             </div>
           </div>
@@ -729,18 +733,22 @@ export const Player: React.FC = () => {
       )}
 
       {/* ── FLOATING PANEL — Now Playing + Character card, centered above bottom bar ── */}
-      {/* Hidden when chat is open — the chat sheet occupies the bottom of the screen */}
-      {audioStarted && !showChat && (
+      {/* While chat is open: hidden on mobile (chat is full-screen), kept visible on
+          desktop anchored bottom-left so it never collides with the chat panel (bottom-right) */}
+      {audioStarted && (
         <div
-          className="absolute left-1/2 -translate-x-1/2 z-[1500] flex flex-col items-end gap-2 w-full max-w-sm px-4"
+          className={`absolute z-[1500] flex-col items-end gap-2 w-full max-w-sm px-4 ${
+            showChat ? 'hidden md:flex left-2' : 'flex left-1/2 -translate-x-1/2'
+          }`}
           style={{ bottom: 'calc(104px + env(safe-area-inset-bottom, 0px))' }}
         >
           {/* ── Character presence ─────────────────────────────────────────────
                Two states, one design language:
                • First entry (chatEverOpened=false): compact encounter card
                • After first chat (chatEverOpened=true): ambient presence orb
-               Both use a pulsing ring to signal the character is "alive".   */}
-          {activeCharacterZone && chatEverOpened ? (
+               Both use a pulsing ring to signal the character is "alive".
+               Hidden entirely while the chat is open — redundant next to it.  */}
+          {showChat ? null : activeCharacterZone && chatEverOpened ? (
             /* ── Ambient orb — appears after first conversation ── */
             <button
               onClick={() => setShowChat(true)}
