@@ -74,6 +74,96 @@ const StatCard: React.FC<{ label: string; value: number | string; icon: React.Re
   </div>
 );
 
+// ── API key row (Settings) ──────────────────────────────────────────────────
+const ApiKeyRow: React.FC<{
+  label: string;
+  blurb: string;
+  placeholder: string;
+  saved: boolean;
+  onSave: (value: string) => Promise<boolean>;
+  onRemove: () => Promise<boolean>;
+}> = ({ label, blurb, placeholder, saved, onSave, onRemove }) => {
+  const [value, setValue]     = useState('');
+  const [show, setShow]       = useState(false);
+  const [busy, setBusy]       = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const save = async () => {
+    if (!value.trim()) return;
+    setBusy(true);
+    setMessage(null);
+    const ok = await onSave(value.trim());
+    setBusy(false);
+    if (ok) { setValue(''); setShow(false); setMessage('Key saved.'); }
+    else setMessage('Failed to save — please try again.');
+  };
+
+  const remove = async () => {
+    setBusy(true);
+    setMessage(null);
+    const ok = await onRemove();
+    setBusy(false);
+    setMessage(ok ? 'Key removed.' : 'Failed to remove — please try again.');
+  };
+
+  return (
+    <div className="border-t border-zinc-800 pt-4">
+      <div className="flex items-center justify-between mb-1">
+        <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider">{label}</label>
+        {saved && (
+          <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/25 px-2 py-0.5 rounded-full">
+            <Check size={9} /> Key saved
+          </span>
+        )}
+      </div>
+      <p className="text-[11px] text-zinc-600 mb-3">{blurb}</p>
+
+      <div className="flex gap-2">
+        <div className="flex items-center gap-2 flex-1 bg-zinc-800 border border-zinc-700 focus-within:border-zinc-500 rounded-xl px-3 transition-colors">
+          <input
+            type={show ? 'text' : 'password'}
+            value={value}
+            onChange={e => setValue(e.target.value)}
+            placeholder={saved ? 'Enter a new key to replace the saved one' : placeholder}
+            className="flex-1 bg-transparent text-sm text-zinc-200 py-2.5 placeholder-zinc-600 focus:outline-none"
+            autoComplete="off"
+          />
+          <button
+            onClick={() => setShow(v => !v)}
+            className="text-zinc-500 hover:text-zinc-300 transition-colors"
+            aria-label={show ? 'Hide key' : 'Show key'}
+          >
+            {show ? <EyeOff size={14} /> : <Eye size={14} />}
+          </button>
+        </div>
+        <button
+          onClick={save}
+          disabled={!value.trim() || busy}
+          className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-sm font-bold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {busy ? <Loader2 size={14} className="animate-spin" /> : 'Save'}
+        </button>
+      </div>
+
+      {saved && (
+        <button
+          onClick={remove}
+          disabled={busy}
+          className="text-[11px] text-zinc-600 hover:text-red-400 mt-2 transition-colors disabled:opacity-40"
+        >
+          Remove saved key
+        </button>
+      )}
+
+      {message && (
+        <p className={`text-xs mt-2 ${message.includes('Failed') ? 'text-red-400' : 'text-emerald-400'}`}>
+          {message}
+        </p>
+      )}
+    </div>
+  );
+};
+
 export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
   const [tours, setTours]             = useState<Tour[]>([]);
   const [zoneCounts, setZoneCounts]   = useState<Record<string, number>>({});
@@ -91,12 +181,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
   const [filter, setFilter]           = useState<FilterKey>('all');
   const [loadingTours, setLoadingTours] = useState(true);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
-  // Settings — ElevenLabs API key
-  const [elevenKey, setElevenKey]         = useState('');
-  const [elevenKeySaved, setElevenKeySaved] = useState(false);   // a key exists in the DB
-  const [showElevenKey, setShowElevenKey] = useState(false);
-  const [savingKey, setSavingKey]         = useState(false);
-  const [keyMessage, setKeyMessage]       = useState<string | null>(null);
+  // Settings — which provider keys exist in the DB
+  const [keysSaved, setKeysSaved] = useState<{ elevenlabs: boolean; gemini: boolean }>({ elevenlabs: false, gemini: false });
   // zone_id → title, loaded lazily when a tour row is expanded in analytics
   const [zoneNames, setZoneNames]       = useState<Record<string, string>>({});
 
@@ -125,37 +211,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
   useEffect(() => {
     if (activeNav !== 'settings') return;
     getApiKeys(user.id).then(keys => {
-      setElevenKeySaved(!!keys?.elevenlabs_key);
+      setKeysSaved({ elevenlabs: !!keys?.elevenlabs_key, gemini: !!keys?.gemini_key });
     });
   }, [activeNav]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleSaveElevenKey = async () => {
-    if (!elevenKey.trim()) return;
-    setSavingKey(true);
-    setKeyMessage(null);
-    const ok = await saveApiKeys(user.id, { elevenlabs_key: elevenKey.trim() });
-    setSavingKey(false);
-    if (ok) {
-      setElevenKeySaved(true);
-      setElevenKey('');
-      setShowElevenKey(false);
-      setKeyMessage('Key saved.');
-    } else {
-      setKeyMessage('Failed to save — please try again.');
-    }
-  };
-
-  const handleRemoveElevenKey = async () => {
-    setSavingKey(true);
-    setKeyMessage(null);
-    const ok = await saveApiKeys(user.id, { elevenlabs_key: null });
-    setSavingKey(false);
-    if (ok) {
-      setElevenKeySaved(false);
-      setKeyMessage('Key removed.');
-    } else {
-      setKeyMessage('Failed to remove — please try again.');
-    }
+  const saveProviderKey = async (provider: 'elevenlabs' | 'gemini', value: string | null): Promise<boolean> => {
+    const column = provider === 'elevenlabs' ? 'elevenlabs_key' : 'gemini_key';
+    const ok = await saveApiKeys(user.id, { [column]: value });
+    if (ok) setKeysSaved(prev => ({ ...prev, [provider]: value !== null }));
+    return ok;
   };
 
   const loadTours = async () => {
@@ -770,63 +834,25 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
                   Usage is billed to your own provider accounts.
                 </p>
 
+                {/* Google Gemini */}
+                <ApiKeyRow
+                  label="Google Gemini"
+                  blurb="Powers character conversations, character voices, and the AI experience generator. Get a key at aistudio.google.com/apikey."
+                  placeholder="AIza…"
+                  saved={keysSaved.gemini}
+                  onSave={v => saveProviderKey('gemini', v)}
+                  onRemove={() => saveProviderKey('gemini', null)}
+                />
+
                 {/* ElevenLabs */}
-                <div className="border-t border-zinc-800 pt-4">
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider">ElevenLabs</label>
-                    {elevenKeySaved && (
-                      <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/25 px-2 py-0.5 rounded-full">
-                        <Check size={9} /> Key saved
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-zinc-600 mb-3">
-                    Powers AI voiceover generation in audio zones. Get a key at elevenlabs.io → Profile → API Keys.
-                  </p>
-
-                  <div className="flex gap-2">
-                    <div className="flex items-center gap-2 flex-1 bg-zinc-800 border border-zinc-700 focus-within:border-zinc-500 rounded-xl px-3 transition-colors">
-                      <input
-                        type={showElevenKey ? 'text' : 'password'}
-                        value={elevenKey}
-                        onChange={e => setElevenKey(e.target.value)}
-                        placeholder={elevenKeySaved ? 'Enter a new key to replace the saved one' : 'sk_…'}
-                        className="flex-1 bg-transparent text-sm text-zinc-200 py-2.5 placeholder-zinc-600 focus:outline-none"
-                        autoComplete="off"
-                      />
-                      <button
-                        onClick={() => setShowElevenKey(v => !v)}
-                        className="text-zinc-500 hover:text-zinc-300 transition-colors"
-                        aria-label={showElevenKey ? 'Hide key' : 'Show key'}
-                      >
-                        {showElevenKey ? <EyeOff size={14} /> : <Eye size={14} />}
-                      </button>
-                    </div>
-                    <button
-                      onClick={handleSaveElevenKey}
-                      disabled={!elevenKey.trim() || savingKey}
-                      className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-sm font-bold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      {savingKey ? <Loader2 size={14} className="animate-spin" /> : 'Save'}
-                    </button>
-                  </div>
-
-                  {elevenKeySaved && (
-                    <button
-                      onClick={handleRemoveElevenKey}
-                      disabled={savingKey}
-                      className="text-[11px] text-zinc-600 hover:text-red-400 mt-2 transition-colors disabled:opacity-40"
-                    >
-                      Remove saved key
-                    </button>
-                  )}
-
-                  {keyMessage && (
-                    <p className={`text-xs mt-2 ${keyMessage.includes('Failed') ? 'text-red-400' : 'text-emerald-400'}`}>
-                      {keyMessage}
-                    </p>
-                  )}
-                </div>
+                <ApiKeyRow
+                  label="ElevenLabs"
+                  blurb="Powers AI voiceover generation in audio zones. Get a key at elevenlabs.io → Profile → API Keys."
+                  placeholder="sk_…"
+                  saved={keysSaved.elevenlabs}
+                  onSave={v => saveProviderKey('elevenlabs', v)}
+                  onRemove={() => saveProviderKey('elevenlabs', null)}
+                />
               </div>
             </>
           )}

@@ -42,13 +42,15 @@ class GeminiService {
     prompt: string,
     systemInstruction: string,
     voiceStyle: string,
+    tourId?: string,
   ): Promise<{ text: string; audioBuffer?: AudioBuffer }> {
 
     try {
       // ── Step 1: text generation ─────────────────────────────────────────────
+      // tourId lets the edge function charge the tour owner's Gemini key (BYOK)
       const { data: chatData, error: chatError } = await supabase.functions.invoke(
         'gemini-chat',
-        { body: { type: 'chat', history, userMessage: prompt, systemInstruction } }
+        { body: { type: 'chat', history, userMessage: prompt, systemInstruction, tourId } }
       );
 
       if (chatError) throw chatError;
@@ -67,7 +69,7 @@ class GeminiService {
         try {
           const { data: ttsData, error: ttsError } = await supabase.functions.invoke(
             'gemini-chat',
-            { body: { type: 'tts', textToSpeak: aiText, voiceStyle: voiceStyle || 'Kore' } }
+            { body: { type: 'tts', textToSpeak: aiText, voiceStyle: voiceStyle || 'Kore', tourId } }
           );
 
           if (!ttsError && ttsData?.audioData) {

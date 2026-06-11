@@ -9,13 +9,35 @@
  * PDF material (optional): accepted as base64 inline_data and passed directly
  * to Gemini — no server-side parsing library needed.
  *
- * Deployed with verify_jwt — creator-only feature, runs on the app's Gemini key.
+ * Deployed with verify_jwt — creator-only feature, billed to the creator's
+ * own Gemini key (platform key as fallback).
  */
 
-const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') ?? '';
+import { createClient } from 'jsr:@supabase/supabase-js@2';
+
+const GEMINI_API_KEY   = Deno.env.get('GEMINI_API_KEY') ?? '';
+const SUPABASE_URL     = Deno.env.get('SUPABASE_URL') ?? '';
+const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 const TEXT_MODEL     = 'gemini-2.5-flash';
 const GEMINI_BASE    = 'https://generativelanguage.googleapis.com/v1beta/models';
 const OVERPASS_URL   = 'https://overpass-api.de/api/interpreter';
+
+/**
+ * BYOK: generation is billed to the signed-in creator's Gemini key.
+ * Falls back to the platform key for creators who haven't added one.
+ */
+async function keyForCaller(req: Request): Promise<string> {
+  try {
+    const jwt = (req.headers.get('Authorization') ?? '').replace('Bearer ', '');
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const { data: u } = await admin.auth.getUser(jwt);
+    if (!u?.user) return GEMINI_API_KEY;
+    const { data: keys } = await admin.from('api_keys').select('gemini_key').eq('user_id', u.user.id).maybeSingle();
+    return keys?.gemini_key || GEMINI_API_KEY;
+  } catch {
+    return GEMINI_API_KEY;
+  }
+}
 
 const ALLOWED_ORIGINS = [
   'https://obelisk-main.vercel.app',
@@ -181,7 +203,8 @@ Deno.serve(async (req) => {
   const cors = corsFor(req);
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
 
-  if (!GEMINI_API_KEY) {
+  const apiKey = await keyForCaller(req);
+  if (!apiKey) {
     return new Response(JSON.stringify({ error: 'Service not configured' }), {
       status: 503, headers: { ...cors, 'Content-Type': 'application/json' },
     });
@@ -241,7 +264,7 @@ Deno.serve(async (req) => {
 
       // 4. Call Gemini
       const res = await fetch(
-        `${GEMINI_BASE}/${TEXT_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+        `${GEMINI_BASE}/${TEXT_MODEL}:generateContent?key=${apiKey}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -304,7 +327,7 @@ Deno.serve(async (req) => {
       ].join('\n');
 
       const res = await fetch(
-        `${GEMINI_BASE}/${TEXT_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+        `${GEMINI_BASE}/${TEXT_MODEL}:generateContent?key=${apiKey}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

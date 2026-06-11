@@ -278,17 +278,17 @@ export const getAnalyticsByTourIds = async (tourIds: string[]): Promise<Record<s
 
 // ── API keys (BYOK — creators store their own provider keys) ────────────────
 
-export const getApiKeys = async (userId: string): Promise<{ elevenlabs_key: string | null } | null> => {
+export const getApiKeys = async (userId: string): Promise<{ elevenlabs_key: string | null; gemini_key: string | null } | null> => {
   const { data, error } = await supabase
     .from('api_keys')
-    .select('elevenlabs_key')
+    .select('elevenlabs_key, gemini_key')
     .eq('user_id', userId)
     .maybeSingle();
   if (error) { console.error('getApiKeys:', error); return null; }
   return data;
 };
 
-export const saveApiKeys = async (userId: string, keys: { elevenlabs_key?: string | null }): Promise<boolean> => {
+export const saveApiKeys = async (userId: string, keys: { elevenlabs_key?: string | null; gemini_key?: string | null }): Promise<boolean> => {
   const { error } = await supabase
     .from('api_keys')
     .upsert({ user_id: userId, ...keys, updated_at: new Date().toISOString() });

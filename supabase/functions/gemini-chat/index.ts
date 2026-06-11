@@ -11,10 +11,34 @@
  *   • errors returned to clients are generic; details stay in logs
  */
 
-const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') ?? '';
+import { createClient } from 'jsr:@supabase/supabase-js@2';
+
+const GEMINI_API_KEY   = Deno.env.get('GEMINI_API_KEY') ?? '';
+const SUPABASE_URL     = Deno.env.get('SUPABASE_URL') ?? '';
+const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 const TEXT_MODEL     = 'gemini-2.5-flash';
 const TTS_MODEL      = 'gemini-2.5-flash-preview-tts';
 const GEMINI_BASE    = 'https://generativelanguage.googleapis.com/v1beta/models';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * BYOK: character chat is billed to the tour owner's Gemini key.
+ * Falls back to the platform key so experiences keep working for
+ * creators who haven't added a key yet.
+ */
+async function keyForTour(tourId: unknown): Promise<string> {
+  if (typeof tourId !== 'string' || !UUID_RE.test(tourId)) return GEMINI_API_KEY;
+  try {
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const { data: tour } = await admin.from('tours').select('owner_id').eq('id', tourId).maybeSingle();
+    if (!tour?.owner_id) return GEMINI_API_KEY;
+    const { data: keys } = await admin.from('api_keys').select('gemini_key').eq('user_id', tour.owner_id).maybeSingle();
+    return keys?.gemini_key || GEMINI_API_KEY;
+  } catch {
+    return GEMINI_API_KEY;
+  }
+}
 
 const ALLOWED_ORIGINS = [
   'https://obelisk-main.vercel.app',
@@ -41,16 +65,18 @@ Deno.serve(async (req) => {
     return new Response('ok', { headers: cors });
   }
 
-  if (!GEMINI_API_KEY) {
-    return new Response(JSON.stringify({ error: 'Service not configured' }), {
-      status: 503,
-      headers: { ...cors, 'Content-Type': 'application/json' },
-    });
-  }
-
   try {
     const body = await req.json();
     const { type } = body;
+
+    // Resolve which Gemini key pays for this call (tour owner's, else platform)
+    const apiKey = await keyForTour(body.tourId);
+    if (!apiKey) {
+      return new Response(JSON.stringify({ error: 'Service not configured' }), {
+        status: 503,
+        headers: { ...cors, 'Content-Type': 'application/json' },
+      });
+    }
 
     // ── TEXT GENERATION ──────────────────────────────────────────────────────
     if (type === 'chat') {
@@ -74,7 +100,7 @@ Deno.serve(async (req) => {
       ];
 
       const res = await fetch(
-        `${GEMINI_BASE}/${TEXT_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+        `${GEMINI_BASE}/${TEXT_MODEL}:generateContent?key=${apiKey}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -122,7 +148,7 @@ Deno.serve(async (req) => {
         : 'Kore';
 
       const res = await fetch(
-        `${GEMINI_BASE}/${TTS_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+        `${GEMINI_BASE}/${TTS_MODEL}:generateContent?key=${apiKey}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

@@ -189,6 +189,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
           [], greetingPrompt,
           (zone.character_prompt || 'You are a helpful assistant.') + NO_STAGE_DIRECTIONS,
           zone.voice_style || 'Kore',
+          zone.tour_id,
         );
         setHistory([{ role: 'model', text }]);
         setIsReady(true);
@@ -283,6 +284,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
         conversationHistory.slice(0, -1), text,
         (zone.character_prompt || 'You are a helpful assistant.') + NO_STAGE_DIRECTIONS,
         zone.voice_style || 'Kore',
+        zone.tour_id,
       );
 
       setHistory(prev => [...prev, { role: 'model', text: replyText }]);
