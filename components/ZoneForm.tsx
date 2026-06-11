@@ -664,7 +664,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
                           <select
                             value={ttsVoiceId}
                             onChange={e => setTtsVoiceId(e.target.value)}
-                            className="flex-1 bg-zinc-900 border border-zinc-700 rounded p-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                            className="flex-1 min-w-0 bg-zinc-900 border border-zinc-700 rounded p-2 text-xs text-white focus:outline-none focus:border-indigo-500"
                           >
                             {ttsVoices.map(v => (
                               <option key={v.voice_id} value={v.voice_id}>
@@ -677,7 +677,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
                             return v?.preview_url ? (
                               <button
                                 onClick={() => playVoiceSample(v.name, v.preview_url!)}
-                                className="px-2.5 rounded bg-zinc-900 border border-zinc-700 text-zinc-400 hover:text-white transition-colors"
+                                className="px-2.5 shrink-0 rounded bg-zinc-900 border border-zinc-700 text-zinc-400 hover:text-white transition-colors"
                                 title="Preview voice"
                               >
                                 {playingVoice === v.name ? <Pause size={12} /> : <Play size={12} />}

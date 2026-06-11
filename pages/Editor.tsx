@@ -543,7 +543,7 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
 
       {/* 3. RIGHT PROPERTIES PANEL */}
       {(selectedZoneId || rightPanel === 'tour') && (
-        <div className="w-80 bg-zinc-900 border-l border-zinc-800 p-4 shadow-2xl z-20 h-full overflow-y-auto shrink-0 animate-in slide-in-from-right-10 custom-scrollbar">
+        <div className="w-80 bg-zinc-900 border-l border-zinc-800 p-4 shadow-2xl z-20 h-full overflow-y-auto overflow-x-hidden shrink-0 animate-in slide-in-from-right-10 custom-scrollbar">
           {selectedZoneId && selectedZone ? (
             selectedZone.id.startsWith('temp_') ? (
               <div className="flex flex-col items-center justify-center gap-3 py-20 text-zinc-500">
@@ -552,6 +552,7 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
               </div>
             ) : (
             <ZoneForm
+              key={selectedZone.id}
               zone={selectedZone}
               onUpdate={(u) => updateZone(selectedZone.id, u)}
               onDelete={() => deleteZone(selectedZone.id)}

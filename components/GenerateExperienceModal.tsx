@@ -323,10 +323,13 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
     }
 
     for (const dz of sortedZones) {
+      // Normalize: a "character" without a prompt can't hold a conversation —
+      // treat it as an audio zone so the editor opens on the right settings
+      const zoneType = dz.type === 'character' && dz.character_prompt?.trim() ? 'character' : 'audio';
       await createZone({
         tour_id:    tour.id,
         title:      dz.title,
-        type:       dz.type,
+        type:       zoneType,
         lat:        dz.lat,
         lng:        dz.lng,
         radius:     dz.radius,
