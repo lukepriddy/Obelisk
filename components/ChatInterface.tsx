@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Zone, ChatMessage } from '../types';
 import { geminiService } from '../services/geminiService';
-import { audioService } from '../services/audioService';
 import { Mic, Send, Square, ChevronDown } from 'lucide-react';
 
 // Appended to every character system instruction so Gemini never
@@ -62,6 +61,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   const hasGreetedRef  = useRef(hasExistingHistory); // skip greeting if history loaded
   const hasUnlockedRef = useRef(false);
   const speakingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ttsAudioRef    = useRef<HTMLAudioElement | null>(null); // currently-playing TTS
 
   // ── Cleanup on unmount — stop mic and any dangling timers ────────────────
   useEffect(() => {
@@ -75,6 +75,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
         micStreamRef.current = null;
       }
       if (speakingTimerRef.current) clearTimeout(speakingTimerRef.current);
+      if (ttsAudioRef.current) { ttsAudioRef.current.pause(); ttsAudioRef.current.src = ''; }
     };
   }, []); // runs once on mount; cleanup fires on unmount
 
@@ -140,27 +141,32 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   };
 
   // ── Audio playback ────────────────────────────────────────────────────────
-  const playAudio = async (buffer: AudioBuffer) => {
+  // Plays a TTS WAV blob URL via an HTMLAudioElement — the same audio path as
+  // zone audio, which is reliably unlocked on iOS/Safari. The object URL is
+  // revoked once playback finishes (or fails) to avoid leaking memory.
+  const playAudio = async (url: string) => {
     try {
-      const ctx = audioService.context;
-      if (!ctx) return;
-      if (ctx.state === 'suspended') await ctx.resume();
-
+      // Stop any TTS still playing from a previous turn
+      if (ttsAudioRef.current) {
+        ttsAudioRef.current.pause();
+        ttsAudioRef.current.src = '';
+      }
+      const audio = new Audio(url);
+      ttsAudioRef.current = audio;
       setIsSpeaking(true);
-      if (speakingTimerRef.current) clearTimeout(speakingTimerRef.current);
-      speakingTimerRef.current = setTimeout(() => setIsSpeaking(false), (buffer.duration + 3) * 1000);
 
-      const src = ctx.createBufferSource();
-      src.buffer = buffer;
-      src.connect(ctx.destination);
-      src.start(0);
-      src.onended = () => {
-        if (speakingTimerRef.current) clearTimeout(speakingTimerRef.current);
+      const done = () => {
         setIsSpeaking(false);
+        try { URL.revokeObjectURL(url); } catch {}
       };
+      audio.onended = done;
+      audio.onerror = done;
+
+      await audio.play();
     } catch (err) {
       console.warn('playAudio failed:', err);
       setIsSpeaking(false);
+      try { URL.revokeObjectURL(url); } catch {}
     }
   };
 
@@ -343,6 +349,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
     stopRecording();
     if (micStreamRef.current) { micStreamRef.current.getTracks().forEach(t => t.stop()); micStreamRef.current = null; }
     if (speakingTimerRef.current) clearTimeout(speakingTimerRef.current);
+    if (ttsAudioRef.current) { ttsAudioRef.current.pause(); ttsAudioRef.current.src = ''; }
     onClose();
   };
 

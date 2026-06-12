@@ -5,7 +5,6 @@
  */
 
 import { ChatMessage } from "../types";
-import { audioService } from "./audioService";
 import { supabase } from "./supabaseClient";
 
 // Wraps raw PCM bytes from Gemini TTS in a WAV header so decodeAudioData can handle it
@@ -57,16 +56,16 @@ class GeminiService {
   }
 
   /**
-   * TTS only — returns a ready-to-play AudioBuffer, or undefined on any
-   * failure (audio is always optional; the text response stands alone).
+   * TTS only — returns a playable WAV object URL, or undefined on any failure
+   * (audio is always optional; the text response stands alone).
+   *
+   * We wrap the raw PCM in a WAV header and hand back a blob URL for playback
+   * via an HTMLAudioElement — the SAME path zone audio uses, which is reliably
+   * unlocked on iOS/Safari. (Web Audio's AudioContext path was unreliable for
+   * these async-loaded buffers on mobile.)
    */
-  async speak(text: string, voiceStyle: string, tourId?: string): Promise<AudioBuffer | undefined> {
-    if (!text.trim() || !audioService.context) return undefined;
-
-    // Ensure the AudioContext is running before TTS (iOS suspends it on inactivity)
-    if (audioService.context.state === 'suspended') {
-      try { await audioService.context.resume(); } catch {}
-    }
+  async speak(text: string, voiceStyle: string, tourId?: string): Promise<string | undefined> {
+    if (!text.trim()) return undefined;
 
     try {
       const { data: ttsData, error: ttsError } = await supabase.functions.invoke(
@@ -78,40 +77,16 @@ class GeminiService {
       const binary = atob(ttsData.audioData);
       const bytes  = new Uint8Array(binary.length);
       for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-      // Decode raw LINEAR16 PCM (24 kHz mono) directly into an AudioBuffer.
-      // Bypasses decodeAudioData which rejects headerless PCM on some browsers.
-      const pcm16 = new Int16Array(bytes.buffer);
-      const audioBuffer = audioService.context.createBuffer(1, pcm16.length, 24000);
-      const channel = audioBuffer.getChannelData(0);
-      for (let i = 0; i < pcm16.length; i++) channel[i] = pcm16[i] / 32768.0;
-      return audioBuffer;
+
+      // Gemini TTS returns headerless LINEAR16 PCM (24 kHz mono). Wrap it in a
+      // WAV header so a plain <audio> element can decode and play it.
+      const wav = pcmToWav(bytes.buffer);
+      const blob = new Blob([wav], { type: 'audio/wav' });
+      return URL.createObjectURL(blob);
     } catch (ttsErr) {
       console.warn('TTS failed, continuing without audio:', ttsErr);
       return undefined;
     }
-  }
-
-  /** Convenience: text then TTS, sequentially. Prefer generateText + speak
-   *  when you want the text to appear before audio finishes. */
-  async generateCharacterResponse(
-    history: ChatMessage[],
-    prompt: string,
-    systemInstruction: string,
-    voiceStyle: string,
-    tourId?: string,
-  ): Promise<{ text: string; audioBuffer?: AudioBuffer }> {
-    try {
-      const text = await this.generateText(history, prompt, systemInstruction, tourId);
-      const audioBuffer = await this.speak(text, voiceStyle, tourId);
-      return { text, audioBuffer };
-    } catch (e: any) {
-      console.error('Gemini error:', e);
-      return { text: "I'm having some trouble right now. Give me a moment and try again." };
-    }
-  }
-
-  playAudio(buffer: AudioBuffer) {
-    audioService.playBuffer(buffer);
   }
 }
 
