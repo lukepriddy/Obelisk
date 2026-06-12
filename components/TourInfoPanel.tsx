@@ -136,7 +136,7 @@ export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({ tour, onUpdate }) 
               className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none"
               value={tour.welcome_subtitle || ''}
               onChange={(e) => onUpdate({ welcome_subtitle: e.target.value })}
-              placeholder="Short tagline shown under the title..."
+              placeholder="Tagline under the title…"
             />
           </div>
 
@@ -150,7 +150,7 @@ export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({ tour, onUpdate }) 
               rows={4}
               value={tour.description}
               onChange={(e) => onUpdate({ description: e.target.value })}
-              placeholder="Describe the experience. Instructions, backstory, what to expect..."
+              placeholder="Describe the experience…"
             />
           </div>
 

@@ -316,7 +316,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
             rows={2}
             value={zone.description || ''}
             onChange={(e) => onUpdate({ description: e.target.value })}
-            placeholder="Short description for the player..."
+            placeholder="Short description…"
           />
         </div>
       </div>
@@ -331,7 +331,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
           rows={2}
           value={zone.entry_message || ''}
           onChange={(e) => onUpdate({ entry_message: e.target.value })}
-          placeholder="Text shown on screen when player enters this zone..."
+          placeholder="Shown on screen on entry…"
         />
         <p className="text-[10px] text-zinc-500 mt-1">Leave blank for no on-screen notification.</p>
       </div>
@@ -437,7 +437,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
               className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-white focus:border-indigo-500 focus:outline-none resize-y break-words min-h-[130px]"
               value={zone.character_bio || ''}
               onChange={(e) => onUpdate({ character_bio: e.target.value })}
-              placeholder="e.g. A weathered lighthouse keeper who has watched ships come and go for forty years. He knows every secret the harbour holds."
+              placeholder="Who is this character?"
             />
             <p className="text-[10px] text-zinc-500 mt-1">Shown on the card players see before starting the conversation. Keep it evocative — set the scene.</p>
           </div>
@@ -451,10 +451,11 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
               className="w-full bg-zinc-800 border border-indigo-500/50 rounded px-3 py-2 text-sm text-white focus:border-indigo-500 focus:outline-none resize-y break-words min-h-[130px]"
               value={zone.character_prompt || ''}
               onChange={(e) => onUpdate({ character_prompt: e.target.value })}
-              placeholder="Example: You are a grumpy troll living under this bridge. You demand a riddle to pass. Keep your answers short and in character."
+              placeholder="Personality, voice, goals…"
             />
             <p className="text-[10px] text-zinc-400 mt-1.5">
               Defines the AI's personality, knowledge, and goals. Be specific — the more detail, the better the character.
+              E.g. "You are a grumpy troll under this bridge. You demand a riddle to pass. Keep answers short and in character."
             </p>
           </div>
 
@@ -468,7 +469,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
               rows={2}
               value={zone.greeting_message || ''}
               onChange={(e) => onUpdate({ greeting_message: e.target.value })}
-              placeholder="e.g. Well, well... a visitor. I haven't had company in a very long time."
+              placeholder="First line they speak…"
             />
             <p className="text-[10px] text-zinc-500 mt-1">Script the character's exact first words. Leave blank for an auto-generated greeting.</p>
           </div>
@@ -672,7 +673,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
                           value={ttsScript}
                           onChange={e => { setTtsScript(e.target.value.slice(0, 10000)); setTtsDone(false); }}
                           rows={4}
-                          placeholder="Write what the voice should say when the player enters this zone…"
+                          placeholder="Write the voiceover script…"
                           className="w-full bg-zinc-900 border border-zinc-700 rounded p-2.5 text-xs text-white placeholder-zinc-600 leading-relaxed resize-y break-words whitespace-pre-wrap focus:outline-none focus:border-indigo-500"
                         />
                       </div>

@@ -586,7 +586,7 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
                     value={brief}
                     onChange={e => setBrief(e.target.value.slice(0, 3000))}
                     rows={4}
-                    placeholder="e.g. A ghost tour of Victorian Dublin focused on the 1916 Rising. Main character is a spectral journalist named Eileen. Atmospheric and melancholy in tone…"
+                    placeholder="Describe your theme, characters, and tone…"
                     className="w-full bg-zinc-900 border border-zinc-800 text-zinc-200 text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-zinc-600 resize-none placeholder-zinc-600 leading-relaxed"
                   />
                 </div>
@@ -848,7 +848,7 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
                     value={feedback}
                     onChange={e => setFeedback(e.target.value)}
                     rows={2}
-                    placeholder="e.g. Make zone 3 a character instead of audio. Give the detective a grittier voice. Add a passphrase zone near the end."
+                    placeholder="Describe the changes you want…"
                     disabled={refining}
                     className="flex-1 bg-zinc-900 border border-zinc-800 text-zinc-200 text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-zinc-600 resize-none placeholder-zinc-600 leading-relaxed disabled:opacity-50"
                   />
