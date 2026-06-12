@@ -133,9 +133,10 @@ Deno.serve(async (req) => {
 
     // ── TTS ───────────────────────────────────────────────────────────────────
     if (type === 'tts') {
-      const { textToSpeak, voiceStyle } = body as {
+      const { textToSpeak, voiceStyle, styleInstruction } = body as {
         textToSpeak: string;
         voiceStyle: string;
+        styleInstruction?: string;
       };
 
       // This endpoint runs on the app's own Gemini key. Character replies are
@@ -150,13 +151,22 @@ Deno.serve(async (req) => {
         ? voiceStyle
         : 'Kore';
 
+      // Gemini TTS takes a natural-language style directive prefixed to the line
+      // ("Say in a warm Southern drawl: <text>"). Prepending the creator's style
+      // to EVERY line keeps the accent/delivery consistent across the whole
+      // conversation. Capped + sanitized so it can't be abused.
+      const rawStyle = typeof styleInstruction === 'string' ? styleInstruction.trim().slice(0, 400) : '';
+      const spoken = rawStyle
+        ? `${rawStyle.replace(/[:\s]+$/, '')}: ${textToSpeak}`
+        : textToSpeak;
+
       const res = await fetch(
         `${GEMINI_BASE}/${TTS_MODEL}:generateContent?key=${apiKey}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            contents: [{ parts: [{ text: textToSpeak }] }],
+            contents: [{ parts: [{ text: spoken }] }],
             generationConfig: {
               responseModalities: ['AUDIO'],
               // Low temperature keeps the delivery (accent, pace, tone) steady

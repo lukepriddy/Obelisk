@@ -39,6 +39,7 @@ interface DraftZone {
   character_bio: string | null;
   greeting_message: string | null;
   voice_style: string | null;
+  voice_instructions: string | null;
   lock_hint: string | null;
   lock_passphrase: string | null;
 }
@@ -338,6 +339,7 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
         entry_message: dz.entry_message ?? undefined,
         is_visible:  true,
         character_prompt:  dz.character_prompt  ?? undefined,
+        voice_instructions: dz.voice_instructions ?? undefined,
         character_bio:     dz.character_bio     ?? undefined,
         greeting_message:  dz.greeting_message  ?? undefined,
         voice_style:       dz.voice_style       ?? undefined,

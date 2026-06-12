@@ -47,6 +47,7 @@ export interface Zone {
 
   // Audio Zone Props
   media_url: string;
+  voiceover_script?: string;        // Saved ElevenLabs voiceover script (so it survives a reopen)
   volume: number; // 0.0 to 1.0
   is_visible: boolean;
   show_progress: boolean;
@@ -59,7 +60,8 @@ export interface Zone {
   // Character Zone Props
   character_prompt?: string;
   greeting_message?: string;        // Custom first line spoken by character; if blank, character auto-greets
-  voice_style?: string;             // see VOICES in constants
+  voice_style?: string;             // see VOICES in constants (the Gemini voice name)
+  voice_instructions?: string;      // Free-text accent/delivery prepended to every TTS line for consistency
   character_image_url?: string;     // Square avatar shown in chat header and character card
   character_bio?: string;           // Player-facing story/description shown on the character card
   avatar_unlock_zone_id?: string | null;   // Zone to auto-unlock when this conversation ends

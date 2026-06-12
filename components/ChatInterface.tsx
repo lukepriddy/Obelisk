@@ -182,30 +182,20 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   }, [history, storageKey]);
 
   // ── Greeting on mount ─────────────────────────────────────────────────────
+  // The greeting is TEXT ONLY — never voiced. Only the character's replies to
+  // the player are read aloud. This keeps the opening instant and quiet.
   useEffect(() => {
     if (hasGreetedRef.current) return;
     hasGreetedRef.current = true;
 
-    const voice = zone.voice_style || 'Kore';
-
-    const speakGreeting = async (text: string) => {
-      try {
-        const buf = await geminiService.speak(text, voice, zone.tour_id);
-        if (buf) await playAudio(buf);
-      } catch { /* audio is optional */ }
-    };
-
-    // A preset opening line is already written — show it instantly with no LLM
-    // round-trip, then voice it. This is the common case and feels immediate.
+    // A preset opening line is already written — show it instantly, no LLM call.
     if (zone.greeting_message?.trim()) {
       setHistory([{ role: 'model', text: zone.greeting_message.trim() }]);
       setIsReady(true);
-      speakGreeting(zone.greeting_message.trim());
       return;
     }
 
-    // No preset line — generate one. Show the text as soon as it arrives, then
-    // voice it separately so the player isn't staring at a spinner during TTS.
+    // No preset line — generate one (text only).
     (async () => {
       try {
         const text = await geminiService.generateText(
@@ -215,7 +205,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
         );
         setHistory([{ role: 'model', text }]);
         setIsReady(true);
-        speakGreeting(text);
       } catch (err) {
         console.warn('Greeting failed:', err);
         setErrorMsg('Could not reach the character. Check your connection and try again.');
@@ -320,8 +309,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
 
       if (!voiceEnded) {
         // ── Voice phase ── voice the reply (TTS is skipped once voice ends)
-        const audioBuffer = await geminiService.speak(replyText, zone.voice_style || 'Kore', zone.tour_id);
-        if (audioBuffer) await playAudio(audioBuffer);
+        const audioUrl = await geminiService.speak(replyText, zone.voice_style || 'Kore', zone.tour_id, zone.voice_instructions);
+        if (audioUrl) await playAudio(audioUrl);
         voiceCountRef.current++;
         if (voiceCountRef.current >= VOICE_LIMIT) {
           // Character "loses voice" — inject in-character transition message (text only)

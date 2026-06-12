@@ -253,18 +253,19 @@ STORY CRAFT
 CHARACTERS (type "character")
 9. Every character gets a distinct VOICE (diction, rhythm, attitude), a WANT (what they're after from the player), and a SECRET (revealed only if the player probes the right way). Encode all three in character_prompt: second person ("You are…"), 3–5 sentences, plus 2–3 grounding details the character can reference — real local details when the story is fact-based, world-consistent details when it's fiction.
 10. greeting_message: their actual opening line, fully in voice, at most 2 sentences. character_bio: an evocative player-facing teaser with no spoilers.
-11. Voice style — match personality: ${VOICE_OPTIONS}
+11. voice_style — pick the prebuilt voice that best matches the personality: ${VOICE_OPTIONS}
+12. voice_instructions — a short delivery directive (accent, pace, mood) prepended to every spoken line to keep the voice consistent. One concise phrase, e.g. "Gravelly old fisherman, unhurried, faint Irish lilt" or "Crisp, clipped, impatient aristocrat." Keep it under ~15 words.
 
 LOCKED ZONES (locked: true)
-12. Use 0–2. The passphrase MUST be discoverable inside the experience: write it into an earlier character's SECRET or an earlier audio zone's content, and make that earlier zone's text actually contain it. lock_hint points to the right earlier zone without revealing the answer. Passphrases are single memorable words or short phrases a player can type.
+13. Use 0–2. The passphrase MUST be discoverable inside the experience: write it into an earlier character's SECRET or an earlier audio zone's content, and make that earlier zone's text actually contain it. lock_hint points to the right earlier zone without revealing the answer. Passphrases are single memorable words or short phrases a player can type.
 
 AUDIO ZONES (type "audio")
-13. description doubles as a production note: specify mood, era, instrumentation, ambience, or a voiceover script direction vividly enough that the creator can produce or AI-generate it immediately.
+14. description doubles as a production note: specify mood, era, instrumentation, ambience, or a voiceover script direction vividly enough that the creator can produce or AI-generate it immediately.
 
 OUTPUT
-14. 5–8 zones, unless the creator's material clearly calls for a different count.
-15. radius is in meters: 15–40 for most zones, up to 60 for locked zones.
-16. Return ONLY valid JSON matching the schema below. No markdown fences, no commentary.
+15. 5–8 zones, unless the creator's material clearly calls for a different count.
+16. radius is in meters: 15–40 for most zones, up to 60 for locked zones.
+17. Return ONLY valid JSON matching the schema below. No markdown fences, no commentary.
 
 JSON SCHEMA (exact shape — all fields present, null where not applicable):
 {
@@ -288,6 +289,7 @@ JSON SCHEMA (exact shape — all fields present, null where not applicable):
       "character_bio": "string | null",
       "greeting_message": "string | null",
       "voice_style": "string | null",
+      "voice_instructions": "string | null",
       "lock_hint": "string | null",
       "lock_passphrase": "string | null"
     }

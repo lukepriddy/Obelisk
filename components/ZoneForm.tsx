@@ -172,8 +172,9 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
   const [playingVoice, setPlayingVoice] = useState<string | null>(null);
   const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  // AI voiceover (ElevenLabs)
-  const [ttsScript, setTtsScript]             = useState('');
+  // AI voiceover (ElevenLabs) — the script is persisted on the zone so it
+  // survives a save/reopen (derived from zone, not local state).
+  const ttsScript = zone.voiceover_script || '';
   const [ttsVoiceId, setTtsVoiceId]           = useState('');
   const [ttsVoices, setTtsVoices]             = useState<ElevenVoice[] | null>(null);
   const [ttsVoicesError, setTtsVoicesError]   = useState<string | null>(null);
@@ -533,6 +534,23 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
             >
               {showAllVoices ? `Show less` : `Show all ${VOICES.length} voices…`}
             </button>
+
+            {/* Speaking style — prepended to every spoken line to lock accent/delivery */}
+            <div className="mt-4">
+              <label className="block text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-1.5">
+                Speaking style & accent
+              </label>
+              <textarea
+                className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-white focus:border-indigo-500 focus:outline-none resize-y break-words"
+                rows={2}
+                value={zone.voice_instructions || ''}
+                onChange={(e) => onUpdate({ voice_instructions: e.target.value.slice(0, 400) })}
+                placeholder="e.g. Warm, slow Southern drawl"
+              />
+              <p className="text-[10px] text-zinc-500 mt-1 leading-relaxed">
+                Applied to every spoken line to keep the accent and delivery consistent. Describe the accent, pace, and mood — e.g. "Gravelly old fisherman, unhurried, with a faint Irish lilt."
+              </p>
+            </div>
           </div>
 
           {/* After Conversation — Avatar Unlock */}
@@ -671,7 +689,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
                         </div>
                         <textarea
                           value={ttsScript}
-                          onChange={e => { setTtsScript(e.target.value.slice(0, 10000)); setTtsDone(false); }}
+                          onChange={e => { onUpdate({ voiceover_script: e.target.value.slice(0, 10000) }); setTtsDone(false); }}
                           rows={4}
                           placeholder="Write the voiceover script…"
                           className="w-full bg-zinc-900 border border-zinc-700 rounded p-2.5 text-xs text-white placeholder-zinc-600 leading-relaxed resize-y break-words whitespace-pre-wrap focus:outline-none focus:border-indigo-500"

@@ -64,13 +64,13 @@ class GeminiService {
    * unlocked on iOS/Safari. (Web Audio's AudioContext path was unreliable for
    * these async-loaded buffers on mobile.)
    */
-  async speak(text: string, voiceStyle: string, tourId?: string): Promise<string | undefined> {
+  async speak(text: string, voiceStyle: string, tourId?: string, styleInstruction?: string): Promise<string | undefined> {
     if (!text.trim()) return undefined;
 
     try {
       const { data: ttsData, error: ttsError } = await supabase.functions.invoke(
         'gemini-chat',
-        { body: { type: 'tts', textToSpeak: text, voiceStyle: voiceStyle || 'Kore', tourId } }
+        { body: { type: 'tts', textToSpeak: text, voiceStyle: voiceStyle || 'Kore', tourId, styleInstruction } }
       );
       if (ttsError || !ttsData?.audioData) return undefined;
 
