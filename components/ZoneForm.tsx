@@ -159,6 +159,9 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [sourceType, setSourceType] = useState<AudioSourceType>(() => {
+    // A saved voiceover script means this zone's audio came from AI Voice —
+    // open on that tab so the creator lands where they left off.
+    if (zone.voiceover_script?.trim()) return 'ai';
     if (!zone.media_url || zone.media_url.startsWith('blob:')) return 'upload';
     if (SAMPLE_AUDIO_FILES.some(f => f.url === zone.media_url)) return 'preset';
     return 'url';
