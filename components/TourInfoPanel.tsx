@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Tour } from '../types';
 import { MAP_STYLES, FONT_STYLES } from '../constants';
 import { uploadImage } from '../services/storageService';
-import { Image, Type, Palette, AlignLeft, Upload, MapPin, Eye, Settings, Globe, Lock, Loader2, Sun, Moon } from 'lucide-react';
+import { Image, Type, Palette, AlignLeft, AlignCenter, Upload, MapPin, Eye, Settings, Globe, Lock, Loader2, Sun, Moon } from 'lucide-react';
 
 interface TourInfoPanelProps {
   tour: Tour;
@@ -63,7 +63,7 @@ export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({ tour, onUpdate }) 
 
   return (
     <div className="text-zinc-200 pb-20">
-      <h3 className="text-emerald-400 font-bold uppercase tracking-wider text-sm mb-4">Tour Settings</h3>
+      <h3 className="text-emerald-400 font-bold uppercase tracking-wider text-sm mb-4">Experience Settings</h3>
 
       {/* Tabs */}
       <div className="flex bg-zinc-800 rounded p-1 mb-5">
@@ -142,15 +142,35 @@ export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({ tour, onUpdate }) 
 
           {/* Description */}
           <div>
-            <label className="block text-xs font-bold text-zinc-400 uppercase mb-1 flex items-center gap-2">
-              <AlignLeft size={13} /> Description / Instructions
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-bold text-zinc-400 uppercase flex items-center gap-2">
+                <AlignLeft size={13} /> Description / Instructions
+              </label>
+              {/* Alignment toggle — longer text often reads better left-aligned */}
+              <div className="flex items-center gap-0.5 bg-zinc-800 border border-zinc-700 rounded p-0.5">
+                <button
+                  onClick={() => onUpdate({ description_align: 'center' })}
+                  title="Center"
+                  className={`p-1 rounded transition-colors ${(tour.description_align || 'center') === 'center' ? 'bg-emerald-600 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
+                >
+                  <AlignCenter size={13} />
+                </button>
+                <button
+                  onClick={() => onUpdate({ description_align: 'left' })}
+                  title="Left"
+                  className={`p-1 rounded transition-colors ${tour.description_align === 'left' ? 'bg-emerald-600 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
+                >
+                  <AlignLeft size={13} />
+                </button>
+              </div>
+            </div>
             <textarea
-              className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none resize-none"
+              className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none resize-y break-words"
               rows={4}
               value={tour.description}
               onChange={(e) => onUpdate({ description: e.target.value })}
               placeholder="Describe the experience…"
+              style={{ textAlign: tour.description_align === 'left' ? 'left' : 'center' }}
             />
           </div>
 

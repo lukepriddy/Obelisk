@@ -601,7 +601,7 @@ export const Player: React.FC = () => {
                 )}
 
                 {tour.description && (
-                  <p className="text-sm leading-relaxed opacity-80" style={{ color: textColor }}>{tour.description}</p>
+                  <p className="text-sm leading-relaxed opacity-80 w-full whitespace-pre-wrap" style={{ color: textColor, textAlign: tour.description_align === 'left' ? 'left' : 'center' }}>{tour.description}</p>
                 )}
 
                 <div className="w-full aspect-square rounded-xl overflow-hidden border border-white/10 shadow-lg">
@@ -719,7 +719,7 @@ export const Player: React.FC = () => {
 
               {/* Description */}
               {tour.description && (
-                <p className="text-sm leading-relaxed" style={{ color: th.sheetMuted }}>
+                <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: th.sheetMuted, textAlign: tour.description_align === 'left' ? 'left' : 'center' }}>
                   {tour.description}
                 </p>
               )}

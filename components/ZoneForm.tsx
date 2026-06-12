@@ -482,7 +482,15 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
           <div>
             <label className="block text-xs font-bold text-zinc-400 uppercase mb-2">Voice</label>
             <div className="grid grid-cols-2 gap-2">
-              {(showAllVoices ? INTERLEAVED_VOICES : INTERLEAVED_VOICES.slice(0, 4)).map(v => {
+              {(() => {
+                if (showAllVoices) return INTERLEAVED_VOICES;
+                const top4 = INTERLEAVED_VOICES.slice(0, 4);
+                const sel = zone.voice_style || 'Kore';
+                if (top4.some(v => v.name === sel)) return top4;
+                // Surface the selected voice IN the grid (keep it to 4 = even columns)
+                const selVoice = INTERLEAVED_VOICES.find(v => v.name === sel);
+                return selVoice ? [selVoice, ...top4.slice(0, 3)] : top4;
+              })().map(v => {
                 const selected = (zone.voice_style || 'Kore') === v.name;
                 return (
                   <button
@@ -519,18 +527,6 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
                 );
               })}
             </div>
-            {/* If the selected voice is hidden, always surface it */}
-            {!showAllVoices && zone.voice_style && !INTERLEAVED_VOICES.slice(0, 4).find(v => v.name === zone.voice_style) && (() => {
-              const v = VOICES.find(v => v.name === zone.voice_style);
-              return v ? (
-                <div className="mt-2 flex items-center gap-2 px-3 py-1.5 rounded-xl border bg-indigo-600/20 border-indigo-500 text-white text-xs">
-                  <span className="font-semibold">{v.name}</span>
-                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${v.gender === 'F' ? 'bg-pink-500/20 text-pink-400' : 'bg-blue-500/20 text-blue-400'}`}>{v.gender}</span>
-                  <span className="text-indigo-300 ml-1">{v.description}</span>
-                  <span className="ml-auto text-[10px] text-indigo-400">Selected</span>
-                </div>
-              ) : null;
-            })()}
             <button
               onClick={() => setShowAllVoices(s => !s)}
               className="mt-2 w-full text-center text-xs text-zinc-400 hover:text-white py-1.5 rounded-lg hover:bg-zinc-800 transition-colors"

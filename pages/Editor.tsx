@@ -28,6 +28,26 @@ const StartPinIcon = L.divIcon({
   iconAnchor: [30, 11],
 });
 
+// Zone colour language — matches the player exactly:
+//   selected/clicked → blue · locked → yellow · character → purple · audio → green
+const zoneColor = (type: string, locked: boolean, selected: boolean): string =>
+  selected ? '#3b82f6'
+  : locked  ? '#f59e0b'
+  : type === 'character' ? '#8b5cf6'
+  :          '#10b981';
+
+// A small dot centered on the zone's coordinate (so it sits dead-center in the
+// circle, unlike the default teardrop pin which anchors at its bottom tip).
+const zoneMarkerIcon = (color: string, selected: boolean) => {
+  const d = selected ? 16 : 13;
+  return L.divIcon({
+    html: `<div style="width:${d}px;height:${d}px;border-radius:50%;background:${color};border:2px solid white;box-shadow:0 1px 5px rgba(0,0,0,0.5)"></div>`,
+    className: '',
+    iconSize: [d, d],
+    iconAnchor: [d / 2, d / 2],
+  });
+};
+
 interface EditorProps {
   user: User;
 }
@@ -317,6 +337,7 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
           font_style: tour.font_style,
           map_style: tour.map_style,
           player_theme: tour.player_theme,
+          description_align: tour.description_align,
           is_public: tour.is_public,
           lat: tour.lat,
           lng: tour.lng,
@@ -474,34 +495,33 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
             <MapInteraction tool={activeTool} onMapClick={handleMapClick} />
             <InvalidateSize trigger={`${selectedZoneId}-${rightPanel}`} />
             
-            {zones.map(zone => (
+            {zones.map(zone => {
+              const isSelected = selectedZoneId === zone.id;
+              const isLocked = zone.lock_type === 'passphrase';
+              const color = zoneColor(zone.type, isLocked, isSelected);
+              return (
               <React.Fragment key={zone.id}>
                 {/* Visual Circle */}
-                <Circle 
+                <Circle
                   center={[zone.lat, zone.lng]}
                   radius={zone.radius}
-                  pathOptions={(() => {
-                    const isSelected = selectedZoneId === zone.id;
-                    const isChar = zone.type === 'character';
-                    const isLocked = zone.lock_type === 'passphrase';
-                    // Match player colors: selected=emerald, char=indigo, locked=amber, audio=slate/teal
-                    const baseColor = isSelected ? '#10b981' : isLocked ? '#f59e0b' : isChar ? '#6366f1' : (zone.is_visible ? '#5b6b7c' : '#475569');
-                    return {
-                      color: baseColor,
-                      fillColor: baseColor,
-                      fillOpacity: isSelected ? 0.25 : 0.12,
-                      weight: isLocked ? 2 : isChar ? 2 : 1,
-                      dashArray: zone.is_visible ? undefined : '5, 10',
-                    };
-                  })()}
+                  pathOptions={{
+                    color,
+                    fillColor: color,
+                    fillOpacity: isSelected ? 0.3 : 0.18,
+                    weight: isSelected ? 3 : 2,
+                    // Invisible-to-players zones are dashed so the creator can tell
+                    dashArray: zone.is_visible ? undefined : '5, 8',
+                  }}
                   eventHandlers={{
                     click: () => handleZoneClick(zone.id)
                   }}
                 />
-                
-                {/* Draggable Center Marker */}
-                <Marker 
+
+                {/* Draggable center dot — sits dead-center in the circle */}
+                <Marker
                   position={[zone.lat, zone.lng]}
+                  icon={zoneMarkerIcon(color, isSelected)}
                   draggable={activeTool === 'select'}
                   opacity={activeTool === 'draw' ? 0.5 : 1}
                   eventHandlers={{
@@ -515,7 +535,8 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
                   }}
                 />
               </React.Fragment>
-            ))}
+              );
+            })}
             {/* Start Location Pin — only shown once placed */}
             {(tour.lat !== 0 || tour.lng !== 0) && (
               <Marker

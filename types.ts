@@ -16,6 +16,7 @@ export interface Tour {
   // Welcome screen customization
   welcome_subtitle?: string;
   welcome_image_url?: string;
+  description_align?: 'center' | 'left';   // alignment of the welcome description text
   accent_color?: string;   // hex e.g. '#10b981'
   bg_color?: string;       // welcome screen background color
   text_color?: string;     // welcome screen text color
