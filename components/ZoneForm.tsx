@@ -840,17 +840,17 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
             <div>
               <label className="block text-xs font-bold text-zinc-400 uppercase mb-1.5">On End</label>
               <div className="flex gap-1">
-                {(['loop', 'stop', 'destroy'] as ZoneEndBehavior[]).map(val => (
+                {(['stop', 'loop', 'destroy'] as ZoneEndBehavior[]).map(val => (
                   <button
                     key={val}
                     onClick={() => onUpdate({ on_end: val })}
-                    className={`flex-1 py-1.5 text-xs rounded capitalize border transition-colors ${zone.on_end === val ? (val === 'destroy' ? 'bg-red-600/40 text-red-300 border-red-500/50' : 'bg-emerald-600 text-white border-emerald-500') : 'border-zinc-700 text-zinc-400 hover:text-zinc-200'}`}
+                    className={`flex-1 py-1.5 text-xs rounded capitalize border transition-colors ${(zone.on_end || 'stop') === val ? (val === 'destroy' ? 'bg-red-600/40 text-red-300 border-red-500/50' : 'bg-emerald-600 text-white border-emerald-500') : 'border-zinc-700 text-zinc-400 hover:text-zinc-200'}`}
                   >{val}</button>
                 ))}
               </div>
               <p className="text-[10px] text-zinc-500 mt-1">
-                <strong className="text-zinc-400">Loop</strong> — repeats. &nbsp;
                 <strong className="text-zinc-400">Stop</strong> — plays once per visit, replays on re-entry. &nbsp;
+                <strong className="text-zinc-400">Loop</strong> — repeats. &nbsp;
                 <strong className="text-red-400">Destroy</strong> — plays once, then gone for the session.
               </p>
             </div>

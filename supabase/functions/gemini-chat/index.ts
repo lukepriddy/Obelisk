@@ -107,7 +107,10 @@ Deno.serve(async (req) => {
           body: JSON.stringify({
             system_instruction: { parts: [{ text: systemInstruction }] },
             contents,
-            generationConfig: { maxOutputTokens: 800 },
+            // Disable "thinking" — character banter doesn't need it, and on
+            // gemini-2.5-flash thinking adds latency and can eat the output
+            // budget, occasionally stalling replies. Off = faster, steadier.
+            generationConfig: { maxOutputTokens: 800, thinkingConfig: { thinkingBudget: 0 } },
           }),
         }
       );

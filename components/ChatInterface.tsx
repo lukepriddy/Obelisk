@@ -180,26 +180,42 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
     if (hasGreetedRef.current) return;
     hasGreetedRef.current = true;
 
-    const fetchGreeting = async () => {
-      const greetingPrompt = zone.greeting_message
-        ? `[The player has arrived. Your exact opening line is: "${zone.greeting_message}" — say it now, word for word, then wait for the player to respond.]`
-        : '[The player has arrived at your location. Greet them briefly and in character, then wait for them to respond.]';
+    const voice = zone.voice_style || 'Kore';
+
+    const speakGreeting = async (text: string) => {
       try {
-        const { text } = await geminiService.generateCharacterResponse(
-          [], greetingPrompt,
+        const buf = await geminiService.speak(text, voice, zone.tour_id);
+        if (buf) await playAudio(buf);
+      } catch { /* audio is optional */ }
+    };
+
+    // A preset opening line is already written — show it instantly with no LLM
+    // round-trip, then voice it. This is the common case and feels immediate.
+    if (zone.greeting_message?.trim()) {
+      setHistory([{ role: 'model', text: zone.greeting_message.trim() }]);
+      setIsReady(true);
+      speakGreeting(zone.greeting_message.trim());
+      return;
+    }
+
+    // No preset line — generate one. Show the text as soon as it arrives, then
+    // voice it separately so the player isn't staring at a spinner during TTS.
+    (async () => {
+      try {
+        const text = await geminiService.generateText(
+          [], '[The player has arrived at your location. Greet them briefly and in character, then wait for them to respond.]',
           (zone.character_prompt || 'You are a helpful assistant.') + NO_STAGE_DIRECTIONS,
-          zone.voice_style || 'Kore',
           zone.tour_id,
         );
         setHistory([{ role: 'model', text }]);
         setIsReady(true);
+        speakGreeting(text);
       } catch (err) {
         console.warn('Greeting failed:', err);
         setErrorMsg('Could not reach the character. Check your connection and try again.');
         setIsReady(true);
       }
-    };
-    fetchGreeting();
+    })();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Speech recognition ────────────────────────────────────────────────────
@@ -280,10 +296,10 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
 
     try {
       const conversationHistory = newHistory.filter(m => m.role === 'user' || m.role === 'model');
-      const { text: replyText, audioBuffer } = await geminiService.generateCharacterResponse(
+      // Text first — show the reply immediately, voice it afterward.
+      const replyText = await geminiService.generateText(
         conversationHistory.slice(0, -1), text,
         (zone.character_prompt || 'You are a helpful assistant.') + NO_STAGE_DIRECTIONS,
-        zone.voice_style || 'Kore',
         zone.tour_id,
       );
 
@@ -297,7 +313,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
       }
 
       if (!voiceEnded) {
-        // ── Voice phase ──
+        // ── Voice phase ── voice the reply (TTS is skipped once voice ends)
+        const audioBuffer = await geminiService.speak(replyText, zone.voice_style || 'Kore', zone.tour_id);
         if (audioBuffer) await playAudio(audioBuffer);
         voiceCountRef.current++;
         if (voiceCountRef.current >= VOICE_LIMIT) {

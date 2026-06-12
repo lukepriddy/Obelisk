@@ -37,6 +37,62 @@ function pcmToWav(pcmData: ArrayBuffer, sampleRate = 24000, numChannels = 1, bit
 
 class GeminiService {
 
+  /**
+   * Text-only character reply. Fast — used to show the message immediately,
+   * before (and independently of) the slower TTS step.
+   * tourId lets the edge function charge the tour owner's Gemini key (BYOK).
+   */
+  async generateText(
+    history: ChatMessage[],
+    prompt: string,
+    systemInstruction: string,
+    tourId?: string,
+  ): Promise<string> {
+    const { data, error } = await supabase.functions.invoke(
+      'gemini-chat',
+      { body: { type: 'chat', history, userMessage: prompt, systemInstruction, tourId } }
+    );
+    if (error) throw error;
+    return data?.text || "I didn't catch that.";
+  }
+
+  /**
+   * TTS only — returns a ready-to-play AudioBuffer, or undefined on any
+   * failure (audio is always optional; the text response stands alone).
+   */
+  async speak(text: string, voiceStyle: string, tourId?: string): Promise<AudioBuffer | undefined> {
+    if (!text.trim() || !audioService.context) return undefined;
+
+    // Ensure the AudioContext is running before TTS (iOS suspends it on inactivity)
+    if (audioService.context.state === 'suspended') {
+      try { await audioService.context.resume(); } catch {}
+    }
+
+    try {
+      const { data: ttsData, error: ttsError } = await supabase.functions.invoke(
+        'gemini-chat',
+        { body: { type: 'tts', textToSpeak: text, voiceStyle: voiceStyle || 'Kore', tourId } }
+      );
+      if (ttsError || !ttsData?.audioData) return undefined;
+
+      const binary = atob(ttsData.audioData);
+      const bytes  = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      // Decode raw LINEAR16 PCM (24 kHz mono) directly into an AudioBuffer.
+      // Bypasses decodeAudioData which rejects headerless PCM on some browsers.
+      const pcm16 = new Int16Array(bytes.buffer);
+      const audioBuffer = audioService.context.createBuffer(1, pcm16.length, 24000);
+      const channel = audioBuffer.getChannelData(0);
+      for (let i = 0; i < pcm16.length; i++) channel[i] = pcm16[i] / 32768.0;
+      return audioBuffer;
+    } catch (ttsErr) {
+      console.warn('TTS failed, continuing without audio:', ttsErr);
+      return undefined;
+    }
+  }
+
+  /** Convenience: text then TTS, sequentially. Prefer generateText + speak
+   *  when you want the text to appear before audio finishes. */
   async generateCharacterResponse(
     history: ChatMessage[],
     prompt: string,
@@ -44,53 +100,10 @@ class GeminiService {
     voiceStyle: string,
     tourId?: string,
   ): Promise<{ text: string; audioBuffer?: AudioBuffer }> {
-
     try {
-      // ── Step 1: text generation ─────────────────────────────────────────────
-      // tourId lets the edge function charge the tour owner's Gemini key (BYOK)
-      const { data: chatData, error: chatError } = await supabase.functions.invoke(
-        'gemini-chat',
-        { body: { type: 'chat', history, userMessage: prompt, systemInstruction, tourId } }
-      );
-
-      if (chatError) throw chatError;
-
-      const aiText: string = chatData?.text || "I didn't catch that.";
-
-      // ── Step 2: TTS ─────────────────────────────────────────────────────────
-      let audioBuffer: AudioBuffer | undefined;
-
-      // Ensure the AudioContext is running before TTS (iOS suspends it on inactivity)
-      if (audioService.context?.state === 'suspended') {
-        try { await audioService.context.resume(); } catch {}
-      }
-
-      if (aiText.trim().length > 0 && audioService.context) {
-        try {
-          const { data: ttsData, error: ttsError } = await supabase.functions.invoke(
-            'gemini-chat',
-            { body: { type: 'tts', textToSpeak: aiText, voiceStyle: voiceStyle || 'Kore', tourId } }
-          );
-
-          if (!ttsError && ttsData?.audioData) {
-            const binary = atob(ttsData.audioData);
-            const bytes  = new Uint8Array(binary.length);
-            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-            // Decode raw LINEAR16 PCM (24 kHz mono) directly into an AudioBuffer.
-            // Bypasses decodeAudioData which rejects headerless PCM on some browsers.
-            const pcm16 = new Int16Array(bytes.buffer);
-            audioBuffer = audioService.context.createBuffer(1, pcm16.length, 24000);
-            const channel = audioBuffer.getChannelData(0);
-            for (let i = 0; i < pcm16.length; i++) channel[i] = pcm16[i] / 32768.0;
-          }
-        } catch (ttsErr) {
-          // Non-fatal — user still gets the text response
-          console.warn('TTS failed, continuing without audio:', ttsErr);
-        }
-      }
-
-      return { text: aiText, audioBuffer };
-
+      const text = await this.generateText(history, prompt, systemInstruction, tourId);
+      const audioBuffer = await this.speak(text, voiceStyle, tourId);
+      return { text, audioBuffer };
     } catch (e: any) {
       console.error('Gemini error:', e);
       return { text: "I'm having some trouble right now. Give me a moment and try again." };

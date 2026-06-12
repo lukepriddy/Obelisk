@@ -495,8 +495,16 @@ export const Player: React.FC = () => {
              const isChar = zone.type === 'character';
              const isLocked = zone.lock_type === 'passphrase';
 
-             let color = isChar ? '#6366f1' : (isActive ? '#34d399' : '#5b6b7c');
-             if (isLocked) color = '#f59e0b';
+             // Universal colour language for the player:
+             //   active (any type) → blue · inactive audio → green
+             //   inactive character → purple · inactive locked → yellow
+             // (Invisible zones are never drawn — handled above.)
+             const ACTIVE = '#3b82f6'; // blue-500
+             const color = isActive
+               ? ACTIVE
+               : isLocked ? '#f59e0b'   // amber/yellow
+               : isChar   ? '#8b5cf6'   // violet/purple
+               :            '#10b981';  // emerald/green
 
              return (
               <React.Fragment key={zone.id}>
@@ -506,9 +514,9 @@ export const Player: React.FC = () => {
                   pathOptions={{
                     color,
                     fillColor: color,
-                    fillOpacity: isActive ? 0.3 : 0.1,
-                    weight: isLocked ? 2 : (isChar ? 2 : 1),
-                    dashArray: isLocked ? '6 4' : (zone.is_visible ? undefined : '4 4')
+                    fillOpacity: isActive ? 0.35 : 0.18,
+                    weight: isActive ? 3 : 2,
+                    dashArray: isLocked && !isActive ? '6 4' : undefined
                   }}
                 />
               </React.Fragment>
