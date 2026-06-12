@@ -156,6 +156,9 @@ Deno.serve(async (req) => {
             contents: [{ parts: [{ text: textToSpeak }] }],
             generationConfig: {
               responseModalities: ['AUDIO'],
+              // Low temperature keeps the delivery (accent, pace, tone) steady
+              // from one line to the next instead of drifting between messages.
+              temperature: 0.35,
               speechConfig: {
                 voiceConfig: {
                   prebuiltVoiceConfig: { voiceName: safeVoice },

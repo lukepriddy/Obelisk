@@ -119,7 +119,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
     headerMuted:    dk ? 'text-zinc-500'                  : 'text-zinc-500',
     closeBtn:       dk ? 'text-zinc-400 hover:text-white hover:bg-zinc-800' : 'text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100',
     errorBg:        dk ? 'bg-red-500/10 border-red-500/30 text-red-300' : 'bg-red-50 border-red-200 text-red-600',
-    userBubble:     'bg-indigo-600 text-white rounded-br-md',
+    userBubble:     'bg-emerald-600 text-white rounded-br-md',
     aiBubble:       dk ? 'bg-zinc-800 text-zinc-100 rounded-bl-md' : 'bg-zinc-100 text-zinc-900 rounded-bl-md',
     typingDot:      dk ? 'bg-zinc-400' : 'bg-zinc-400',
     typingBg:       dk ? 'bg-zinc-800' : 'bg-zinc-100',
@@ -127,7 +127,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
     inputField:     dk ? 'bg-zinc-800 border-zinc-700 text-white placeholder-zinc-500 focus:border-indigo-500/60'
                        : 'bg-zinc-100 border-zinc-200 text-zinc-900 placeholder-zinc-400 focus:border-indigo-400',
     micBtn:         dk ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300' : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-600',
-    sendActive:     'bg-indigo-600 hover:bg-indigo-500 text-white',
+    sendActive:     'bg-emerald-600 hover:bg-emerald-500 text-white',
     sendInactive:   dk ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed' : 'bg-zinc-100 text-zinc-400 cursor-not-allowed',
     recordingLabel: dk ? 'text-red-400' : 'text-red-500',
     spinnerBorder:  dk ? 'border-zinc-700 border-t-indigo-400' : 'border-zinc-300 border-t-indigo-500',

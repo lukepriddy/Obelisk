@@ -314,6 +314,7 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
       is_public: false,
       lat: tourLat,
       lng: tourLng,
+      map_style: 'light',
     });
 
     if (!tour) {

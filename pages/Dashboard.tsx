@@ -272,6 +272,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
       is_public: true,
       lat: 40.7484,
       lng: -73.9856,
+      map_style: 'light',
     });
     setCreating(false);
     if (tour) navigate(`/editor/${tour.id}`);

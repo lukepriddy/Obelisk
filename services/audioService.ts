@@ -15,7 +15,13 @@ interface NodeData {
   played: boolean;
   /** True after a 'destroy' zone has played through. Never resets. */
   destroyed: boolean;
+  /** Pending 2-second entry delay timer, or null when idle. */
+  playTimer: ReturnType<typeof setTimeout> | null;
 }
+
+// Audio waits this long after the player enters a zone before starting, so the
+// sound feels like an intentional arrival rather than an abrupt jump-cut.
+const ENTRY_DELAY_MS = 2000;
 
 export class AudioService {
   public context: AudioContext | null = null;
@@ -55,7 +61,7 @@ export class AudioService {
       // preload='none' — stream on demand; avoids any upfront network cost or
       // accidental playback during initialisation.
       audioEl.preload = 'none';
-      this.nodes.set(zoneId, { audioEl, url, played: false, destroyed: false });
+      this.nodes.set(zoneId, { audioEl, url, played: false, destroyed: false, playTimer: null });
     } catch (e) {
       console.error(`Failed to set up audio for zone ${zoneId}:`, e);
     }
@@ -79,6 +85,11 @@ export class AudioService {
       // Outside zone — behaviour depends on the zone's on_exit setting.
       if (zone.volume <= 0.01) {
         audioEl.volume = 0;
+        // Cancel any pending entry delay — the player left before it fired.
+        if (nodeData.playTimer) {
+          clearTimeout(nodeData.playTimer);
+          nodeData.playTimer = null;
+        }
         const exit = zone.exitBehavior ?? 'stop';
         if (exit === 'keep') {
           // Triggered audio plays to completion regardless of zone exit.
@@ -100,27 +111,54 @@ export class AudioService {
         return;
       }
 
-      // Inside zone — HTMLAudioElement.volume must be 0–1.
+      // Inside zone — HTMLAudioElement.volume must be 0–1. Keep it live every
+      // tick (attenuation) even while the entry delay is still counting down.
       audioEl.volume = Math.min(1, Math.max(0, zone.volume));
 
-      // Start playback if not already running and not yet played this visit.
-      if (!nodeData.played && audioEl.paused) {
-        audioEl.loop = zone.loop === true;
-        audioEl.play().catch(e => console.warn(`Zone audio play failed (${zone.id}):`, e));
-
-        if (!zone.loop) {
-          audioEl.onended = () => {
-            if (zone.destroyOnEnd) {
-              nodeData.destroyed = true;
-              audioEl.volume = 0;
-            } else {
-              // 'stop': played once per visit, resets when the user exits.
-              nodeData.played = true;
-            }
-          };
-        }
+      // Schedule playback once per visit, after a short delay, if not already
+      // playing or scheduled. The delay makes the audio feel like an arrival.
+      if (!nodeData.played && audioEl.paused && !nodeData.playTimer) {
+        nodeData.playTimer = setTimeout(() => {
+          nodeData.playTimer = null;
+          if (nodeData.played || nodeData.destroyed) return;
+          this.beginPlayback(nodeData, zone.id, zone.loop === true, zone.destroyOnEnd === true);
+        }, ENTRY_DELAY_MS);
       }
     });
+  }
+
+  /** Start a node's audio element playing and wire up its end behaviour. */
+  private beginPlayback(nodeData: NodeData, zoneId: string, loop: boolean, destroyOnEnd: boolean) {
+    const { audioEl } = nodeData;
+    audioEl.loop = loop;
+    audioEl.play().catch(e => console.warn(`Zone audio play failed (${zoneId}):`, e));
+    if (!loop) {
+      audioEl.onended = () => {
+        if (destroyOnEnd) {
+          nodeData.destroyed = true;
+          audioEl.volume = 0;
+        } else {
+          // 'stop': played once per visit; a Replay button can restart it.
+          nodeData.played = true;
+        }
+      };
+    }
+  }
+
+  /** True when a non-looping 'stop' zone has finished and can be replayed. */
+  hasFinished(zoneId: string): boolean {
+    const n = this.nodes.get(zoneId);
+    return !!n && n.played && !n.destroyed;
+  }
+
+  /** Restart a finished zone's audio immediately (no entry delay). */
+  replayZone(zoneId: string) {
+    const n = this.nodes.get(zoneId);
+    if (!n || n.destroyed) return;
+    if (n.playTimer) { clearTimeout(n.playTimer); n.playTimer = null; }
+    n.played = false;
+    try { n.audioEl.currentTime = 0; } catch { /* not seekable yet */ }
+    this.beginPlayback(n, zoneId, n.audioEl.loop, false);
   }
 
   /** Play a decoded AudioBuffer directly — used by ChatInterface for TTS. */

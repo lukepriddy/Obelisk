@@ -145,9 +145,12 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
   const [rightPanel, setRightPanel] = useState<RightPanel>('zone');
   const mapRef = useRef<L.Map | null>(null);
   
-  // Editor-only map style — defaults to satellite for precise zone placement.
-  // Independent of tour.map_style (the player setting).
-  const [editorMapStyle, setEditorMapStyle] = useState('satellite');
+  // Editor map mirrors the tour's chosen map style (set in Tour Settings), so
+  // what the creator places on is what the player will see. Defaults to light.
+  const editorMapStyle = tour?.map_style || 'light';
+  // Satellite imagery has no street/place labels — stack a labels overlay so
+  // creators can still read where they're placing zones.
+  const showSatelliteLabels = editorMapStyle === 'satellite';
   // Tracks the current zoom level; saved with the tour so the player starts here.
   const editorMapZoomRef = useRef<number>(tour?.start_zoom ?? MAP_DEFAULT_ZOOM);
 
@@ -396,7 +399,7 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
       </div>
 
       {/* 2. CENTER MAP */}
-      <div className="flex-1 relative h-full">
+      <div className="flex-1 min-w-0 relative h-full">
          {/* Map Header Overlay */}
          <div className="absolute top-4 left-4 right-4 z-[400] pointer-events-none flex justify-between items-start gap-2">
              <div className="bg-zinc-900/95 backdrop-blur border border-zinc-700 p-2 rounded-lg pointer-events-auto flex gap-4 items-center">
@@ -452,11 +455,20 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
           >
             <TileLayer
               key={editorMapStyle}
-              url={(MAP_STYLES[editorMapStyle] || MAP_STYLES.satellite).url}
-              attribution={(MAP_STYLES[editorMapStyle] || MAP_STYLES.satellite).attribution}
+              url={(MAP_STYLES[editorMapStyle] || MAP_STYLES.light).url}
+              attribution={(MAP_STYLES[editorMapStyle] || MAP_STYLES.light).attribution}
               maxNativeZoom={19}
               maxZoom={22}
             />
+            {/* Place + street labels on top of satellite imagery */}
+            {showSatelliteLabels && (
+              <TileLayer
+                key="sat-labels"
+                url="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
+                maxNativeZoom={19}
+                maxZoom={22}
+              />
+            )}
             <EnsureWheelZoom />
             <ZoomWatcher zoomRef={editorMapZoomRef} />
             <MapInteraction tool={activeTool} onMapClick={handleMapClick} />
@@ -543,7 +555,7 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
 
       {/* 3. RIGHT PROPERTIES PANEL */}
       {(selectedZoneId || rightPanel === 'tour') && (
-        <div className="w-80 bg-zinc-900 border-l border-zinc-800 p-4 shadow-2xl z-20 h-full overflow-y-auto overflow-x-hidden shrink-0 animate-in slide-in-from-right-10 custom-scrollbar">
+        <div className="w-80 max-w-[88vw] bg-zinc-900 border-l border-zinc-800 p-4 shadow-2xl z-20 h-full overflow-y-auto overflow-x-hidden shrink-0 animate-in slide-in-from-right-10 custom-scrollbar">
           {selectedZoneId && selectedZone ? (
             selectedZone.id.startsWith('temp_') ? (
               <div className="flex flex-col items-center justify-center gap-3 py-20 text-zinc-500">

@@ -62,14 +62,14 @@ export interface Zone {
   voice_style?: string;             // see VOICES in constants
   character_image_url?: string;     // Square avatar shown in chat header and character card
   character_bio?: string;           // Player-facing story/description shown on the character card
-  avatar_unlock_zone_id?: string;   // Zone to auto-unlock when this conversation ends
+  avatar_unlock_zone_id?: string | null;   // Zone to auto-unlock when this conversation ends
 
   // Gating & Sequencing
   entry_message?: string;       // HUD text shown when player enters zone
   lock_type: ZoneLockType;      // Default 'none'
   lock_passphrase?: string;     // Required passphrase to unlock
   lock_hint?: string;           // Optional hint shown to player
-  requires_zone_id?: string;    // This zone only activates after the referenced zone is visited
+  requires_zone_id?: string | null;    // This zone only activates after the referenced zone is visited
 }
 
 export interface AudioState {

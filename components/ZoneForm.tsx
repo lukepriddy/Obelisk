@@ -123,6 +123,24 @@ interface ElevenVoice {
   preview_url: string | null;
 }
 
+// Recently-used ElevenLabs voices (most recent first) so a creator's go-to
+// voices float to the top of the picker. Stored locally to the browser.
+const RECENT_VOICES_KEY = 'obelisk_recent_el_voices';
+function getRecentVoiceIds(): string[] {
+  try { return JSON.parse(localStorage.getItem(RECENT_VOICES_KEY) || '[]'); } catch { return []; }
+}
+function recordRecentVoice(id: string) {
+  try {
+    const next = [id, ...getRecentVoiceIds().filter(v => v !== id)].slice(0, 6);
+    localStorage.setItem(RECENT_VOICES_KEY, JSON.stringify(next));
+  } catch { /* ignore */ }
+}
+function sortByRecency<T extends { voice_id: string }>(voices: T[]): T[] {
+  const recent = getRecentVoiceIds();
+  const rank = (id: string) => { const i = recent.indexOf(id); return i === -1 ? Infinity : i; };
+  return [...voices].sort((a, b) => rank(a.voice_id) - rank(b.voice_id));
+}
+
 // supabase-js returns data=null on non-2xx — the server's real message lives in
 // error.context (a Response). Pull it out so users see actionable errors.
 async function fnErrorMessage(error: unknown, data: { message?: string } | null): Promise<string | null> {
@@ -175,8 +193,9 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
           const msg = await fnErrorMessage(error, data);
           setTtsVoicesError(msg || 'Could not load voices. Add your ElevenLabs API key in Dashboard → Settings.');
         } else {
-          setTtsVoices(data.voices as ElevenVoice[]);
-          if (data.voices.length > 0) setTtsVoiceId(data.voices[0].voice_id);
+          const ordered = sortByRecency(data.voices as ElevenVoice[]);
+          setTtsVoices(ordered);
+          if (ordered.length > 0) setTtsVoiceId(ordered[0].voice_id);
         }
       })
       .catch(() => setTtsVoicesError('Could not load voices. Add your ElevenLabs API key in Dashboard → Settings.'))
@@ -197,6 +216,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
         setTtsError(msg || 'Voice generation failed — please try again.');
       } else {
         onUpdate({ media_url: data.url });
+        recordRecentVoice(ttsVoiceId);
         setTtsDone(true);
       }
     } catch {
@@ -292,7 +312,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
         <div className="mb-4">
           <label className="block text-xs font-bold text-zinc-400 uppercase mb-1">Description</label>
           <textarea
-            className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none resize-y"
+            className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none resize-y break-words"
             rows={2}
             value={zone.description || ''}
             onChange={(e) => onUpdate({ description: e.target.value })}
@@ -307,7 +327,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
           <Bell size={14} /> Entry Message
         </label>
         <textarea
-          className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none resize-y"
+          className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none resize-y break-words"
           rows={2}
           value={zone.entry_message || ''}
           onChange={(e) => onUpdate({ entry_message: e.target.value })}
@@ -414,7 +434,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
               <MessageSquare size={14} /> Player-Facing Description
             </label>
             <textarea
-              className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-white focus:border-indigo-500 focus:outline-none resize-y min-h-[130px]"
+              className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-white focus:border-indigo-500 focus:outline-none resize-y break-words min-h-[130px]"
               value={zone.character_bio || ''}
               onChange={(e) => onUpdate({ character_bio: e.target.value })}
               placeholder="e.g. A weathered lighthouse keeper who has watched ships come and go for forty years. He knows every secret the harbour holds."
@@ -428,7 +448,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
               <MessageSquare size={14} /> Persona & Instructions
             </label>
             <textarea
-              className="w-full bg-zinc-800 border border-indigo-500/50 rounded px-3 py-2 text-sm text-white focus:border-indigo-500 focus:outline-none resize-y min-h-[130px]"
+              className="w-full bg-zinc-800 border border-indigo-500/50 rounded px-3 py-2 text-sm text-white focus:border-indigo-500 focus:outline-none resize-y break-words min-h-[130px]"
               value={zone.character_prompt || ''}
               onChange={(e) => onUpdate({ character_prompt: e.target.value })}
               placeholder="Example: You are a grumpy troll living under this bridge. You demand a riddle to pass. Keep your answers short and in character."
@@ -444,7 +464,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
               Opening Line <span className="normal-case font-normal text-zinc-500">(optional)</span>
             </label>
             <textarea
-              className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-white focus:border-indigo-500 focus:outline-none resize-y"
+              className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-white focus:border-indigo-500 focus:outline-none resize-y break-words"
               rows={2}
               value={zone.greeting_message || ''}
               onChange={(e) => onUpdate({ greeting_message: e.target.value })}
@@ -524,7 +544,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
                 <select
                   className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-white outline-none focus:border-indigo-500"
                   value={zone.avatar_unlock_zone_id || ''}
-                  onChange={(e) => onUpdate({ avatar_unlock_zone_id: e.target.value || undefined })}
+                  onChange={(e) => onUpdate({ avatar_unlock_zone_id: e.target.value || null })}
                 >
                   <option value="">— No automatic unlock —</option>
                   {zonesList
@@ -653,7 +673,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
                           onChange={e => { setTtsScript(e.target.value.slice(0, 10000)); setTtsDone(false); }}
                           rows={4}
                           placeholder="Write what the voice should say when the player enters this zone…"
-                          className="w-full bg-zinc-900 border border-zinc-700 rounded p-2.5 text-xs text-white placeholder-zinc-600 leading-relaxed resize-y focus:outline-none focus:border-indigo-500"
+                          className="w-full bg-zinc-900 border border-zinc-700 rounded p-2.5 text-xs text-white placeholder-zinc-600 leading-relaxed resize-y break-words whitespace-pre-wrap focus:outline-none focus:border-indigo-500"
                         />
                       </div>
 
@@ -853,7 +873,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
             <select
               className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-white outline-none focus:border-amber-500"
               value={zone.requires_zone_id || ''}
-              onChange={(e) => onUpdate({ requires_zone_id: e.target.value || undefined })}
+              onChange={(e) => onUpdate({ requires_zone_id: e.target.value || null })}
             >
               <option value="">— No prerequisite —</option>
               {zonesList

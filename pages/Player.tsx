@@ -7,7 +7,7 @@ import { audioService } from '../services/audioService';
 import { getDistance, calculateAttenuation } from '../utils/geo';
 import { Tour, Zone } from '../types';
 import { FONT_STYLES, MAP_STYLES } from '../constants';
-import { PlayCircle, Volume2, Mic, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu, Layers, Locate } from 'lucide-react';
+import { PlayCircle, Volume2, Mic, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu, Layers, Locate, RotateCcw } from 'lucide-react';
 import { ChatInterface } from '../components/ChatInterface';
 
 // Custom icons
@@ -57,7 +57,7 @@ export const Player: React.FC = () => {
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [audioStarted, setAudioStarted] = useState(false);
   const [simulationMode, setSimulationMode] = useState(isPreview);
-  const [activeZones, setActiveZones] = useState<{id: string, title: string, volume: number}[]>([]);
+  const [activeZones, setActiveZones] = useState<{id: string, title: string, volume: number, replayable: boolean}[]>([]);
   // Map style — starts at the tour's chosen style, user can override in-session
   const [mapStyleOverride, setMapStyleOverride] = useState<string | null>(null);
   const [showMapPicker, setShowMapPicker] = useState(false);
@@ -206,7 +206,7 @@ export const Player: React.FC = () => {
     const interval = setInterval(() => {
       const currentPos = simPosRef.current || userPos;
       const audioUpdates: { id: string; volume: number; loop?: boolean; destroyOnEnd?: boolean; exitBehavior?: 'stop' | 'pause' | 'keep' }[] = [];
-      const activeState: { id: string; title: string; volume: number }[] = [];
+      const activeState: { id: string; title: string; volume: number; replayable: boolean }[] = [];
       let foundCharZone: Zone | null = null;
       const currentZoneIds = new Set<string>();
 
@@ -249,7 +249,13 @@ export const Player: React.FC = () => {
                 ? calculateAttenuation(dist, zone.radius)
                 : 1.0;
               volume = volume * (zone.volume ?? 1.0);
-              activeState.push({ id: zone.id, title: zone.title, volume: Math.round(volume * 100) });
+              activeState.push({
+                id: zone.id,
+                title: zone.title,
+                volume: Math.round(volume * 100),
+                // A non-looping track that already finished can be replayed from the card.
+                replayable: zone.on_end !== 'loop' && audioService.hasFinished(zone.id),
+              });
             }
           }
         }
@@ -313,7 +319,7 @@ export const Player: React.FC = () => {
               charZoneExitTimerRef.current = null;
               // persistedCharacterZone lives on for 10 more seconds (see useEffect)
               // so re-entry within that window continues the conversation.
-            }, 20000);
+            }, 12000);
           }
         }
       }
@@ -853,9 +859,19 @@ export const Player: React.FC = () => {
                 {activeZones.map((az, idx) => (
                   <div key={idx} className="flex justify-between items-center gap-3">
                     <span className="text-xs truncate" style={{ color: th.cardText }}>{az.title}</span>
-                    <div className="w-16 h-1 rounded-full overflow-hidden shrink-0" style={{ backgroundColor: `${accent}33` }}>
-                      <div className="h-full transition-all duration-300" style={{ width: `${az.volume}%`, backgroundColor: accent }} />
-                    </div>
+                    {az.replayable ? (
+                      <button
+                        onClick={() => { audioService.replayZone(az.id); setActiveZones(prev => prev.map(z => z.id === az.id ? { ...z, replayable: false } : z)); }}
+                        className="flex items-center gap-1 shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold transition-opacity active:opacity-60"
+                        style={{ backgroundColor: `${accent}22`, color: accent }}
+                      >
+                        <RotateCcw size={10} /> Replay
+                      </button>
+                    ) : (
+                      <div className="w-16 h-1 rounded-full overflow-hidden shrink-0" style={{ backgroundColor: `${accent}33` }}>
+                        <div className="h-full transition-all duration-300" style={{ width: `${az.volume}%`, backgroundColor: accent }} />
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
