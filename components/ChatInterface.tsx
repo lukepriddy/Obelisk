@@ -307,7 +307,10 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
         onUnlock(zone.avatar_unlock_zone_id);
       }
 
-      if (!voiceEnded) {
+      // Creator can disable voice entirely (text-only) to cut cost at scale.
+      const voiceOn = zone.voice_enabled !== false;
+
+      if (voiceOn && !voiceEnded) {
         // ── Voice phase ── voice the reply (TTS is skipped once voice ends)
         const audioUrl = await geminiService.speak(replyText, zone.voice_style || 'Kore', zone.tour_id, zone.voice_instructions);
         if (audioUrl) await playAudio(audioUrl);

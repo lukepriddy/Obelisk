@@ -480,8 +480,27 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
 
           {/* Voice Picker */}
           <div>
-            <label className="block text-xs font-bold text-zinc-400 uppercase mb-2">Voice</label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-bold text-zinc-400 uppercase">Voice</label>
+              {/* Voiceover toggle — off = text-only replies (cheaper at scale) */}
+              <button
+                type="button"
+                onClick={() => onUpdate({ voice_enabled: zone.voice_enabled === false })}
+                className="flex items-center gap-2 group"
+                title={zone.voice_enabled === false ? 'Replies are text-only' : 'Replies are spoken aloud'}
+              >
+                <span className={`text-[10px] font-bold uppercase tracking-wider ${zone.voice_enabled === false ? 'text-zinc-500' : 'text-indigo-400'}`}>
+                  Voiceover {zone.voice_enabled === false ? 'Off' : 'On'}
+                </span>
+                <span className={`relative inline-flex h-4 w-7 shrink-0 rounded-full transition-colors ${zone.voice_enabled === false ? 'bg-zinc-700' : 'bg-indigo-500'}`}>
+                  <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white transition-all ${zone.voice_enabled === false ? 'left-0.5' : 'left-3.5'}`} />
+                </span>
+              </button>
+            </div>
+            {zone.voice_enabled === false && (
+              <p className="text-[10px] text-zinc-500 mb-2 -mt-1">Replies are text-only — no AI voice cost. Good for experiences with many players.</p>
+            )}
+            <div className={`grid grid-cols-2 gap-2 transition-opacity ${zone.voice_enabled === false ? 'opacity-40 pointer-events-none' : ''}`}>
               {(() => {
                 if (showAllVoices) return INTERLEAVED_VOICES;
                 const top4 = INTERLEAVED_VOICES.slice(0, 4);
