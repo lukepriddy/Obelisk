@@ -21,7 +21,6 @@ interface NodeData {
 // Audio waits this long after the player enters a zone before starting, so the
 // sound feels like an intentional arrival rather than an abrupt jump-cut.
 const ENTRY_DELAY_MS = 2000;
-const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
 
 interface SpeechCallbacks {
   onStart?: () => void;
@@ -48,7 +47,6 @@ export class AudioService {
       await this.context.resume();
     }
     this.ensureSpeechElement();
-    this.primeSpeechElement();
     this.isUnlocked = true;
   }
 
@@ -61,7 +59,6 @@ export class AudioService {
   async prepareSpeechPlayback() {
     await this.resume();
     this.ensureSpeechElement();
-    this.primeSpeechElement();
   }
 
   /**
@@ -92,27 +89,6 @@ export class AudioService {
       this.speechEl = el;
     }
     return this.speechEl;
-  }
-
-  private primeSpeechElement() {
-    const el = this.ensureSpeechElement();
-    if (!el.paused && el.src === SILENT_WAV) return;
-    try {
-      el.src = SILENT_WAV;
-      el.loop = false;
-      el.volume = 0;
-      el.play()
-        .then(() => {
-          el.pause();
-          el.volume = 1;
-          try { el.currentTime = 0; } catch {}
-        })
-        .catch(() => {
-          el.volume = 1;
-        });
-    } catch {
-      el.volume = 1;
-    }
   }
 
   async playSpeechUrl(url: string, callbacks: SpeechCallbacks = {}): Promise<boolean> {

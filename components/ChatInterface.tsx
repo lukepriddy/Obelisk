@@ -133,25 +133,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   };
 
   // ── Audio playback ────────────────────────────────────────────────────────
-  const speakWithSystemVoice = (text: string) => {
-    if (!('speechSynthesis' in window) || !text.trim()) return false;
-    try {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 0.95;
-      utterance.pitch = 1;
-      utterance.onstart = () => setIsSpeaking(true);
-      utterance.onend = () => setIsSpeaking(false);
-      utterance.onerror = () => setIsSpeaking(false);
-      window.speechSynthesis.speak(utterance);
-      return true;
-    } catch {
-      setIsSpeaking(false);
-      return false;
-    }
-  };
-
-  const playGeneratedSpeech = async (url: string, text: string, manual = false) => {
+  const playGeneratedSpeech = async (url: string, manual = false) => {
     setIsSpeaking(true);
     if (manual) setPendingAudioUrl(null);
 
@@ -168,13 +150,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
 
     setIsSpeaking(false);
     setPendingAudioUrl(url);
-
-    if (!manual) {
-      const fallbackSpoke = speakWithSystemVoice(text);
-      if (!fallbackSpoke) {
-        setErrorMsg('Voice playback was blocked. Tap “Hear reply” to play it.');
-      }
-    }
+    if (!manual) setErrorMsg('Voice playback was blocked. Tap “Hear reply” to play it.');
   };
 
   // ── Auto-scroll ───────────────────────────────────────────────────────────
@@ -337,16 +313,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
           .speak(replyText, zone.voice_style || 'Kore', zone.tour_id, zone.voice_instructions)
           .then(audioUrl => {
             if (audioUrl) {
-              playGeneratedSpeech(audioUrl, replyText);
+              playGeneratedSpeech(audioUrl);
             } else {
-              const spoke = speakWithSystemVoice(replyText);
-              if (!spoke) setErrorMsg('Voice audio could not be generated. The text reply is still available.');
+              setErrorMsg('Voice audio could not be generated. The text reply is still available.');
             }
           })
-          .catch(() => {
-            const spoke = speakWithSystemVoice(replyText);
-            if (!spoke) setErrorMsg('Voice audio could not be generated. The text reply is still available.');
-          })
+          .catch(() => setErrorMsg('Voice audio could not be generated. The text reply is still available.'))
           .finally(() => setIsPreparingSpeech(false));
       } else {
         // ── Text-only phase ──
@@ -369,7 +341,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
 
   const handleClose = () => {
     cancelRecording();
-    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     if (speakingTimerRef.current) clearTimeout(speakingTimerRef.current);
     audioService.stopSpeech();
     if (pendingAudioUrl) { try { URL.revokeObjectURL(pendingAudioUrl); } catch {} }
@@ -442,7 +413,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
 
         {pendingAudioUrl && (
           <button
-            onClick={() => playGeneratedSpeech(pendingAudioUrl, '', true)}
+            onClick={() => playGeneratedSpeech(pendingAudioUrl, true)}
             className="self-start flex items-center gap-2 px-3 py-2 rounded-full bg-indigo-500 text-white text-xs font-semibold shadow-lg active:scale-95 transition-transform"
           >
             <Volume2 size={14} /> Hear reply
