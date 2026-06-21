@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Zone, ChatMessage } from '../types';
 import { geminiService } from '../services/geminiService';
+import { audioService } from '../services/audioService';
 import { Mic, Send, Square, ChevronDown, Volume2 } from 'lucide-react';
 
 // Appended to every character system instruction so Gemini never
@@ -15,10 +16,6 @@ const NO_STAGE_DIRECTIONS =
 // Soft limits — voice goes silent first, then text winds down gracefully.
 const VOICE_LIMIT = 20;  // TTS responses before character "loses voice"
 const TEXT_LIMIT  = 50;  // further text-only replies before conversation ends
-
-// A valid, essentially-silent WAV. Played once inside a tap to "unlock" the
-// audio element for the session so later TTS plays reliably on iOS.
-const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
 
 // Injected as model messages (not from the API) when limits are hit.
 const VOICE_GONE_MSG =
@@ -66,11 +63,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   const hasGreetedRef  = useRef(hasExistingHistory); // skip greeting if history loaded
   const hasUnlockedRef = useRef(false);
   const speakingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // One persistent <audio> element, reused for every reply and unlocked inside a
-  // tap (see primeAudio). iOS only reliably plays an element that was started by
-  // a user gesture, so reusing+priming one element beats `new Audio()` per turn.
-  const ttsAudioRef    = useRef<HTMLAudioElement | null>(null);
-  const audioPrimedRef = useRef(false);
 
   // ── Cleanup on unmount — stop mic and any dangling timers ────────────────
   useEffect(() => {
@@ -81,7 +73,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
         recognitionRef.current = null;
       }
       if (speakingTimerRef.current) clearTimeout(speakingTimerRef.current);
-      if (ttsAudioRef.current) { ttsAudioRef.current.pause(); ttsAudioRef.current.src = ''; }
+      audioService.stopSpeech();
     };
   }, []); // runs once on mount; cleanup fires on unmount
 
@@ -141,37 +133,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   };
 
   // ── Audio playback ────────────────────────────────────────────────────────
-  // Lazily create the single reused <audio> element and wire its lifecycle.
-  const getAudioEl = (): HTMLAudioElement => {
-    if (!ttsAudioRef.current) {
-      const el = new Audio();
-      el.preload = 'auto';
-      el.playsInline = true;
-      ttsAudioRef.current = el;
-    }
-    ttsAudioRef.current.onended = () => setIsSpeaking(false);
-    ttsAudioRef.current.onerror = () => setIsSpeaking(false);
-    return ttsAudioRef.current;
-  };
-
-  // Must be called inside a user gesture (the send tap). Plays a silent clip
-  // once to unlock the element so subsequent programmatic .play() works on iOS.
-  const primeAudio = () => {
-    if (audioPrimedRef.current) return;
-    const el = getAudioEl();
-    try {
-      el.src = SILENT_WAV;
-      el
-        .play()
-        .then(() => {
-          audioPrimedRef.current = true;
-          el.pause();
-          try { el.currentTime = 0; } catch {}
-        })
-        .catch(() => { audioPrimedRef.current = false; });
-    } catch {}
-  };
-
   const speakWithSystemVoice = (text: string) => {
     if (!('speechSynthesis' in window) || !text.trim()) return false;
     try {
@@ -190,25 +151,29 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
     }
   };
 
-  // Play a TTS WAV blob URL on the (already-unlocked) persistent element.
-  // Fire-and-forget — never blocks the send flow. Revokes the previous blob URL.
-  const playAudio = async (url: string, manual = false, fallbackText = '') => {
-    const el = getAudioEl();
-    const prev = el.dataset.blobUrl;
-    if (prev && prev !== SILENT_WAV && prev !== url) { try { URL.revokeObjectURL(prev); } catch {} }
-    el.dataset.blobUrl = url;
-    el.src = url;
-    el.currentTime = 0;
+  const playGeneratedSpeech = async (url: string, text: string, manual = false) => {
     setIsSpeaking(true);
     if (manual) setPendingAudioUrl(null);
-    try {
-      await el.play();
+
+    const played = await audioService.playSpeechUrl(url, {
+      onStart: () => setIsSpeaking(true),
+      onEnd: () => setIsSpeaking(false),
+      onError: () => setIsSpeaking(false),
+    });
+
+    if (played) {
       setPendingAudioUrl(null);
-    } catch (err) {
-      console.warn('playAudio failed:', err);
-      setIsSpeaking(false);
-      setPendingAudioUrl(url);
-      if (!manual && fallbackText) speakWithSystemVoice(fallbackText);
+      return;
+    }
+
+    setIsSpeaking(false);
+    setPendingAudioUrl(url);
+
+    if (!manual) {
+      const fallbackSpoke = speakWithSystemVoice(text);
+      if (!fallbackSpoke) {
+        setErrorMsg('Voice playback was blocked. Tap “Hear reply” to play it.');
+      }
     }
   };
 
@@ -323,8 +288,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
     const text = inputText.trim();
     if (!text || isSending || chatLocked) return;
 
-    // Unlock audio inside the tap gesture so the reply can be voiced on iOS.
-    primeAudio();
+    // Re-prime the shared audio service inside the tap gesture. This mirrors
+    // the zone-audio path and helps mobile browsers trust the later TTS play().
+    audioService.prepareSpeechPlayback().catch(() => {});
 
     // Stop any active recording BEFORE clearing the input so onresult
     // can't race and refill the input after we clear it.
@@ -371,7 +337,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
           .speak(replyText, zone.voice_style || 'Kore', zone.tour_id, zone.voice_instructions)
           .then(audioUrl => {
             if (audioUrl) {
-              playAudio(audioUrl, false, replyText);
+              playGeneratedSpeech(audioUrl, replyText);
             } else {
               const spoke = speakWithSystemVoice(replyText);
               if (!spoke) setErrorMsg('Voice audio could not be generated. The text reply is still available.');
@@ -405,7 +371,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
     cancelRecording();
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     if (speakingTimerRef.current) clearTimeout(speakingTimerRef.current);
-    if (ttsAudioRef.current) { ttsAudioRef.current.pause(); ttsAudioRef.current.src = ''; }
+    audioService.stopSpeech();
     if (pendingAudioUrl) { try { URL.revokeObjectURL(pendingAudioUrl); } catch {} }
     onClose();
   };
@@ -476,7 +442,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
 
         {pendingAudioUrl && (
           <button
-            onClick={() => playAudio(pendingAudioUrl, true)}
+            onClick={() => playGeneratedSpeech(pendingAudioUrl, '', true)}
             className="self-start flex items-center gap-2 px-3 py-2 rounded-full bg-indigo-500 text-white text-xs font-semibold shadow-lg active:scale-95 transition-transform"
           >
             <Volume2 size={14} /> Hear reply

@@ -1,10 +1,9 @@
 /**
  * audioService.ts
  *
- * Uses HTMLAudioElement for zone audio playback — no CORS or fetch required,
- * so any publicly accessible URL works. Volume is controlled directly via
- * audioEl.volume (clamped 0–1). The AudioContext is kept alive solely for
- * TTS playback in ChatInterface (playBuffer / context).
+ * Uses HTMLAudioElement for all playback — zone audio and generated character
+ * speech. Zone audio elements and the speech element are created/unlocked from
+ * the player's Begin gesture so later playback is reliable across browsers.
  */
 
 interface NodeData {
@@ -22,11 +21,20 @@ interface NodeData {
 // Audio waits this long after the player enters a zone before starting, so the
 // sound feels like an intentional arrival rather than an abrupt jump-cut.
 const ENTRY_DELAY_MS = 2000;
+const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+
+interface SpeechCallbacks {
+  onStart?: () => void;
+  onEnd?: () => void;
+  onError?: (error: unknown) => void;
+}
 
 export class AudioService {
   public context: AudioContext | null = null;
   private nodes: Map<string, NodeData> = new Map();
   private isUnlocked = false;
+  private speechEl: HTMLAudioElement | null = null;
+  private speechUrl: string | null = null;
 
   constructor() {
     const AudioContextClass = (window.AudioContext || (window as any).webkitAudioContext);
@@ -39,6 +47,8 @@ export class AudioService {
     if (this.context?.state === 'suspended') {
       await this.context.resume();
     }
+    this.ensureSpeechElement();
+    this.primeSpeechElement();
     this.isUnlocked = true;
   }
 
@@ -46,6 +56,12 @@ export class AudioService {
     if (this.context?.state === 'suspended') {
       await this.context.resume();
     }
+  }
+
+  async prepareSpeechPlayback() {
+    await this.resume();
+    this.ensureSpeechElement();
+    this.primeSpeechElement();
   }
 
   /**
@@ -65,6 +81,79 @@ export class AudioService {
     } catch (e) {
       console.error(`Failed to set up audio for zone ${zoneId}:`, e);
     }
+  }
+
+  private ensureSpeechElement(): HTMLAudioElement {
+    if (!this.speechEl) {
+      const el = new Audio();
+      el.preload = 'auto';
+      el.playsInline = true;
+      el.volume = 1;
+      this.speechEl = el;
+    }
+    return this.speechEl;
+  }
+
+  private primeSpeechElement() {
+    const el = this.ensureSpeechElement();
+    if (!el.paused && el.src === SILENT_WAV) return;
+    try {
+      el.src = SILENT_WAV;
+      el.loop = false;
+      el.volume = 0;
+      el.play()
+        .then(() => {
+          el.pause();
+          el.volume = 1;
+          try { el.currentTime = 0; } catch {}
+        })
+        .catch(() => {
+          el.volume = 1;
+        });
+    } catch {
+      el.volume = 1;
+    }
+  }
+
+  async playSpeechUrl(url: string, callbacks: SpeechCallbacks = {}): Promise<boolean> {
+    if (!url) return false;
+
+    const el = this.ensureSpeechElement();
+    const previousUrl = this.speechUrl;
+
+    try {
+      el.pause();
+      el.loop = false;
+      el.volume = 1;
+      el.onplaying = () => callbacks.onStart?.();
+      el.onended = () => callbacks.onEnd?.();
+      el.onerror = () => {
+        callbacks.onEnd?.();
+        callbacks.onError?.(new Error('Speech audio failed to play'));
+      };
+      this.speechUrl = url;
+      el.src = url;
+      try { el.currentTime = 0; } catch {}
+
+      if (previousUrl && previousUrl !== url && previousUrl.startsWith('blob:')) {
+        try { URL.revokeObjectURL(previousUrl); } catch {}
+      }
+
+      await el.play();
+      return true;
+    } catch (error) {
+      callbacks.onEnd?.();
+      callbacks.onError?.(error);
+      return false;
+    }
+  }
+
+  stopSpeech() {
+    if (!this.speechEl) return;
+    this.speechEl.pause();
+    this.speechEl.onplaying = null;
+    this.speechEl.onended = null;
+    this.speechEl.onerror = null;
   }
 
   updateVolumes(zones: { id: string; volume: number; loop?: boolean; destroyOnEnd?: boolean; exitBehavior?: 'stop' | 'pause' | 'keep' }[]) {
@@ -176,6 +265,14 @@ export class AudioService {
       data.audioEl.src = '';
     });
     this.nodes.clear();
+    this.stopSpeech();
+    if (this.speechUrl?.startsWith('blob:')) {
+      try { URL.revokeObjectURL(this.speechUrl); } catch {}
+    }
+    if (this.speechEl) {
+      this.speechEl.src = '';
+    }
+    this.speechUrl = null;
     this.isUnlocked = false;
   }
 }
