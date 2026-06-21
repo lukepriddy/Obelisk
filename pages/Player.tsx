@@ -245,14 +245,15 @@ export const Player: React.FC = () => {
             if (zone.type === 'character') {
               foundCharZone = zone;
             } else {
+              const zoneVolume = Math.min(1, Math.max(0, zone.volume ?? 1.0));
               let volume = zone.use_attenuation
                 ? calculateAttenuation(dist, zone.radius)
                 : 1.0;
-              volume = volume * (zone.volume ?? 1.0);
+              volume = volume * zoneVolume;
               activeState.push({
                 id: zone.id,
                 title: zone.title,
-                volume: Math.round(volume * 100),
+                volume: Math.min(100, Math.round(volume * 100)),
                 // A non-looping track that already finished can be replayed from the card.
                 replayable: zone.on_end !== 'loop' && audioService.hasFinished(zone.id),
               });
@@ -263,8 +264,9 @@ export const Player: React.FC = () => {
         if (zone.type === 'audio') {
           let volume = 0;
           if (insideZone && isZoneAccessible(zone)) {
+            const zoneVolume = Math.min(1, Math.max(0, zone.volume ?? 1.0));
             volume = zone.use_attenuation ? calculateAttenuation(dist, zone.radius) : 1.0;
-            volume = volume * (zone.volume ?? 1.0);
+            volume = volume * zoneVolume;
           }
           audioUpdates.push({
             id: zone.id,
@@ -876,8 +878,17 @@ export const Player: React.FC = () => {
                         <RotateCcw size={10} /> Replay
                       </button>
                     ) : (
-                      <div className="w-16 h-1 rounded-full overflow-hidden shrink-0" style={{ backgroundColor: `${accent}33` }}>
-                        <div className="h-full transition-all duration-300" style={{ width: `${az.volume}%`, backgroundColor: accent }} />
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-[10px] tabular-nums" style={{ color: th.cardMuted }}>{az.volume}%</span>
+                        <div className="w-16 h-1 rounded-full overflow-hidden" style={{ backgroundColor: `${accent}33` }}>
+                          <div
+                            className="h-full transition-all duration-300"
+                            style={{
+                              width: az.volume > 0 ? `${Math.max(4, az.volume)}%` : '0%',
+                              backgroundColor: accent,
+                            }}
+                          />
+                        </div>
                       </div>
                     )}
                   </div>

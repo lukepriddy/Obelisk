@@ -6,7 +6,7 @@ import { supabase } from '../services/supabaseClient';
 import { Music, AlertCircle, Clock, Volume2, EyeOff, Radio, PlayCircle, Upload, Link as LinkIcon, FileAudio, ListMusic, Bot, MessageSquare, Lock, Unlock, GitBranch, Bell, Sparkles, KeySquare, ImageIcon, X, Trash2, Play, Pause, Loader2 } from 'lucide-react';
 
 // ── Mini audio preview player ───────────────────────────────────────────────
-const AudioPreview: React.FC<{ url: string }> = ({ url }) => {
+const AudioPreview: React.FC<{ url: string; volume?: number }> = ({ url, volume = 1 }) => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const scrubRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
@@ -20,6 +20,12 @@ const AudioPreview: React.FC<{ url: string }> = ({ url }) => {
     setProgress(0);
     setDuration(0);
   }, [url]);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = Math.min(1, Math.max(0, volume));
+    }
+  }, [volume]);
 
   const toggle = () => {
     const a = audioRef.current;
@@ -63,12 +69,15 @@ const AudioPreview: React.FC<{ url: string }> = ({ url }) => {
       <audio
         ref={audioRef}
         src={url}
+        onLoadedMetadata={() => {
+          if (audioRef.current) {
+            audioRef.current.volume = Math.min(1, Math.max(0, volume));
+            setDuration(audioRef.current.duration);
+          }
+        }}
         onTimeUpdate={() => {
           const a = audioRef.current;
           if (a && a.duration && !isDragging.current) setProgress(a.currentTime / a.duration);
-        }}
-        onLoadedMetadata={() => {
-          if (audioRef.current) setDuration(audioRef.current.duration);
         }}
         onEnded={() => { setPlaying(false); setProgress(0); }}
       />
@@ -785,7 +794,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
             </div>
             {/* Preview player — shown whenever there's a valid URL */}
             {zone.media_url && !zone.media_url.startsWith('blob:temp') && (
-              <AudioPreview key={zone.media_url} url={zone.media_url} />
+              <AudioPreview key={zone.media_url} url={zone.media_url} volume={zone.volume ?? 1} />
             )}
           </div>
 
@@ -794,13 +803,13 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
             <div>
               <div className="flex justify-between text-xs font-bold text-zinc-400 uppercase mb-1">
                 <span>Volume</span>
-                <span>{Math.round((zone.volume || 1) * 10)}</span>
+                <span>{Math.round((zone.volume ?? 1) * 100)}%</span>
               </div>
               <input
                 type="range"
                 min="0"
-                max="2"
-                step="0.1"
+                max="1"
+                step="0.05"
                 className="w-full accent-emerald-500 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
                 value={zone.volume ?? 1}
                 onChange={(e) => onUpdate({ volume: parseFloat(e.target.value) })}

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Zone, ChatMessage } from '../types';
 import { geminiService } from '../services/geminiService';
-import { Mic, Send, Square, ChevronDown } from 'lucide-react';
+import { Mic, Send, Square, ChevronDown, Volume2 } from 'lucide-react';
 
 // Appended to every character system instruction so Gemini never
 // adds stage directions like "(smiles)" or "(pauses solemnly)".
@@ -49,6 +49,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   const [errorMsg, setErrorMsg]       = useState<string | null>(null);
   const [inputText, setInputText]     = useState('');
   const [isRecording, setIsRecording] = useState(false);
+  const [isPreparingSpeech, setIsPreparingSpeech] = useState(false);
+  const [pendingAudioUrl, setPendingAudioUrl] = useState<string | null>(null);
 
   // ── Rate limits: voice fades at 20, text ends at 50 more ─────────────────
   // Derived from saved history so state survives remounts within the same tab.
@@ -61,7 +63,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   const scrollRef      = useRef<HTMLDivElement>(null);
   const textareaRef    = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<any>(null);
-  const micStreamRef   = useRef<MediaStream | null>(null);
   const hasGreetedRef  = useRef(hasExistingHistory); // skip greeting if history loaded
   const hasUnlockedRef = useRef(false);
   const speakingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -77,10 +78,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
       if (recognitionRef.current) {
         recognitionRef.current.onresult = null;
         try { recognitionRef.current.stop(); } catch {}
-      }
-      if (micStreamRef.current) {
-        micStreamRef.current.getTracks().forEach(t => t.stop());
-        micStreamRef.current = null;
+        recognitionRef.current = null;
       }
       if (speakingTimerRef.current) clearTimeout(speakingTimerRef.current);
       if (ttsAudioRef.current) { ttsAudioRef.current.pause(); ttsAudioRef.current.src = ''; }
@@ -91,19 +89,13 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   // When the user minimises the browser we stop the recording immediately so
   // the mic indicator disappears.  On return they simply tap the mic again.
   useEffect(() => {
-    const releaseMic = () => {
-      if (micStreamRef.current) {
-        micStreamRef.current.getTracks().forEach(t => t.stop());
-        micStreamRef.current = null;
-      }
-    };
     const handleVisibility = () => {
       if (document.hidden) {
         if (recognitionRef.current) {
           recognitionRef.current.onresult = null;
           try { recognitionRef.current.stop(); } catch {}
+          recognitionRef.current = null;
         }
-        releaseMic();
         setIsRecording(false);
       }
     };
@@ -153,10 +145,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   const getAudioEl = (): HTMLAudioElement => {
     if (!ttsAudioRef.current) {
       const el = new Audio();
-      el.onended = () => setIsSpeaking(false);
-      el.onerror = () => setIsSpeaking(false);
+      el.preload = 'auto';
+      el.playsInline = true;
       ttsAudioRef.current = el;
     }
+    ttsAudioRef.current.onended = () => setIsSpeaking(false);
+    ttsAudioRef.current.onerror = () => setIsSpeaking(false);
     return ttsAudioRef.current;
   };
 
@@ -164,25 +158,58 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   // once to unlock the element so subsequent programmatic .play() works on iOS.
   const primeAudio = () => {
     if (audioPrimedRef.current) return;
-    audioPrimedRef.current = true;
     const el = getAudioEl();
     try {
       el.src = SILENT_WAV;
-      el.play().then(() => el.pause()).catch(() => {});
+      el
+        .play()
+        .then(() => {
+          audioPrimedRef.current = true;
+          el.pause();
+          try { el.currentTime = 0; } catch {}
+        })
+        .catch(() => { audioPrimedRef.current = false; });
     } catch {}
+  };
+
+  const speakWithSystemVoice = (text: string) => {
+    if (!('speechSynthesis' in window) || !text.trim()) return false;
+    try {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 0.95;
+      utterance.pitch = 1;
+      utterance.onstart = () => setIsSpeaking(true);
+      utterance.onend = () => setIsSpeaking(false);
+      utterance.onerror = () => setIsSpeaking(false);
+      window.speechSynthesis.speak(utterance);
+      return true;
+    } catch {
+      setIsSpeaking(false);
+      return false;
+    }
   };
 
   // Play a TTS WAV blob URL on the (already-unlocked) persistent element.
   // Fire-and-forget — never blocks the send flow. Revokes the previous blob URL.
-  const playAudio = (url: string) => {
+  const playAudio = async (url: string, manual = false, fallbackText = '') => {
     const el = getAudioEl();
     const prev = el.dataset.blobUrl;
-    if (prev && prev !== SILENT_WAV) { try { URL.revokeObjectURL(prev); } catch {} }
+    if (prev && prev !== SILENT_WAV && prev !== url) { try { URL.revokeObjectURL(prev); } catch {} }
     el.dataset.blobUrl = url;
     el.src = url;
     el.currentTime = 0;
     setIsSpeaking(true);
-    el.play().catch(err => { console.warn('playAudio failed:', err); setIsSpeaking(false); });
+    if (manual) setPendingAudioUrl(null);
+    try {
+      await el.play();
+      setPendingAudioUrl(null);
+    } catch (err) {
+      console.warn('playAudio failed:', err);
+      setIsSpeaking(false);
+      setPendingAudioUrl(url);
+      if (!manual && fallbackText) speakWithSystemVoice(fallbackText);
+    }
   };
 
   // ── Auto-scroll ───────────────────────────────────────────────────────────
@@ -231,57 +258,59 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   // ── Speech recognition ────────────────────────────────────────────────────
   const setupSpeechRecognition = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) return;
+    if (!SpeechRecognition) return null;
     const recognition = new SpeechRecognition();
     recognition.continuous = false;
     recognition.interimResults = true;
+    recognition.lang = navigator.language || 'en-US';
     recognition.onresult = (e: any) => {
       let interim = '', final = '';
       for (let i = e.resultIndex; i < e.results.length; i++) {
         if (e.results[i].isFinal) final += e.results[i][0].transcript;
         else interim += e.results[i][0].transcript;
       }
-      setInputText(final || interim);
+      const spoken = (final || interim).trim();
+      if (spoken) setInputText(spoken);
     };
-    // Always release the MediaStream when recognition ends so the mic
-    // indicator clears — whether the user stopped it, it timed out, or errored.
-    const releaseMic = () => {
-      if (micStreamRef.current) {
-        micStreamRef.current.getTracks().forEach(t => t.stop());
-        micStreamRef.current = null;
-      }
+    recognition.onend = () => {
+      recognitionRef.current = null;
       setIsRecording(false);
     };
-    recognition.onend   = releaseMic;
-    recognition.onerror = releaseMic;
-    recognitionRef.current = recognition;
+    recognition.onerror = () => {
+      recognitionRef.current = null;
+      setIsRecording(false);
+    };
+    return recognition;
   };
 
-  const stopRecording = () => {
+  const cancelRecording = () => {
     if (recognitionRef.current) {
       recognitionRef.current.onresult = null;
+      recognitionRef.current.onend = null;
+      recognitionRef.current.onerror = null;
       try { recognitionRef.current.stop(); } catch {}
-    }
-    // Always release the raw MediaStream so the mic indicator clears
-    if (micStreamRef.current) {
-      micStreamRef.current.getTracks().forEach(t => t.stop());
-      micStreamRef.current = null;
+      recognitionRef.current = null;
     }
     setIsRecording(false);
   };
 
+  const stopListening = () => {
+    if (!recognitionRef.current) return;
+    try { recognitionRef.current.stop(); } catch { cancelRecording(); }
+  };
+
   const toggleMic = async () => {
-    if (!recognitionRef.current) {
-      setupSpeechRecognition();
-      if (!recognitionRef.current) return;
-    }
     if (isRecording) {
-      stopRecording();
+      stopListening();
     } else {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        micStreamRef.current = stream;
-        recognitionRef.current.start();
+        const recognition = setupSpeechRecognition();
+        if (!recognition) {
+          setErrorMsg('Speech recognition is not available in this browser.');
+          return;
+        }
+        recognitionRef.current = recognition;
+        recognition.start();
         setIsRecording(true);
       } catch {
         setErrorMsg('Microphone access denied.');
@@ -299,7 +328,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
 
     // Stop any active recording BEFORE clearing the input so onresult
     // can't race and refill the input after we clear it.
-    stopRecording();
+    cancelRecording();
 
     const newHistory: ChatMessage[] = [...history, { role: 'user', text }];
     setHistory(newHistory);
@@ -337,10 +366,22 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
           setHistory(prev => [...prev, { role: 'model', text: VOICE_GONE_MSG }]);
           setVoiceEnded(true);
         }
+        setIsPreparingSpeech(true);
         geminiService
           .speak(replyText, zone.voice_style || 'Kore', zone.tour_id, zone.voice_instructions)
-          .then(audioUrl => { if (audioUrl) playAudio(audioUrl); })
-          .catch(() => {/* audio is optional */});
+          .then(audioUrl => {
+            if (audioUrl) {
+              playAudio(audioUrl, false, replyText);
+            } else {
+              const spoke = speakWithSystemVoice(replyText);
+              if (!spoke) setErrorMsg('Voice audio could not be generated. The text reply is still available.');
+            }
+          })
+          .catch(() => {
+            const spoke = speakWithSystemVoice(replyText);
+            if (!spoke) setErrorMsg('Voice audio could not be generated. The text reply is still available.');
+          })
+          .finally(() => setIsPreparingSpeech(false));
       } else {
         // ── Text-only phase ──
         textCountRef.current++;
@@ -361,17 +402,20 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   };
 
   const handleClose = () => {
-    stopRecording();
-    if (micStreamRef.current) { micStreamRef.current.getTracks().forEach(t => t.stop()); micStreamRef.current = null; }
+    cancelRecording();
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     if (speakingTimerRef.current) clearTimeout(speakingTimerRef.current);
     if (ttsAudioRef.current) { ttsAudioRef.current.pause(); ttsAudioRef.current.src = ''; }
+    if (pendingAudioUrl) { try { URL.revokeObjectURL(pendingAudioUrl); } catch {} }
     onClose();
   };
 
   const isLoading  = !isReady || isSending;
-  const dotState   = isSpeaking ? 'speaking' : isLoading ? 'loading' : 'ready';
+  const dotState   = isSpeaking ? 'speaking' : (isLoading || isPreparingSpeech) ? 'loading' : 'ready';
   const statusText = chatLocked  ? 'Conversation ended'
     : isSpeaking                 ? 'Speaking...'
+    : pendingAudioUrl            ? 'Tap to hear'
+    : isPreparingSpeech          ? 'Finding voice...'
     : isLoading                  ? 'Thinking...'
     : voiceEnded                 ? 'Text only'
     : 'Ready';
@@ -428,6 +472,15 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
           <div className={`text-sm px-4 py-3 rounded-2xl text-center border ${t.errorBg}`}>
             {errorMsg}
           </div>
+        )}
+
+        {pendingAudioUrl && (
+          <button
+            onClick={() => playAudio(pendingAudioUrl, true)}
+            className="self-start flex items-center gap-2 px-3 py-2 rounded-full bg-indigo-500 text-white text-xs font-semibold shadow-lg active:scale-95 transition-transform"
+          >
+            <Volume2 size={14} /> Hear reply
+          </button>
         )}
 
         {history.map((msg, i) => (

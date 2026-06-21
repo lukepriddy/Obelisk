@@ -280,10 +280,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
   };
 
   const copyPlayerLink = (tourId: string) => {
-    // Vercel auto-protects per-deployment URLs (…-lukepriddys-projects.vercel.app)
-    // behind a login wall. Never share those — fall back to the public production
-    // domain. The clean alias or a future custom domain is used as-is.
-    const origin = /-lukepriddys-projects\.vercel\.app$/.test(window.location.origin)
+    // Vercel preview/deployment URLs can sit behind Deployment Protection.
+    // Share the public production alias from any vercel.app host; custom
+    // domains and local development keep their current origin.
+    const host = window.location.hostname;
+    const origin = host.endsWith('.vercel.app')
       ? 'https://obelisk-main.vercel.app'
       : window.location.origin;
     const url = `${origin}/player/${tourId}`;
