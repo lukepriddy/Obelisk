@@ -16,6 +16,10 @@ const NO_STAGE_DIRECTIONS =
 const VOICE_LIMIT = 20;  // TTS responses before character "loses voice"
 const TEXT_LIMIT  = 50;  // further text-only replies before conversation ends
 
+// A valid, essentially-silent WAV. Played once inside a tap to "unlock" the
+// audio element for the session so later TTS plays reliably on iOS.
+const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+
 // Injected as model messages (not from the API) when limits are hit.
 const VOICE_GONE_MSG =
   "My voice... it seems to be fading on me. I'll need to reach you through words alone from here — but I'm still with you.";
@@ -61,7 +65,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   const hasGreetedRef  = useRef(hasExistingHistory); // skip greeting if history loaded
   const hasUnlockedRef = useRef(false);
   const speakingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const ttsAudioRef    = useRef<HTMLAudioElement | null>(null); // currently-playing TTS
+  // One persistent <audio> element, reused for every reply and unlocked inside a
+  // tap (see primeAudio). iOS only reliably plays an element that was started by
+  // a user gesture, so reusing+priming one element beats `new Audio()` per turn.
+  const ttsAudioRef    = useRef<HTMLAudioElement | null>(null);
+  const audioPrimedRef = useRef(false);
 
   // ── Cleanup on unmount — stop mic and any dangling timers ────────────────
   useEffect(() => {
@@ -141,33 +149,40 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   };
 
   // ── Audio playback ────────────────────────────────────────────────────────
-  // Plays a TTS WAV blob URL via an HTMLAudioElement — the same audio path as
-  // zone audio, which is reliably unlocked on iOS/Safari. The object URL is
-  // revoked once playback finishes (or fails) to avoid leaking memory.
-  const playAudio = async (url: string) => {
-    try {
-      // Stop any TTS still playing from a previous turn
-      if (ttsAudioRef.current) {
-        ttsAudioRef.current.pause();
-        ttsAudioRef.current.src = '';
-      }
-      const audio = new Audio(url);
-      ttsAudioRef.current = audio;
-      setIsSpeaking(true);
-
-      const done = () => {
-        setIsSpeaking(false);
-        try { URL.revokeObjectURL(url); } catch {}
-      };
-      audio.onended = done;
-      audio.onerror = done;
-
-      await audio.play();
-    } catch (err) {
-      console.warn('playAudio failed:', err);
-      setIsSpeaking(false);
-      try { URL.revokeObjectURL(url); } catch {}
+  // Lazily create the single reused <audio> element and wire its lifecycle.
+  const getAudioEl = (): HTMLAudioElement => {
+    if (!ttsAudioRef.current) {
+      const el = new Audio();
+      el.onended = () => setIsSpeaking(false);
+      el.onerror = () => setIsSpeaking(false);
+      ttsAudioRef.current = el;
     }
+    return ttsAudioRef.current;
+  };
+
+  // Must be called inside a user gesture (the send tap). Plays a silent clip
+  // once to unlock the element so subsequent programmatic .play() works on iOS.
+  const primeAudio = () => {
+    if (audioPrimedRef.current) return;
+    audioPrimedRef.current = true;
+    const el = getAudioEl();
+    try {
+      el.src = SILENT_WAV;
+      el.play().then(() => el.pause()).catch(() => {});
+    } catch {}
+  };
+
+  // Play a TTS WAV blob URL on the (already-unlocked) persistent element.
+  // Fire-and-forget — never blocks the send flow. Revokes the previous blob URL.
+  const playAudio = (url: string) => {
+    const el = getAudioEl();
+    const prev = el.dataset.blobUrl;
+    if (prev && prev !== SILENT_WAV) { try { URL.revokeObjectURL(prev); } catch {} }
+    el.dataset.blobUrl = url;
+    el.src = url;
+    el.currentTime = 0;
+    setIsSpeaking(true);
+    el.play().catch(err => { console.warn('playAudio failed:', err); setIsSpeaking(false); });
   };
 
   // ── Auto-scroll ───────────────────────────────────────────────────────────
@@ -279,6 +294,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
     const text = inputText.trim();
     if (!text || isSending || chatLocked) return;
 
+    // Unlock audio inside the tap gesture so the reply can be voiced on iOS.
+    primeAudio();
+
     // Stop any active recording BEFORE clearing the input so onresult
     // can't race and refill the input after we clear it.
     stopRecording();
@@ -311,15 +329,18 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
       const voiceOn = zone.voice_enabled !== false;
 
       if (voiceOn && !voiceEnded) {
-        // ── Voice phase ── voice the reply (TTS is skipped once voice ends)
-        const audioUrl = await geminiService.speak(replyText, zone.voice_style || 'Kore', zone.tour_id, zone.voice_instructions);
-        if (audioUrl) await playAudio(audioUrl);
+        // Bookkeeping is synchronous; the actual TTS is fire-and-forget so the
+        // "thinking" indicator clears as soon as the TEXT is shown (below), not
+        // when the audio finishes generating.
         voiceCountRef.current++;
         if (voiceCountRef.current >= VOICE_LIMIT) {
-          // Character "loses voice" — inject in-character transition message (text only)
           setHistory(prev => [...prev, { role: 'model', text: VOICE_GONE_MSG }]);
           setVoiceEnded(true);
         }
+        geminiService
+          .speak(replyText, zone.voice_style || 'Kore', zone.tour_id, zone.voice_instructions)
+          .then(audioUrl => { if (audioUrl) playAudio(audioUrl); })
+          .catch(() => {/* audio is optional */});
       } else {
         // ── Text-only phase ──
         textCountRef.current++;
@@ -333,6 +354,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
       console.warn('sendMessage failed:', err);
       setErrorMsg('Something went wrong. Try again.');
     } finally {
+      // Text is done → stop the "thinking"/typing state immediately. Audio (if
+      // any) continues playing in the background and drives isSpeaking instead.
       setIsSending(false);
     }
   };
