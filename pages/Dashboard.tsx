@@ -280,7 +280,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
   };
 
   const copyPlayerLink = (tourId: string) => {
-    const url = `${window.location.origin}/player/${tourId}`;
+    // Vercel auto-protects per-deployment URLs (…-lukepriddys-projects.vercel.app)
+    // behind a login wall. Never share those — fall back to the public production
+    // domain. The clean alias or a future custom domain is used as-is.
+    const origin = /-lukepriddys-projects\.vercel\.app$/.test(window.location.origin)
+      ? 'https://obelisk-main.vercel.app'
+      : window.location.origin;
+    const url = `${origin}/player/${tourId}`;
     if (navigator.share) {
       navigator.share({ title: 'Join my Obelisk experience', url }).catch(() => {});
     } else {
