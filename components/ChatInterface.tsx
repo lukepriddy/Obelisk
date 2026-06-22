@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Zone, ChatMessage } from '../types';
 import { geminiService } from '../services/geminiService';
-import { Mic, Send, Square, ChevronDown, Volume2 } from 'lucide-react';
+import { Send, ChevronDown } from 'lucide-react';
 
 // Appended to every character system instruction so Gemini never
 // adds stage directions like "(smiles)" or "(pauses solemnly)".
@@ -13,17 +13,9 @@ const NO_STAGE_DIRECTIONS =
   'Speak only as dialogue, exactly as it would be heard aloud. ' +
   'Keep replies concise and voice-chat natural: usually 1 to 3 short sentences unless the player asks for detail.';
 
-const MAX_TTS_CHARS = 900;
-
-const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
-
-// Soft limits — voice goes silent first, then text winds down gracefully.
-const VOICE_LIMIT = 20;  // TTS responses before character "loses voice"
-const TEXT_LIMIT  = 50;  // further text-only replies before conversation ends
+const TEXT_LIMIT  = 70;  // text replies before conversation ends
 
 // Injected as model messages (not from the API) when limits are hit.
-const VOICE_GONE_MSG =
-  "My voice... it seems to be fading on me. I'll need to reach you through words alone from here — but I'm still with you.";
 const CHAT_END_MSG =
   "I must leave you here for now. It's been a rare pleasure. Carry what we've shared with you.";
 
@@ -46,61 +38,19 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   const [history, setHistory]         = useState<ChatMessage[]>(savedHistory);
   const [isReady, setIsReady]         = useState(hasExistingHistory);
   const [isSending, setIsSending]     = useState(false);
-  const [isSpeaking, setIsSpeaking]   = useState(false);
   const [errorMsg, setErrorMsg]       = useState<string | null>(null);
   const [inputText, setInputText]     = useState('');
-  const [isRecording, setIsRecording] = useState(false);
-  const [isPreparingSpeech, setIsPreparingSpeech] = useState(false);
-  const [pendingAudioUrl, setPendingAudioUrl] = useState<string | null>(null);
 
-  // ── Rate limits: voice fades at 20, text ends at 50 more ─────────────────
+  // ── Rate limits: conversation winds down gracefully ───────────────────────
   // Derived from saved history so state survives remounts within the same tab.
   const savedModelCount = savedHistory.filter((m: ChatMessage) => m.role === 'model').length;
-  const [voiceEnded, setVoiceEnded] = useState(savedModelCount > VOICE_LIMIT);
-  const [chatLocked, setChatLocked] = useState(savedModelCount > VOICE_LIMIT + 1 + TEXT_LIMIT);
-  const voiceCountRef = useRef(Math.min(savedModelCount, VOICE_LIMIT));
-  const textCountRef  = useRef(Math.max(0, savedModelCount - VOICE_LIMIT - 1));
+  const [chatLocked, setChatLocked] = useState(savedModelCount >= TEXT_LIMIT);
+  const textCountRef  = useRef(savedModelCount);
 
   const scrollRef      = useRef<HTMLDivElement>(null);
   const textareaRef    = useRef<HTMLTextAreaElement>(null);
-  const recognitionRef = useRef<any>(null);
   const hasGreetedRef  = useRef(hasExistingHistory); // skip greeting if history loaded
   const hasUnlockedRef = useRef(false);
-  const speakingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
-  const currentSpeechUrlRef = useRef<string | null>(null);
-  const audioPrimedRef = useRef(false);
-
-  // ── Cleanup on unmount — stop mic and any dangling timers ────────────────
-  useEffect(() => {
-    return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.onresult = null;
-        try { recognitionRef.current.stop(); } catch {}
-        recognitionRef.current = null;
-      }
-      if (speakingTimerRef.current) clearTimeout(speakingTimerRef.current);
-      stopSpeech();
-    };
-  }, []); // runs once on mount; cleanup fires on unmount
-
-  // ── Release mic when page is backgrounded (clears iOS Dynamic Island) ────
-  // When the user minimises the browser we stop the recording immediately so
-  // the mic indicator disappears.  On return they simply tap the mic again.
-  useEffect(() => {
-    const handleVisibility = () => {
-      if (document.hidden) {
-        if (recognitionRef.current) {
-          recognitionRef.current.onresult = null;
-          try { recognitionRef.current.stop(); } catch {}
-          recognitionRef.current = null;
-        }
-        setIsRecording(false);
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, []);
 
   // ── Textarea auto-resize ──────────────────────────────────────────────────
   useEffect(() => {
@@ -126,95 +76,14 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
     inputBar:       dk ? 'border-zinc-800' : 'border-zinc-200',
     inputField:     dk ? 'bg-zinc-800 border-zinc-700 text-white placeholder-zinc-500 focus:border-indigo-500/60'
                        : 'bg-zinc-100 border-zinc-200 text-zinc-900 placeholder-zinc-400 focus:border-indigo-400',
-    micBtn:         dk ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300' : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-600',
     sendActive:     'bg-emerald-600 hover:bg-emerald-500 text-white',
     sendInactive:   dk ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed' : 'bg-zinc-100 text-zinc-400 cursor-not-allowed',
-    recordingLabel: dk ? 'text-red-400' : 'text-red-500',
     spinnerBorder:  dk ? 'border-zinc-700 border-t-indigo-400' : 'border-zinc-300 border-t-indigo-500',
     spinnerText:    dk ? 'text-zinc-500' : 'text-zinc-500',
     handle:         dk ? 'bg-white/20' : 'bg-black/15',
-    statusDot: (state: 'speaking' | 'loading' | 'ready') =>
-      state === 'speaking' ? 'bg-indigo-400 animate-pulse'
-      : state === 'loading' ? 'bg-amber-400 animate-pulse'
+    statusDot: (state: 'loading' | 'ready') =>
+      state === 'loading' ? 'bg-amber-400 animate-pulse'
       : 'bg-emerald-400',
-  };
-
-  // ── Audio playback ────────────────────────────────────────────────────────
-  const getSpeechElement = () => {
-    if (!ttsAudioRef.current) {
-      const el = new Audio();
-      el.preload = 'auto';
-      el.playsInline = true;
-      el.volume = 1;
-      el.onended = () => setIsSpeaking(false);
-      el.onerror = () => setIsSpeaking(false);
-      ttsAudioRef.current = el;
-    }
-    return ttsAudioRef.current;
-  };
-
-  const stopSpeech = () => {
-    const el = ttsAudioRef.current;
-    if (el) {
-      el.pause();
-      el.removeAttribute('src');
-      try { el.load(); } catch {}
-    }
-    setIsSpeaking(false);
-  };
-
-  const primeSpeechAudio = () => {
-    if (audioPrimedRef.current) return;
-    audioPrimedRef.current = true;
-    const el = getSpeechElement();
-    try {
-      el.src = SILENT_WAV;
-      el.play()
-        .then(() => {
-          el.pause();
-          el.removeAttribute('src');
-          try { el.load(); } catch {}
-        })
-        .catch(() => {});
-    } catch {}
-  };
-
-  const revokeCurrentSpeechUrl = (except?: string) => {
-    const url = currentSpeechUrlRef.current;
-    if (url && url !== except && url.startsWith('blob:')) {
-      try { URL.revokeObjectURL(url); } catch {}
-    }
-    if (!except || url !== except) currentSpeechUrlRef.current = null;
-  };
-
-  const playGeneratedSpeech = async (url: string, manual = false) => {
-    const el = getSpeechElement();
-    const previousUrl = currentSpeechUrlRef.current;
-    currentSpeechUrlRef.current = url;
-    if (manual) setPendingAudioUrl(null);
-
-    try {
-      el.pause();
-      el.src = url;
-      el.currentTime = 0;
-      setIsSpeaking(true);
-      await el.play();
-      setPendingAudioUrl(null);
-      if (previousUrl && previousUrl !== url && previousUrl.startsWith('blob:')) {
-        try { URL.revokeObjectURL(previousUrl); } catch {}
-      }
-    } catch (err) {
-      console.warn('Character voice playback failed:', err);
-      setIsSpeaking(false);
-      setPendingAudioUrl(url);
-      if (!manual) setErrorMsg('Voice is ready but playback was blocked. Tap “Hear reply” to play it.');
-    }
-  };
-
-  const speechTextFor = (text: string) => {
-    if (text.length <= MAX_TTS_CHARS) return text;
-    const trimmed = text.slice(0, MAX_TTS_CHARS);
-    return `${trimmed.replace(/\s+\S*$/, '').trim()}...`;
   };
 
   // ── Auto-scroll ───────────────────────────────────────────────────────────
@@ -229,8 +98,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   }, [history, storageKey]);
 
   // ── Greeting on mount ─────────────────────────────────────────────────────
-  // The greeting is TEXT ONLY — never voiced. Only the character's replies to
-  // the player are read aloud. This keeps the opening instant and quiet.
+  // Text-only greeting. Character voice playback is disabled in the public
+  // player until the new voice mode is rebuilt behind a separate flag.
   useEffect(() => {
     if (hasGreetedRef.current) return;
     hasGreetedRef.current = true;
@@ -260,81 +129,10 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
     })();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Speech recognition ────────────────────────────────────────────────────
-  const setupSpeechRecognition = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) return null;
-    const recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.lang = navigator.language || 'en-US';
-    recognition.onresult = (e: any) => {
-      let interim = '', final = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) final += e.results[i][0].transcript;
-        else interim += e.results[i][0].transcript;
-      }
-      const spoken = (final || interim).trim();
-      if (spoken) setInputText(spoken);
-    };
-    recognition.onend = () => {
-      recognitionRef.current = null;
-      setIsRecording(false);
-    };
-    recognition.onerror = () => {
-      recognitionRef.current = null;
-      setIsRecording(false);
-    };
-    return recognition;
-  };
-
-  const cancelRecording = () => {
-    if (recognitionRef.current) {
-      recognitionRef.current.onresult = null;
-      recognitionRef.current.onend = null;
-      recognitionRef.current.onerror = null;
-      try { recognitionRef.current.stop(); } catch {}
-      recognitionRef.current = null;
-    }
-    setIsRecording(false);
-  };
-
-  const stopListening = () => {
-    if (!recognitionRef.current) return;
-    try { recognitionRef.current.stop(); } catch { cancelRecording(); }
-  };
-
-  const toggleMic = async () => {
-    if (isRecording) {
-      stopListening();
-    } else {
-      try {
-        stopSpeech();
-        const recognition = setupSpeechRecognition();
-        if (!recognition) {
-          setErrorMsg('Speech recognition is not available in this browser.');
-          return;
-        }
-        recognitionRef.current = recognition;
-        recognition.start();
-        setIsRecording(true);
-      } catch {
-        setErrorMsg('Microphone access denied.');
-      }
-    }
-  };
-
   // ── Send message ──────────────────────────────────────────────────────────
   const sendMessage = async () => {
     const text = inputText.trim();
     if (!text || isSending || chatLocked) return;
-
-    stopSpeech();
-    primeSpeechAudio();
-
-    // Stop any active recording BEFORE clearing the input so onresult
-    // can't race and refill the input after we clear it.
-    cancelRecording();
 
     const newHistory: ChatMessage[] = [...history, { role: 'user', text }];
     setHistory(newHistory);
@@ -344,7 +142,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
 
     try {
       const conversationHistory = newHistory.filter(m => m.role === 'user' || m.role === 'model');
-      // Text first — show the reply immediately, voice it afterward.
       const replyText = await geminiService.generateText(
         conversationHistory.slice(0, -1), text,
         (zone.character_prompt || 'You are a helpful assistant.') + NO_STAGE_DIRECTIONS,
@@ -360,68 +157,27 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
         onUnlock(zone.avatar_unlock_zone_id);
       }
 
-      // Creator can disable voice entirely (text-only) to cut cost at scale.
-      const voiceOn = zone.voice_enabled !== false;
-
-      if (voiceOn && !voiceEnded) {
-        // Bookkeeping is synchronous; the actual TTS is fire-and-forget so the
-        // "thinking" indicator clears as soon as the TEXT is shown (below), not
-        // when the audio finishes generating.
-        voiceCountRef.current++;
-        if (voiceCountRef.current >= VOICE_LIMIT) {
-          setHistory(prev => [...prev, { role: 'model', text: VOICE_GONE_MSG }]);
-          setVoiceEnded(true);
-        }
-        setIsPreparingSpeech(true);
-        geminiService
-          .speak(speechTextFor(replyText), zone.voice_style || 'Kore', zone.tour_id, zone.voice_instructions)
-          .then(audioUrl => {
-            if (audioUrl) {
-              playGeneratedSpeech(audioUrl);
-            } else {
-              setErrorMsg('Voice audio could not be generated. The text reply is still available.');
-            }
-          })
-          .catch(() => setErrorMsg('Voice audio could not be generated. The text reply is still available.'))
-          .finally(() => setIsPreparingSpeech(false));
-      } else {
-        // ── Text-only phase ──
-        textCountRef.current++;
-        if (textCountRef.current >= TEXT_LIMIT) {
-          // Gentle farewell, then lock
-          setHistory(prev => [...prev, { role: 'model', text: CHAT_END_MSG }]);
-          setChatLocked(true);
-        }
+      textCountRef.current++;
+      if (textCountRef.current >= TEXT_LIMIT) {
+        setHistory(prev => [...prev, { role: 'model', text: CHAT_END_MSG }]);
+        setChatLocked(true);
       }
     } catch (err) {
       console.warn('sendMessage failed:', err);
       setErrorMsg('Something went wrong. Try again.');
     } finally {
-      // Text is done → stop the "thinking"/typing state immediately. Audio (if
-      // any) continues playing in the background and drives isSpeaking instead.
       setIsSending(false);
     }
   };
 
   const handleClose = () => {
-    cancelRecording();
-    if (speakingTimerRef.current) clearTimeout(speakingTimerRef.current);
-    stopSpeech();
-    revokeCurrentSpeechUrl();
-    if (pendingAudioUrl && pendingAudioUrl !== currentSpeechUrlRef.current) {
-      try { URL.revokeObjectURL(pendingAudioUrl); } catch {}
-    }
     onClose();
   };
 
   const isLoading  = !isReady || isSending;
-  const dotState   = isSpeaking ? 'speaking' : (isLoading || isPreparingSpeech) ? 'loading' : 'ready';
+  const dotState   = isLoading ? 'loading' : 'ready';
   const statusText = chatLocked  ? 'Conversation ended'
-    : isSpeaking                 ? 'Speaking...'
-    : pendingAudioUrl            ? 'Tap to hear'
-    : isPreparingSpeech          ? 'Finding voice...'
     : isLoading                  ? 'Thinking...'
-    : voiceEnded                 ? 'Text only'
     : 'Ready';
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -478,15 +234,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
           </div>
         )}
 
-        {pendingAudioUrl && (
-          <button
-            onClick={() => playGeneratedSpeech(pendingAudioUrl, true)}
-            className="self-start flex items-center gap-2 px-3 py-2 rounded-full bg-indigo-500 text-white text-xs font-semibold shadow-lg active:scale-95 transition-transform"
-          >
-            <Volume2 size={14} /> Hear reply
-          </button>
-        )}
-
         {history.map((msg, i) => (
           <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`max-w-[78%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
@@ -515,16 +262,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
         style={{ paddingBottom: 'calc(10px + env(safe-area-inset-bottom, 0px))' }}
       >
         <div className="flex items-end gap-2">
-          <button
-            onClick={toggleMic}
-            disabled={isLoading || chatLocked}
-            className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all ${
-              isRecording ? 'bg-red-500 text-white' : `${t.micBtn} disabled:opacity-40`
-            }`}
-          >
-            {isRecording ? <Square size={15} fill="currentColor" /> : <Mic size={15} />}
-          </button>
-
           <textarea
             ref={textareaRef}
             className={`flex-1 border rounded-2xl px-3.5 py-2.5 focus:outline-none resize-none leading-snug disabled:opacity-40 ${t.inputField}`}
@@ -548,9 +285,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
           </button>
         </div>
 
-        {isRecording && (
-          <p className={`text-[10px] text-center mt-1.5 animate-pulse ${t.recordingLabel}`}>Listening…</p>
-        )}
       </div>
     </div>
   );

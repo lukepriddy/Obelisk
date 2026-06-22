@@ -343,6 +343,7 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
         character_bio:     dz.character_bio     ?? undefined,
         greeting_message:  dz.greeting_message  ?? undefined,
         voice_style:       dz.voice_style       ?? undefined,
+        voice_enabled:     false,
         lock_type:         dz.locked ? 'passphrase' : 'none',
         lock_hint:         dz.lock_hint         ?? undefined,
         lock_passphrase:   dz.lock_passphrase   ?? undefined,

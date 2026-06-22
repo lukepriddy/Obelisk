@@ -31,6 +31,7 @@ const DEFAULT_ZONE_PROPS = {
   on_end: 'loop' as const,
   character_prompt: 'You are a helpful guide.',
   voice_style: 'Kore',
+  voice_enabled: false,
   entry_message: '',
   greeting_message: '',
   avatar_unlock_zone_id: '',

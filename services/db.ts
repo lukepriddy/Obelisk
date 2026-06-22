@@ -16,6 +16,7 @@ const DEFAULT_ZONE_PROPS = {
   on_exit: 'stop' as const,
   on_end: 'loop' as const,
   lock_type: 'none' as const,
+  voice_enabled: false,
 };
 
 // ── Auth helpers ──────────────────────────────────────────────────────────────

@@ -245,6 +245,7 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
         radius: 40,
         title: `Step ${zones.length + 1}`,
         media_url: '',
+        voice_enabled: false,
       };
       const tempId = 'temp_' + Date.now();
       const zoneWithId = { ...newZone, id: tempId } as Zone;

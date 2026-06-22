@@ -63,7 +63,7 @@ export interface Zone {
   greeting_message?: string;        // Custom first line spoken by character; if blank, character auto-greets
   voice_style?: string;             // see VOICES in constants (the Gemini voice name)
   voice_instructions?: string;      // Free-text accent/delivery prepended to every TTS line for consistency
-  voice_enabled?: boolean;          // When false, replies are text-only (no TTS) — saves cost at scale. Default true.
+  voice_enabled?: boolean;          // Reserved for the rebuilt voice mode. Public player chat is text-only for now. Default false.
   character_image_url?: string;     // Square avatar shown in chat header and character card
   character_bio?: string;           // Player-facing story/description shown on the character card
   avatar_unlock_zone_id?: string | null;   // Zone to auto-unlock when this conversation ends
