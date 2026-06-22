@@ -52,6 +52,7 @@ export const Player: React.FC = () => {
   const [tour, setTour] = useState<Tour | null>(null);
   const [zones, setZones] = useState<Zone[]>([]);
   const [userPos, setUserPos] = useState<[number, number] | null>(null);
+  const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
@@ -61,6 +62,7 @@ export const Player: React.FC = () => {
   // Map style — starts at the tour's chosen style, user can override in-session
   const [mapStyleOverride, setMapStyleOverride] = useState<string | null>(null);
   const [showMapPicker, setShowMapPicker] = useState(false);
+  const [welcomeMapInteractive, setWelcomeMapInteractive] = useState(false);
 
   // Character Interaction
   const [activeCharacterZone, setActiveCharacterZone] = useState<Zone | null>(null);
@@ -117,6 +119,7 @@ export const Player: React.FC = () => {
 
   // Simulation ref to avoid state lag in drag handlers
   const simPosRef = useRef<[number, number] | null>(null);
+  const gpsFixRef = useRef<{ pos: [number, number]; accuracy: number; timestamp: number } | null>(null);
 
   // Analytics: session ID for the current play; null in preview mode or before Begin.
   const sessionIdRef = useRef<string | null>(null);
@@ -174,6 +177,29 @@ export const Player: React.FC = () => {
     if (hudTimerRef.current) clearTimeout(hudTimerRef.current);
     setHudNotification({ title, message });
     hudTimerRef.current = setTimeout(() => setHudNotification(null), 5000);
+  };
+
+  const applyGpsFix = (pos: GeolocationPosition) => {
+    const newPos: [number, number] = [pos.coords.latitude, pos.coords.longitude];
+    const accuracy = Number.isFinite(pos.coords.accuracy) ? pos.coords.accuracy : Infinity;
+    const now = Date.now();
+    const prev = gpsFixRef.current;
+
+    // GPS often emits a stale coarse fix before the real high-accuracy fix.
+    // Keep the best recent fix unless the new reading is comparable or the old
+    // one is getting stale, so the marker does not jump to a worse location.
+    const shouldAccept =
+      !prev ||
+      accuracy <= prev.accuracy * 1.35 ||
+      now - prev.timestamp > 12000;
+
+    if (!shouldAccept) return;
+
+    gpsFixRef.current = { pos: newPos, accuracy, timestamp: now };
+    setUserPos(newPos);
+    setGpsAccuracy(Number.isFinite(accuracy) ? accuracy : null);
+    simPosRef.current = newPos;
+    setGpsError(null);
   };
 
   const isZoneAccessible = (zone: Zone): boolean => {
@@ -340,13 +366,19 @@ export const Player: React.FC = () => {
   // GPS Watcher
   useEffect(() => {
     if (simulationMode) return;
+    if (!navigator.geolocation) {
+      setGpsError('Location is not available in this browser.');
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      applyGpsFix,
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 }
+    );
+
     const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        const newPos: [number, number] = [pos.coords.latitude, pos.coords.longitude];
-        setUserPos(newPos);
-        simPosRef.current = newPos;
-        setGpsError(null); // clear any previous error on successful fix
-      },
+      applyGpsFix,
       (err) => {
         console.error(err);
         if (err.code === err.PERMISSION_DENIED) {
@@ -359,7 +391,7 @@ export const Player: React.FC = () => {
           setGpsError('Could not get your location. Please check your device settings and try again.');
         }
       },
-      { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 }
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
     );
     return () => navigator.geolocation.clearWatch(watchId);
   }, [simulationMode]);
@@ -526,6 +558,19 @@ export const Player: React.FC = () => {
           })}
 
           {/* User Marker — only render when we have an actual position */}
+          {userPos && gpsAccuracy && gpsAccuracy > 0 && (
+            <Circle
+              center={userPos}
+              radius={Math.min(gpsAccuracy, 120)}
+              pathOptions={{
+                color: '#ef4444',
+                fillColor: '#ef4444',
+                fillOpacity: 0.08,
+                weight: 1,
+                dashArray: '4 4',
+              }}
+            />
+          )}
           {userPos && (
             <Marker
               position={userPos}
@@ -606,24 +651,46 @@ export const Player: React.FC = () => {
                   <p className="text-sm leading-relaxed opacity-80 w-full whitespace-pre-wrap" style={{ color: textColor, textAlign: tour.description_align === 'left' ? 'left' : 'center' }}>{tour.description}</p>
                 )}
 
-                <div className="w-full aspect-[4/3] max-h-[240px] rounded-xl overflow-hidden border border-white/10 shadow-lg pointer-events-none">
+                <div className="relative w-full aspect-[4/3] max-h-[240px] rounded-xl overflow-hidden border border-white/10 shadow-lg">
                   <MapContainer
                     center={[tour.lat, tour.lng]}
                     zoom={tour.start_zoom ?? 18}
                     style={{ width: '100%', height: '100%' }}
                     zoomControl={false}
                     scrollWheelZoom={false}
-                    dragging={false}
-                    touchZoom={false}
-                    doubleClickZoom={false}
+                    dragging={welcomeMapInteractive}
+                    touchZoom={welcomeMapInteractive}
+                    doubleClickZoom={welcomeMapInteractive}
                     boxZoom={false}
                     keyboard={false}
                     attributionControl={false}
+                    className={welcomeMapInteractive ? '' : 'pointer-events-none'}
                   >
                     <TileLayer url={mapStyle.url} />
                     <Marker position={[tour.lat, tour.lng]} icon={StartMarkerIcon} />
                     <InvalidateSize />
                   </MapContainer>
+                  {!welcomeMapInteractive ? (
+                    <button
+                      type="button"
+                      onClick={() => setWelcomeMapInteractive(true)}
+                      className="absolute inset-0 z-[500] flex items-center justify-center bg-black/5 active:bg-black/10"
+                      aria-label="Explore map"
+                    >
+                      <span className="rounded-full px-3 py-1.5 text-xs font-semibold backdrop-blur-md border border-white/15 shadow-lg" style={{ backgroundColor: `${bg}cc`, color: textColor }}>
+                        Tap to explore map
+                      </span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setWelcomeMapInteractive(false)}
+                      className="absolute top-2 right-2 z-[500] rounded-full px-3 py-1.5 text-xs font-semibold backdrop-blur-md border border-white/15 shadow-lg"
+                      style={{ backgroundColor: `${bg}dd`, color: textColor }}
+                    >
+                      Done
+                    </button>
+                  )}
                 </div>
 
                 <button
