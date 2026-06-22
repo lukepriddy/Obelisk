@@ -245,7 +245,7 @@ export const Player: React.FC = () => {
             if (zone.type === 'character') {
               foundCharZone = zone;
             } else {
-              const zoneVolume = Math.min(1, Math.max(0, zone.volume ?? 1.0));
+              const zoneVolume = Math.min(1, Math.max(0, Number(zone.volume ?? 1.0)));
               let volume = zone.use_attenuation
                 ? calculateAttenuation(dist, zone.radius)
                 : 1.0;
@@ -264,7 +264,7 @@ export const Player: React.FC = () => {
         if (zone.type === 'audio') {
           let volume = 0;
           if (insideZone && isZoneAccessible(zone)) {
-            const zoneVolume = Math.min(1, Math.max(0, zone.volume ?? 1.0));
+            const zoneVolume = Math.min(1, Math.max(0, Number(zone.volume ?? 1.0)));
             volume = zone.use_attenuation ? calculateAttenuation(dist, zone.radius) : 1.0;
             volume = volume * zoneVolume;
           }

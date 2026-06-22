@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Zone, ChatMessage } from '../types';
 import { geminiService } from '../services/geminiService';
-import { audioService } from '../services/audioService';
 import { Mic, Send, Square, ChevronDown, Volume2 } from 'lucide-react';
 
 // Appended to every character system instruction so Gemini never
@@ -11,7 +10,12 @@ const NO_STAGE_DIRECTIONS =
   'Never include stage directions, action descriptions, or parenthetical ' +
   'notes about physical actions, expressions, or emotions — e.g. never write ' +
   '(smiles), (pauses), (My gaze is steady), or anything in parentheses. ' +
-  'Speak only as dialogue, exactly as it would be heard aloud.';
+  'Speak only as dialogue, exactly as it would be heard aloud. ' +
+  'Keep replies concise and voice-chat natural: usually 1 to 3 short sentences unless the player asks for detail.';
+
+const MAX_TTS_CHARS = 900;
+
+const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
 
 // Soft limits — voice goes silent first, then text winds down gracefully.
 const VOICE_LIMIT = 20;  // TTS responses before character "loses voice"
@@ -63,6 +67,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   const hasGreetedRef  = useRef(hasExistingHistory); // skip greeting if history loaded
   const hasUnlockedRef = useRef(false);
   const speakingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
+  const currentSpeechUrlRef = useRef<string | null>(null);
+  const audioPrimedRef = useRef(false);
 
   // ── Cleanup on unmount — stop mic and any dangling timers ────────────────
   useEffect(() => {
@@ -73,7 +80,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
         recognitionRef.current = null;
       }
       if (speakingTimerRef.current) clearTimeout(speakingTimerRef.current);
-      audioService.stopSpeech();
+      stopSpeech();
     };
   }, []); // runs once on mount; cleanup fires on unmount
 
@@ -133,24 +140,81 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   };
 
   // ── Audio playback ────────────────────────────────────────────────────────
+  const getSpeechElement = () => {
+    if (!ttsAudioRef.current) {
+      const el = new Audio();
+      el.preload = 'auto';
+      el.playsInline = true;
+      el.volume = 1;
+      el.onended = () => setIsSpeaking(false);
+      el.onerror = () => setIsSpeaking(false);
+      ttsAudioRef.current = el;
+    }
+    return ttsAudioRef.current;
+  };
+
+  const stopSpeech = () => {
+    const el = ttsAudioRef.current;
+    if (el) {
+      el.pause();
+      el.removeAttribute('src');
+      try { el.load(); } catch {}
+    }
+    setIsSpeaking(false);
+  };
+
+  const primeSpeechAudio = () => {
+    if (audioPrimedRef.current) return;
+    audioPrimedRef.current = true;
+    const el = getSpeechElement();
+    try {
+      el.src = SILENT_WAV;
+      el.play()
+        .then(() => {
+          el.pause();
+          el.removeAttribute('src');
+          try { el.load(); } catch {}
+        })
+        .catch(() => {});
+    } catch {}
+  };
+
+  const revokeCurrentSpeechUrl = (except?: string) => {
+    const url = currentSpeechUrlRef.current;
+    if (url && url !== except && url.startsWith('blob:')) {
+      try { URL.revokeObjectURL(url); } catch {}
+    }
+    if (!except || url !== except) currentSpeechUrlRef.current = null;
+  };
+
   const playGeneratedSpeech = async (url: string, manual = false) => {
-    setIsSpeaking(true);
+    const el = getSpeechElement();
+    const previousUrl = currentSpeechUrlRef.current;
+    currentSpeechUrlRef.current = url;
     if (manual) setPendingAudioUrl(null);
 
-    const played = await audioService.playSpeechUrl(url, {
-      onStart: () => setIsSpeaking(true),
-      onEnd: () => setIsSpeaking(false),
-      onError: () => setIsSpeaking(false),
-    });
-
-    if (played) {
+    try {
+      el.pause();
+      el.src = url;
+      el.currentTime = 0;
+      setIsSpeaking(true);
+      await el.play();
       setPendingAudioUrl(null);
-      return;
+      if (previousUrl && previousUrl !== url && previousUrl.startsWith('blob:')) {
+        try { URL.revokeObjectURL(previousUrl); } catch {}
+      }
+    } catch (err) {
+      console.warn('Character voice playback failed:', err);
+      setIsSpeaking(false);
+      setPendingAudioUrl(url);
+      if (!manual) setErrorMsg('Voice is ready but playback was blocked. Tap “Hear reply” to play it.');
     }
+  };
 
-    setIsSpeaking(false);
-    setPendingAudioUrl(url);
-    if (!manual) setErrorMsg('Voice playback was blocked. Tap “Hear reply” to play it.');
+  const speechTextFor = (text: string) => {
+    if (text.length <= MAX_TTS_CHARS) return text;
+    const trimmed = text.slice(0, MAX_TTS_CHARS);
+    return `${trimmed.replace(/\s+\S*$/, '').trim()}...`;
   };
 
   // ── Auto-scroll ───────────────────────────────────────────────────────────
@@ -245,6 +309,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
       stopListening();
     } else {
       try {
+        stopSpeech();
         const recognition = setupSpeechRecognition();
         if (!recognition) {
           setErrorMsg('Speech recognition is not available in this browser.');
@@ -264,9 +329,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
     const text = inputText.trim();
     if (!text || isSending || chatLocked) return;
 
-    // Re-prime the shared audio service inside the tap gesture. This mirrors
-    // the zone-audio path and helps mobile browsers trust the later TTS play().
-    audioService.prepareSpeechPlayback().catch(() => {});
+    stopSpeech();
+    primeSpeechAudio();
 
     // Stop any active recording BEFORE clearing the input so onresult
     // can't race and refill the input after we clear it.
@@ -310,7 +374,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
         }
         setIsPreparingSpeech(true);
         geminiService
-          .speak(replyText, zone.voice_style || 'Kore', zone.tour_id, zone.voice_instructions)
+          .speak(speechTextFor(replyText), zone.voice_style || 'Kore', zone.tour_id, zone.voice_instructions)
           .then(audioUrl => {
             if (audioUrl) {
               playGeneratedSpeech(audioUrl);
@@ -342,8 +406,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   const handleClose = () => {
     cancelRecording();
     if (speakingTimerRef.current) clearTimeout(speakingTimerRef.current);
-    audioService.stopSpeech();
-    if (pendingAudioUrl) { try { URL.revokeObjectURL(pendingAudioUrl); } catch {} }
+    stopSpeech();
+    revokeCurrentSpeechUrl();
+    if (pendingAudioUrl && pendingAudioUrl !== currentSpeechUrlRef.current) {
+      try { URL.revokeObjectURL(pendingAudioUrl); } catch {}
+    }
     onClose();
   };
 

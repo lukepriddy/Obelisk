@@ -1,9 +1,9 @@
 /**
  * audioService.ts
  *
- * Uses HTMLAudioElement for all playback — zone audio and generated character
- * speech. Zone audio elements and the speech element are created/unlocked from
- * the player's Begin gesture so later playback is reliable across browsers.
+ * Uses HTMLAudioElement for locative zone playback. Zone audio elements are
+ * created/unlocked from the player's Begin gesture so later playback is
+ * reliable across browsers.
  */
 
 interface NodeData {
@@ -22,18 +22,10 @@ interface NodeData {
 // sound feels like an intentional arrival rather than an abrupt jump-cut.
 const ENTRY_DELAY_MS = 2000;
 
-interface SpeechCallbacks {
-  onStart?: () => void;
-  onEnd?: () => void;
-  onError?: (error: unknown) => void;
-}
-
 export class AudioService {
   public context: AudioContext | null = null;
   private nodes: Map<string, NodeData> = new Map();
   private isUnlocked = false;
-  private speechEl: HTMLAudioElement | null = null;
-  private speechUrl: string | null = null;
 
   constructor() {
     const AudioContextClass = (window.AudioContext || (window as any).webkitAudioContext);
@@ -46,7 +38,6 @@ export class AudioService {
     if (this.context?.state === 'suspended') {
       await this.context.resume();
     }
-    this.ensureSpeechElement();
     this.isUnlocked = true;
   }
 
@@ -54,11 +45,6 @@ export class AudioService {
     if (this.context?.state === 'suspended') {
       await this.context.resume();
     }
-  }
-
-  async prepareSpeechPlayback() {
-    await this.resume();
-    this.ensureSpeechElement();
   }
 
   /**
@@ -80,58 +66,6 @@ export class AudioService {
     }
   }
 
-  private ensureSpeechElement(): HTMLAudioElement {
-    if (!this.speechEl) {
-      const el = new Audio();
-      el.preload = 'auto';
-      el.playsInline = true;
-      el.volume = 1;
-      this.speechEl = el;
-    }
-    return this.speechEl;
-  }
-
-  async playSpeechUrl(url: string, callbacks: SpeechCallbacks = {}): Promise<boolean> {
-    if (!url) return false;
-
-    const el = this.ensureSpeechElement();
-    const previousUrl = this.speechUrl;
-
-    try {
-      el.pause();
-      el.loop = false;
-      el.volume = 1;
-      el.onplaying = () => callbacks.onStart?.();
-      el.onended = () => callbacks.onEnd?.();
-      el.onerror = () => {
-        callbacks.onEnd?.();
-        callbacks.onError?.(new Error('Speech audio failed to play'));
-      };
-      this.speechUrl = url;
-      el.src = url;
-      try { el.currentTime = 0; } catch {}
-
-      if (previousUrl && previousUrl !== url && previousUrl.startsWith('blob:')) {
-        try { URL.revokeObjectURL(previousUrl); } catch {}
-      }
-
-      await el.play();
-      return true;
-    } catch (error) {
-      callbacks.onEnd?.();
-      callbacks.onError?.(error);
-      return false;
-    }
-  }
-
-  stopSpeech() {
-    if (!this.speechEl) return;
-    this.speechEl.pause();
-    this.speechEl.onplaying = null;
-    this.speechEl.onended = null;
-    this.speechEl.onerror = null;
-  }
-
   updateVolumes(zones: { id: string; volume: number; loop?: boolean; destroyOnEnd?: boolean; exitBehavior?: 'stop' | 'pause' | 'keep' }[]) {
     if (!this.isUnlocked) return;
 
@@ -148,7 +82,9 @@ export class AudioService {
       }
 
       // Outside zone — behaviour depends on the zone's on_exit setting.
-      if (zone.volume <= 0.01) {
+      const volume = Number(zone.volume);
+
+      if (volume <= 0.01 || !Number.isFinite(volume)) {
         audioEl.volume = 0;
         // Cancel any pending entry delay — the player left before it fired.
         if (nodeData.playTimer) {
@@ -178,7 +114,7 @@ export class AudioService {
 
       // Inside zone — HTMLAudioElement.volume must be 0–1. Keep it live every
       // tick (attenuation) even while the entry delay is still counting down.
-      audioEl.volume = Math.min(1, Math.max(0, zone.volume));
+      audioEl.volume = Math.min(1, Math.max(0, volume));
 
       // Schedule playback once per visit, after a short delay, if not already
       // playing or scheduled. The delay makes the audio feel like an arrival.
@@ -226,29 +162,12 @@ export class AudioService {
     this.beginPlayback(n, zoneId, n.audioEl.loop, false);
   }
 
-  /** Play a decoded AudioBuffer directly — used by ChatInterface for TTS. */
-  playBuffer(buffer: AudioBuffer) {
-    if (!this.context) return;
-    const source = this.context.createBufferSource();
-    source.buffer = buffer;
-    source.connect(this.context.destination);
-    source.start(0);
-  }
-
   stopAll() {
     this.nodes.forEach((data) => {
       data.audioEl.pause();
       data.audioEl.src = '';
     });
     this.nodes.clear();
-    this.stopSpeech();
-    if (this.speechUrl?.startsWith('blob:')) {
-      try { URL.revokeObjectURL(this.speechUrl); } catch {}
-    }
-    if (this.speechEl) {
-      this.speechEl.src = '';
-    }
-    this.speechUrl = null;
     this.isUnlocked = false;
   }
 }
