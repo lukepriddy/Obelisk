@@ -8,6 +8,8 @@
 
 interface NodeData {
   audioEl: HTMLAudioElement;
+  sourceNode: MediaElementAudioSourceNode | null;
+  gainNode: GainNode | null;
   url: string;
   /** True after a non-looping audio has played through once this visit.
    *  Resets to false when the user exits the zone. */
@@ -21,6 +23,15 @@ interface NodeData {
 // Audio waits this long after the player enters a zone before starting, so the
 // sound feels like an intentional arrival rather than an abrupt jump-cut.
 const ENTRY_DELAY_MS = 2000;
+
+function canUseWebAudioGain(url: string) {
+  try {
+    const audioUrl = new URL(url, window.location.href);
+    return audioUrl.origin === window.location.origin || audioUrl.hostname.endsWith('.supabase.co');
+  } catch {
+    return false;
+  }
+}
 
 export class AudioService {
   public context: AudioContext | null = null;
@@ -56,13 +67,41 @@ export class AudioService {
     if (!url || this.nodes.has(zoneId)) return;
 
     try {
-      const audioEl = new Audio(url);
+      const audioEl = new Audio();
+      const useGainNode = !!this.context && canUseWebAudioGain(url);
+      if (useGainNode) audioEl.crossOrigin = 'anonymous';
+      audioEl.src = url;
       // preload='none' — stream on demand; avoids any upfront network cost or
       // accidental playback during initialisation.
       audioEl.preload = 'none';
-      this.nodes.set(zoneId, { audioEl, url, played: false, destroyed: false, playTimer: null });
+
+      let sourceNode: MediaElementAudioSourceNode | null = null;
+      let gainNode: GainNode | null = null;
+      if (this.context && useGainNode) {
+        try {
+          sourceNode = this.context.createMediaElementSource(audioEl);
+          gainNode = this.context.createGain();
+          gainNode.gain.value = 0;
+          sourceNode.connect(gainNode);
+          gainNode.connect(this.context.destination);
+        } catch (e) {
+          console.warn(`Web Audio gain unavailable for zone ${zoneId}; falling back to media volume:`, e);
+          sourceNode = null;
+          gainNode = null;
+        }
+      }
+
+      this.nodes.set(zoneId, { audioEl, sourceNode, gainNode, url, played: false, destroyed: false, playTimer: null });
     } catch (e) {
       console.error(`Failed to set up audio for zone ${zoneId}:`, e);
+    }
+  }
+
+  private setNodeVolume(nodeData: NodeData, volume: number) {
+    const clamped = Math.min(1, Math.max(0, Number.isFinite(volume) ? volume : 0));
+    nodeData.audioEl.volume = clamped;
+    if (nodeData.gainNode) {
+      nodeData.gainNode.gain.value = clamped;
     }
   }
 
@@ -77,7 +116,7 @@ export class AudioService {
 
       // Destroyed zones stay silent for the session.
       if (nodeData.destroyed) {
-        audioEl.volume = 0;
+        this.setNodeVolume(nodeData, 0);
         return;
       }
 
@@ -85,7 +124,7 @@ export class AudioService {
       const volume = Number(zone.volume);
 
       if (volume <= 0.01 || !Number.isFinite(volume)) {
-        audioEl.volume = 0;
+        this.setNodeVolume(nodeData, 0);
         // Cancel any pending entry delay — the player left before it fired.
         if (nodeData.playTimer) {
           clearTimeout(nodeData.playTimer);
@@ -114,7 +153,7 @@ export class AudioService {
 
       // Inside zone — HTMLAudioElement.volume must be 0–1. Keep it live every
       // tick (attenuation) even while the entry delay is still counting down.
-      audioEl.volume = Math.min(1, Math.max(0, volume));
+      this.setNodeVolume(nodeData, volume);
 
       // Schedule playback once per visit, after a short delay, if not already
       // playing or scheduled. The delay makes the audio feel like an arrival.
@@ -137,7 +176,7 @@ export class AudioService {
       audioEl.onended = () => {
         if (destroyOnEnd) {
           nodeData.destroyed = true;
-          audioEl.volume = 0;
+          this.setNodeVolume(nodeData, 0);
         } else {
           // 'stop': played once per visit; a Replay button can restart it.
           nodeData.played = true;
@@ -166,6 +205,8 @@ export class AudioService {
     this.nodes.forEach((data) => {
       data.audioEl.pause();
       data.audioEl.src = '';
+      data.sourceNode?.disconnect();
+      data.gainNode?.disconnect();
     });
     this.nodes.clear();
     this.isUnlocked = false;

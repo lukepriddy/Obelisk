@@ -606,13 +606,19 @@ export const Player: React.FC = () => {
                   <p className="text-sm leading-relaxed opacity-80 w-full whitespace-pre-wrap" style={{ color: textColor, textAlign: tour.description_align === 'left' ? 'left' : 'center' }}>{tour.description}</p>
                 )}
 
-                <div className="w-full aspect-square rounded-xl overflow-hidden border border-white/10 shadow-lg">
+                <div className="w-full aspect-[4/3] max-h-[240px] rounded-xl overflow-hidden border border-white/10 shadow-lg pointer-events-none">
                   <MapContainer
                     center={[tour.lat, tour.lng]}
                     zoom={tour.start_zoom ?? 18}
                     style={{ width: '100%', height: '100%' }}
-                    zoomControl={true}
-                    scrollWheelZoom={true}
+                    zoomControl={false}
+                    scrollWheelZoom={false}
+                    dragging={false}
+                    touchZoom={false}
+                    doubleClickZoom={false}
+                    boxZoom={false}
+                    keyboard={false}
+                    attributionControl={false}
                   >
                     <TileLayer url={mapStyle.url} />
                     <Marker position={[tour.lat, tour.lng]} icon={StartMarkerIcon} />
