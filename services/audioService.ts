@@ -192,14 +192,15 @@ export class AudioService {
     // reporting "running" while producing silence after a lock-screen interruption.
     const rebuiltNodes = new Map<string, NodeData>();
     const playAttempts: Promise<void>[] = [];
-    const oldNodes: NodeData[] = [];
     let activeCount = 0;
 
     this.nodes.forEach((oldNode, zoneId) => {
       if (oldNode.playTimer) clearTimeout(oldNode.playTimer);
       this.cancelFade(oldNode);
-      oldNodes.push(oldNode);
-      this.fadeTo(oldNode, 0, 0.12);
+      this.setNodeVolume(oldNode, 0);
+      oldNode.audioEl.pause();
+      oldNode.sourceNode?.disconnect();
+      oldNode.gainNode?.disconnect();
 
       const audioEl = new Audio();
       const useGainNode = !!newContext && canUseWebAudioGain(oldNode.url);
@@ -253,33 +254,16 @@ export class AudioService {
     });
 
     this.nodes = rebuiltNodes;
+    void oldContext?.close().catch(() => {});
     const contextResume = newContext
       ? newContext.resume().catch(error => {
           console.warn('Rebuilt audio context resume failed:', error);
         })
       : Promise.resolve();
-
-    // Start replacement elements muted while the tap still carries Safari's
-    // user activation. After the old graph fades out, leave a short silent gap,
-    // reset to 0:00, then use the zone's configured fade-in.
     await Promise.all([contextResume, ...playAttempts]);
-    await new Promise<void>(resolve => window.setTimeout(resolve, 150));
-    oldNodes.forEach(nodeData => {
-      nodeData.audioEl.pause();
-      nodeData.sourceNode?.disconnect();
-      nodeData.gainNode?.disconnect();
-    });
-    void oldContext?.close().catch(() => {});
-
-    await new Promise<void>(resolve => window.setTimeout(resolve, 850));
     rebuiltNodes.forEach(nodeData => {
       if (nodeData.isInside && nodeData.hasStarted) {
-        try { nodeData.audioEl.currentTime = 0; } catch { /* metadata may not be ready */ }
-        this.fadeTo(
-          nodeData,
-          nodeData.desiredVolume,
-          Math.max(0.25, nodeData.fadeIn),
-        );
+        this.fadeTo(nodeData, nodeData.desiredVolume, 0.25);
       }
     });
     if (newContext && newContext.state !== 'running') {
