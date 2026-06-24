@@ -975,7 +975,10 @@ export const Player: React.FC = () => {
           className={`absolute z-[1500] flex-col items-end gap-2 w-full max-w-sm px-4 ${
             showChat ? 'hidden md:flex left-2' : 'flex left-1/2 -translate-x-1/2'
           }`}
-          style={{ bottom: 'calc(104px + env(safe-area-inset-bottom, 0px))' }}
+          style={{
+            bottom: 'calc(104px + env(safe-area-inset-bottom, 0px))',
+            maxHeight: 'calc(100dvh - 176px - env(safe-area-inset-bottom, 0px))',
+          }}
         >
           {/* ── Character presence ─────────────────────────────────────────────
                Two states, one design language:
@@ -990,15 +993,15 @@ export const Player: React.FC = () => {
               className="self-end flex flex-col items-center gap-1.5 animate-in zoom-in-75 duration-300"
               aria-label={`Continue with ${activeCharacterZone.title}`}
             >
-              <div className="relative" style={{ width: 80, height: 80 }}>
+              <div className="relative shrink-0" style={{ width: 80, height: 80 }}>
                 {/* Pulsing outer ring — "the being is present" */}
                 <span
-                  className="absolute inset-0 rounded-full animate-ping"
+                  className="absolute inset-0 rounded-2xl animate-ping"
                   style={{ backgroundColor: accent, opacity: 0.25, animationDuration: '2.5s' }}
                 />
-                {/* Avatar orb */}
+                {/* Character artwork */}
                 <div
-                  className="absolute inset-0 rounded-full overflow-hidden shadow-2xl"
+                  className="absolute inset-0 rounded-2xl overflow-hidden shadow-2xl"
                   style={{ border: `2px solid ${accent}`, boxShadow: `0 0 20px ${accent}55` }}
                 >
                   {activeCharacterZone.character_image_url
@@ -1012,7 +1015,7 @@ export const Player: React.FC = () => {
           ) : activeCharacterZone ? (
             /* ── Encounter card — first appearance in zone ── */
             <div
-              className="w-full rounded-2xl animate-in slide-in-from-bottom-4 duration-400"
+              className="w-full max-h-full rounded-2xl animate-in slide-in-from-bottom-4 duration-400 flex flex-col overflow-hidden"
               style={{
                 backgroundColor: th.cardBg,
                 border: `1px solid ${accent}40`,
@@ -1021,14 +1024,14 @@ export const Player: React.FC = () => {
               }}
             >
               {/* Avatar + pulse ring */}
-              <div className="flex flex-col items-center pt-6 pb-2">
-                <div className="relative mb-3" style={{ width: 88, height: 88 }}>
+              <div className="flex flex-col items-center pt-6 pb-2 min-h-0">
+                <div className="relative mb-3 shrink-0" style={{ width: 88, height: 88 }}>
                   <span
-                    className="absolute inset-0 rounded-full animate-ping"
+                    className="absolute inset-0 rounded-2xl animate-ping"
                     style={{ backgroundColor: accent, opacity: 0.2, animationDuration: '2.5s' }}
                   />
                   <div
-                    className="absolute inset-0 rounded-full overflow-hidden shadow-xl"
+                    className="absolute inset-0 rounded-2xl overflow-hidden shadow-xl"
                     style={{ border: `2px solid ${accent}`, boxShadow: `0 0 24px ${accent}44` }}
                   >
                     {activeCharacterZone.character_image_url
@@ -1041,14 +1044,14 @@ export const Player: React.FC = () => {
                   {activeCharacterZone.title}
                 </h3>
                 {(activeCharacterZone.character_bio || activeCharacterZone.description) && (
-                  <p className="text-xs mt-1.5 text-center px-6 leading-relaxed" style={{ color: th.cardMuted }}>
+                  <p className="text-xs mt-1.5 text-center px-6 leading-relaxed overflow-y-auto min-h-0 overscroll-contain" style={{ color: th.cardMuted }}>
                     {activeCharacterZone.character_bio || activeCharacterZone.description}
                   </p>
                 )}
               </div>
 
               {/* Actions */}
-              <div className="px-4 pt-2 pb-5 flex gap-2">
+              <div className="px-4 pt-2 pb-5 flex gap-2 shrink-0">
                 <button
                   onClick={() => setChatEverOpened(true)}
                   className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-opacity active:opacity-60"

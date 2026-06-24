@@ -563,9 +563,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
                       className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden hover:border-zinc-700 transition-colors group"
                     >
                       {/* Cover */}
-                      <div className="h-40 relative overflow-hidden bg-zinc-800">
+                      <div className="aspect-square relative overflow-hidden bg-zinc-950">
                         {tour.welcome_image_url ? (
-                          <img src={tour.welcome_image_url} alt={tour.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                          <img src={tour.welcome_image_url} alt={tour.title} className="w-full h-full object-contain group-hover:scale-[1.02] transition-transform duration-500" />
                         ) : (
                           <div className="absolute inset-0 flex items-center justify-center">
                             <Map size={40} className="text-zinc-700" />
@@ -747,7 +747,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
                             {/* Cover thumb */}
                             <div className="w-10 h-10 rounded-xl bg-zinc-800 shrink-0 overflow-hidden border border-zinc-700">
                               {tour.welcome_image_url
-                                ? <img src={tour.welcome_image_url} alt="" className="w-full h-full object-cover" />
+                                ? <img src={tour.welcome_image_url} alt="" className="w-full h-full object-contain" />
                                 : <Map size={18} className="text-zinc-600 m-auto mt-2.5" />}
                             </div>
 

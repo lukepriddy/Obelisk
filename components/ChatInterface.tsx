@@ -205,7 +205,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
       <div className={`flex items-center gap-3 px-4 pt-0.5 pb-3 border-b shrink-0 ${t.header}`}>
         {zone.character_image_url ? (
           <div className="relative shrink-0">
-            <img src={zone.character_image_url} alt={zone.title} className="w-9 h-9 rounded-full object-cover" />
+            <img src={zone.character_image_url} alt={zone.title} className="w-9 h-9 rounded-lg object-cover" />
             <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 transition-colors ${dk ? 'border-zinc-950' : 'border-white'} ${t.statusDot(dotState)}`} />
           </div>
         ) : (

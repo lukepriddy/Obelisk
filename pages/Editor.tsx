@@ -54,6 +54,9 @@ interface EditorProps {
 
 type Tool = 'select' | 'draw' | 'place-start';
 type RightPanel = 'zone' | 'tour';
+type UndoEntry =
+  | { type: 'create' | 'delete'; zone: Zone }
+  | { type: 'edit'; tour: Tour; zones: Zone[] };
 
 // Geocoding search — uses a map ref instead of useMap() so it can live outside MapContainer
 const LocationSearch: React.FC<{ mapRef: React.RefObject<L.Map | null> }> = ({ mapRef }) => {
@@ -179,10 +182,23 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
   const [savedOk, setSavedOk] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [undoStack, setUndoStack] = useState<Array<{ type: 'create' | 'delete'; zone: Zone }>>([]);
+  const [undoStack, setUndoStack] = useState<UndoEntry[]>([]);
+  const lastEditUndoRef = useRef<{ key: string; timestamp: number } | null>(null);
 
   // Pending zone updates — flushed on Save so all changes go out in one batch.
   const pendingZoneUpdatesRef = useRef<Map<string, Partial<Zone>>>(new Map());
+
+  const pushEditUndo = (key: string) => {
+    if (!tour) return;
+    const now = Date.now();
+    const last = lastEditUndoRef.current;
+    if (last?.key === key && now - last.timestamp < 800) {
+      lastEditUndoRef.current = { key, timestamp: now };
+      return;
+    }
+    setUndoStack(prev => [...prev, { type: 'edit', tour, zones }].slice(-60));
+    lastEditUndoRef.current = { key, timestamp: now };
+  };
 
   useEffect(() => {
     if (tourId) loadData(tourId);
@@ -208,10 +224,16 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
         e.preventDefault();
         saveTourRef.current();
       }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        handleUndoRef.current();
+      }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, []); // empty — always calls latest via ref
+
+  const handleUndoRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
 
   const loadData = async (id: string) => {
@@ -230,6 +252,7 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
     if (!tour) return;
 
     if (activeTool === 'place-start') {
+      pushEditUndo('tour:start-location');
       const updated = { ...tour, lat: e.latlng.lat, lng: e.latlng.lng };
       setTour(updated);
       setActiveTool('select');
@@ -258,6 +281,7 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
         setZones(prev => prev.map(z => z.id === tempId ? saved : z));
         setSelectedZoneId(saved.id);
         setUndoStack(prev => [...prev, { type: 'create', zone: saved }]);
+        lastEditUndoRef.current = null;
       }
     }
   };
@@ -268,6 +292,7 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
   };
 
   const updateZone = (id: string, updates: Partial<Zone>) => {
+    pushEditUndo(`zone:${id}:${Object.keys(updates).sort().join(',')}`);
     setZones(prev => prev.map(z => z.id === id ? { ...z, ...updates } : z));
     if (!id.startsWith('temp_')) {
       // Merge into the pending queue — flushed when the user presses Save.
@@ -285,6 +310,7 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
     if (!id.startsWith('temp_')) {
       await dbDeleteZone(id);
       setUndoStack(prev => [...prev, { type: 'delete', zone }]);
+      lastEditUndoRef.current = null;
     }
   };
 
@@ -293,7 +319,31 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
     if (!last) return;
     setUndoStack(prev => prev.slice(0, -1));
 
-    if (last.type === 'create') {
+    lastEditUndoRef.current = null;
+
+    if (last.type === 'edit') {
+      const currentTour = tour;
+      setTour(last.tour);
+      setZones(last.zones);
+      setSelectedZoneId(current =>
+        current && last.zones.some(zone => zone.id === current) ? current : null
+      );
+
+      pendingZoneUpdatesRef.current.clear();
+      last.zones.forEach(zone => {
+        if (zone.id.startsWith('temp_')) return;
+        const { id: _id, tour_id: _tourId, ...updates } = zone;
+        pendingZoneUpdatesRef.current.set(zone.id, updates);
+      });
+      setHasUnsavedChanges(true);
+
+      if (
+        currentTour &&
+        (currentTour.lat !== last.tour.lat || currentTour.lng !== last.tour.lng)
+      ) {
+        await dbUpdateTour(last.tour.id, { lat: last.tour.lat, lng: last.tour.lng });
+      }
+    } else if (last.type === 'create') {
       // Undo a zone creation → delete it
       setZones(prev => prev.filter(z => z.id !== last.zone.id));
       setSelectedZoneId(null);
@@ -307,9 +357,11 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
       }
     }
   };
+  handleUndoRef.current = handleUndo;
 
   const updateTourFields = (updates: Partial<typeof tour>) => {
     if (!tour) return;
+    pushEditUndo(`tour:${Object.keys(updates).sort().join(',')}`);
     setTour({ ...tour, ...updates });
     if (updates.progression_resources) {
       const validIds = new Set(updates.progression_resources.map(resource => resource.id));
@@ -571,6 +623,7 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
                 eventHandlers={{
                   dragend: (e) => {
                     const pos = e.target.getLatLng();
+                    pushEditUndo('tour:start-location');
                     const updated = { ...tour, lat: pos.lat, lng: pos.lng };
                     setTour(updated);
                     dbUpdateTour(tour.id, { lat: pos.lat, lng: pos.lng });

@@ -109,7 +109,7 @@ export const ProgressionSettings: React.FC<ProgressionSettingsProps> = ({ tour, 
                     setUploadResourceId(resource.id);
                     fileInputRef.current?.click();
                   }}
-                  className="w-12 h-12 rounded-lg border border-zinc-700 bg-zinc-800 flex items-center justify-center overflow-hidden shrink-0 text-zinc-500 hover:text-emerald-400"
+                  className="w-20 h-20 rounded-lg border border-zinc-700 bg-zinc-800 flex items-center justify-center overflow-hidden shrink-0 text-zinc-500 hover:text-emerald-400"
                   title="Upload icon"
                 >
                   {uploading && uploadResourceId === resource.id
@@ -124,14 +124,14 @@ export const ProgressionSettings: React.FC<ProgressionSettingsProps> = ({ tour, 
                     type="text"
                     value={resource.name}
                     onChange={e => updateResource(resource.id, { name: e.target.value })}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded px-2.5 py-1.5 text-sm text-white focus:outline-none focus:border-emerald-500"
+                    className="w-full h-10 bg-zinc-800 border border-zinc-700 rounded px-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
                     placeholder="Resource name"
                   />
                   <div className="flex gap-2">
                     <button
                       type="button"
                       onClick={() => updateResource(resource.id, { type: 'currency' })}
-                      className={`flex-1 py-1.5 rounded text-[10px] font-bold flex items-center justify-center gap-1 ${
+                      className={`h-8 flex-1 rounded text-[10px] font-bold flex items-center justify-center gap-1 ${
                         resource.type === 'currency' ? 'bg-emerald-600 text-white' : 'bg-zinc-800 text-zinc-500'
                       }`}
                     >
@@ -140,7 +140,7 @@ export const ProgressionSettings: React.FC<ProgressionSettingsProps> = ({ tour, 
                     <button
                       type="button"
                       onClick={() => updateResource(resource.id, { type: 'item' })}
-                      className={`flex-1 py-1.5 rounded text-[10px] font-bold flex items-center justify-center gap-1 ${
+                      className={`h-8 flex-1 rounded text-[10px] font-bold flex items-center justify-center gap-1 ${
                         resource.type === 'item' ? 'bg-emerald-600 text-white' : 'bg-zinc-800 text-zinc-500'
                       }`}
                     >
@@ -167,7 +167,7 @@ export const ProgressionSettings: React.FC<ProgressionSettingsProps> = ({ tour, 
                     step="1"
                     value={resource.starting_amount}
                     onChange={e => updateResource(resource.id, { starting_amount: Math.max(0, Number(e.target.value) || 0) })}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded px-2.5 py-1.5 text-sm text-white focus:outline-none focus:border-emerald-500"
+                    className="w-full h-10 bg-zinc-800 border border-zinc-700 rounded px-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
                   />
                 </div>
                 <div>
@@ -176,7 +176,7 @@ export const ProgressionSettings: React.FC<ProgressionSettingsProps> = ({ tour, 
                     type="color"
                     value={resource.color || '#10b981'}
                     onChange={e => updateResource(resource.id, { color: e.target.value })}
-                    className="w-full h-8 bg-zinc-800 border border-zinc-700 rounded cursor-pointer"
+                    className="w-full h-10 bg-zinc-800 border border-zinc-700 rounded cursor-pointer"
                   />
                 </div>
               </div>

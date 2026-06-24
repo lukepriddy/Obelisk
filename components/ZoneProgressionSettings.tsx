@@ -1,5 +1,5 @@
-import React from 'react';
-import { Gift, LockKeyhole, Plus, Trash2 } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Check, ChevronDown, Gift, LockKeyhole, Plus, Trash2 } from 'lucide-react';
 import {
   ProgressionRequirement,
   ProgressionResource,
@@ -12,6 +12,70 @@ interface ZoneProgressionSettingsProps {
   resources: ProgressionResource[];
   onUpdate: (updates: Partial<Zone>) => void;
 }
+
+const ResourceSelect: React.FC<{
+  value: string;
+  resources: ProgressionResource[];
+  onChange: (value: string) => void;
+}> = ({ value, resources, onChange }) => {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const selected = resources.find(resource => resource.id === value) || resources[0];
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="relative flex-1 min-w-0">
+      <button
+        type="button"
+        onClick={() => setOpen(current => !current)}
+        className={`h-10 w-full flex items-center justify-between gap-2 bg-zinc-800 border rounded px-3 text-xs text-white ${
+          open ? 'border-emerald-500 ring-1 ring-emerald-500/30' : 'border-zinc-700'
+        }`}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        <span className="truncate">{selected?.name || 'Select resource'}</span>
+        <ChevronDown size={14} className={`shrink-0 text-zinc-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div
+          role="listbox"
+          className="absolute z-50 left-0 right-0 top-full mt-1 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900 shadow-2xl"
+        >
+          {resources.map(resource => {
+            const active = resource.id === value;
+            return (
+              <button
+                key={resource.id}
+                type="button"
+                role="option"
+                aria-selected={active}
+                onClick={() => {
+                  onChange(resource.id);
+                  setOpen(false);
+                }}
+                className={`w-full h-10 px-3 flex items-center justify-between gap-3 text-left text-xs ${
+                  active ? 'bg-emerald-600 text-white' : 'text-zinc-200 hover:bg-zinc-800'
+                }`}
+              >
+                <span className="truncate">{resource.name}</span>
+                {active && <Check size={14} className="shrink-0" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const ZoneProgressionSettings: React.FC<ZoneProgressionSettingsProps> = ({
   zone,
@@ -70,15 +134,11 @@ export const ZoneProgressionSettings: React.FC<ZoneProgressionSettingsProps> = (
         <div className="space-y-2">
           {rewards.map((reward, index) => (
             <div key={`${reward.resource_id}-${index}`} className="flex items-center gap-2">
-              <select
+              <ResourceSelect
                 value={reward.resource_id}
-                onChange={e => updateReward(index, { resource_id: e.target.value })}
-                className="h-10 flex-1 min-w-0 bg-zinc-800 border border-zinc-700 rounded px-2 text-xs text-white"
-              >
-                {resources.map(resource => (
-                  <option key={resource.id} value={resource.id}>{resource.name}</option>
-                ))}
-              </select>
+                resources={resources}
+                onChange={resource_id => updateReward(index, { resource_id })}
+              />
               <input
                 type="number"
                 min="1"
@@ -118,15 +178,11 @@ export const ZoneProgressionSettings: React.FC<ZoneProgressionSettingsProps> = (
             return (
               <div key={`${requirement.resource_id}-${index}`} className="border border-zinc-800 rounded-lg p-2 space-y-2">
                 <div className="flex items-center gap-2">
-                  <select
+                  <ResourceSelect
                     value={requirement.resource_id}
-                    onChange={e => updateRequirement(index, { resource_id: e.target.value })}
-                    className="h-10 flex-1 min-w-0 bg-zinc-800 border border-zinc-700 rounded px-2 text-xs text-white"
-                  >
-                    {resources.map(item => (
-                      <option key={item.id} value={item.id}>{item.name}</option>
-                    ))}
-                  </select>
+                    resources={resources}
+                    onChange={resource_id => updateRequirement(index, { resource_id })}
+                  />
                   <input
                     type="number"
                     min="1"

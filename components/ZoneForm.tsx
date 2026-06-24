@@ -128,6 +128,22 @@ interface ZoneFormProps {
 
 type AudioSourceType = 'preset' | 'upload' | 'url' | 'ai';
 
+const RADIUS_MIN_METERS = 2;
+const RADIUS_MAX_METERS = 500;
+const RADIUS_SLIDER_MAX = 1000;
+const radiusToSlider = (radius: number) =>
+  Math.round(
+    Math.sqrt(
+      (Math.min(RADIUS_MAX_METERS, Math.max(RADIUS_MIN_METERS, radius)) - RADIUS_MIN_METERS) /
+      (RADIUS_MAX_METERS - RADIUS_MIN_METERS)
+    ) * RADIUS_SLIDER_MAX
+  );
+const sliderToRadius = (value: number) =>
+  Math.round(
+    RADIUS_MIN_METERS +
+    Math.pow(value / RADIUS_SLIDER_MAX, 2) * (RADIUS_MAX_METERS - RADIUS_MIN_METERS)
+  );
+
 interface ElevenVoice {
   voice_id: string;
   name: string;
@@ -638,12 +654,12 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
             </div>
             <input
               type="range"
-              min="5"
-              max="500"
-              step="5"
+              min="0"
+              max={RADIUS_SLIDER_MAX}
+              step="1"
               className="w-full accent-indigo-500 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
-              value={zone.radius}
-              onChange={(e) => onUpdate({ radius: parseInt(e.target.value) })}
+              value={radiusToSlider(zone.radius)}
+              onChange={(e) => onUpdate({ radius: sliderToRadius(Number(e.target.value)) })}
             />
           </div>
 
@@ -918,12 +934,12 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
               </div>
               <input
                 type="range"
-                min="5"
-                max="500"
-                step="5"
+                min="0"
+                max={RADIUS_SLIDER_MAX}
+                step="1"
                 className="w-full accent-blue-500 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
-                value={zone.radius}
-                onChange={(e) => onUpdate({ radius: parseInt(e.target.value) })}
+                value={radiusToSlider(zone.radius)}
+                onChange={(e) => onUpdate({ radius: sliderToRadius(Number(e.target.value)) })}
               />
             </div>
           </div>
@@ -1091,7 +1107,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
         <div className="mt-8 pt-5 border-t border-zinc-800">
           <button
             onClick={() => {
-              if (window.confirm('Delete this zone? This cannot be undone (use Undo in the toolbar to restore it).')) {
+              if (window.confirm('Delete this zone? You can restore it with Undo in the toolbar.')) {
                 onDelete();
               }
             }}
