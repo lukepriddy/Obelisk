@@ -43,6 +43,25 @@ const InvalidateSize = () => {
   return null;
 };
 
+// Leaflet reads interaction options only when the map is created. Toggle the
+// handlers directly so the welcome preview can become interactive after a tap.
+const WelcomeMapInteraction = ({ enabled }: { enabled: boolean }) => {
+  const map = useMap();
+  useEffect(() => {
+    const handlers = [
+      map.dragging,
+      map.touchZoom,
+      map.doubleClickZoom,
+      map.boxZoom,
+      map.keyboard,
+    ];
+    handlers.forEach(handler => enabled ? handler.enable() : handler.disable());
+    map.getContainer().style.touchAction = enabled ? 'none' : 'pan-y';
+    map.invalidateSize();
+  }, [enabled, map]);
+  return null;
+};
+
 export const Player: React.FC = () => {
   const { tourId } = useParams<{ tourId: string }>();
   const navigate = useNavigate();
@@ -111,7 +130,9 @@ export const Player: React.FC = () => {
   const [passphraseInput, setPassphraseInput] = useState('');
   const [passphraseError, setPassphraseError] = useState(false);
 
-  // Zone state tracking (refs so interval closure always sees latest values)
+  // Zone state tracking. The ref feeds the audio loop while state redraws the
+  // map immediately when a prerequisite zone becomes available.
+  const [visitedZoneIds, setVisitedZoneIds] = useState<Set<string>>(new Set());
   const visitedZoneIdsRef = useRef<Set<string>>(new Set());
   const unlockedZoneIdsRef = useRef<Set<string>>(new Set());
   const prevZoneIdsRef = useRef<Set<string>>(new Set());
@@ -208,13 +229,20 @@ export const Player: React.FC = () => {
     return true;
   };
 
+  const markZoneVisited = (zoneId: string) => {
+    if (visitedZoneIdsRef.current.has(zoneId)) return;
+    const next = new Set([...visitedZoneIdsRef.current, zoneId]);
+    visitedZoneIdsRef.current = next;
+    setVisitedZoneIds(next);
+  };
+
   const handlePassphraseSubmit = () => {
     const zone = passphraseChallenge;
     if (!zone) return;
     const correct = (zone.lock_passphrase || '').trim().toLowerCase();
     if (passphraseInput.trim().toLowerCase() === correct) {
       unlockedZoneIdsRef.current = new Set([...unlockedZoneIdsRef.current, zone.id]);
-      visitedZoneIdsRef.current = new Set([...visitedZoneIdsRef.current, zone.id]);
+      markZoneVisited(zone.id);
       passphraseChallengeRef.current = null;
       setPassphraseChallenge(null);
       setPassphraseInput('');
@@ -239,13 +267,13 @@ export const Player: React.FC = () => {
       zones.forEach(zone => {
         const dist = getDistance(currentPos[0], currentPos[1], zone.lat, zone.lng);
         const insideZone = dist < zone.radius;
+        const prereqMet = !zone.requires_zone_id || visitedZoneIdsRef.current.has(zone.requires_zone_id);
 
-        if (insideZone) {
+        if (insideZone && prereqMet) {
           currentZoneIds.add(zone.id);
 
           // Zone entry event
           if (!prevZoneIdsRef.current.has(zone.id)) {
-            const prereqMet = !zone.requires_zone_id || visitedZoneIdsRef.current.has(zone.requires_zone_id);
             const isLocked = zone.lock_type === 'passphrase' && !unlockedZoneIdsRef.current.has(zone.id);
 
             if (isLocked && prereqMet) {
@@ -255,7 +283,7 @@ export const Player: React.FC = () => {
                 setPassphraseChallenge(zone);
               }
             } else if (prereqMet) {
-              visitedZoneIdsRef.current = new Set([...visitedZoneIdsRef.current, zone.id]);
+              markZoneVisited(zone.id);
               if (zone.entry_message && zone.type !== 'character') showHud(zone.title, zone.entry_message);
             }
 
@@ -525,6 +553,7 @@ export const Player: React.FC = () => {
           {zones.map(zone => {
              const isActive = activeZones.find(az => az.id === zone.id) || (activeCharacterZone?.id === zone.id);
              if (!zone.is_visible) return null;
+             if (zone.requires_zone_id && !visitedZoneIds.has(zone.requires_zone_id)) return null;
 
              const isChar = zone.type === 'character';
              const isLocked = zone.lock_type === 'passphrase';
@@ -664,11 +693,11 @@ export const Player: React.FC = () => {
                     boxZoom={false}
                     keyboard={false}
                     attributionControl={false}
-                    className={welcomeMapInteractive ? '' : 'pointer-events-none'}
                   >
                     <TileLayer url={mapStyle.url} />
                     <Marker position={[tour.lat, tour.lng]} icon={StartMarkerIcon} />
                     <InvalidateSize />
+                    <WelcomeMapInteraction enabled={welcomeMapInteractive} />
                   </MapContainer>
                   {!welcomeMapInteractive ? (
                     <button

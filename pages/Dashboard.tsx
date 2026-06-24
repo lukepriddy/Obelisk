@@ -270,9 +270,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
       title: 'Untitled Experience',
       description: 'Describe your experience here.',
       is_public: true,
-      lat: 40.7484,
-      lng: -73.9856,
-      map_style: 'light',
+      lat: 0,
+      lng: 0,
+      map_style: 'satellite',
     });
     setCreating(false);
     if (tour) navigate(`/editor/${tour.id}`);

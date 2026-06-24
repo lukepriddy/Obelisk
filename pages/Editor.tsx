@@ -166,8 +166,8 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
   const mapRef = useRef<L.Map | null>(null);
   
   // Editor map mirrors the tour's chosen map style (set in Tour Settings), so
-  // what the creator places on is what the player will see. Defaults to light.
-  const editorMapStyle = tour?.map_style || 'light';
+  // what the creator places on is what the player will see. Defaults to satellite.
+  const editorMapStyle = tour?.map_style || 'satellite';
   // Satellite imagery has no street/place labels — stack a labels overlay so
   // creators can still read where they're placing zones.
   const showSatelliteLabels = editorMapStyle === 'satellite';
@@ -477,8 +477,8 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
           >
             <TileLayer
               key={editorMapStyle}
-              url={(MAP_STYLES[editorMapStyle] || MAP_STYLES.light).url}
-              attribution={(MAP_STYLES[editorMapStyle] || MAP_STYLES.light).attribution}
+              url={(MAP_STYLES[editorMapStyle] || MAP_STYLES.satellite).url}
+              attribution={(MAP_STYLES[editorMapStyle] || MAP_STYLES.satellite).attribution}
               maxNativeZoom={19}
               maxZoom={22}
             />

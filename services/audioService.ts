@@ -143,10 +143,10 @@ export class AudioService {
           return;
         }
         // 'stop' (default): pause and rewind to start.
-        if (!audioEl.paused) {
-          audioEl.pause();
-          audioEl.currentTime = 0;
-        }
+        if (!audioEl.paused) audioEl.pause();
+        // A finished element reports paused=true. Always rewinding prevents a
+        // later visit from restarting at the end and producing silence.
+        try { audioEl.currentTime = 0; } catch { /* metadata may not be ready */ }
         nodeData.played = false;
         return;
       }

@@ -10,11 +10,11 @@ const DEFAULT_ZONE_PROPS = {
   volume: 1.0,
   is_visible: true,
   show_progress: false,
-  use_attenuation: true,
+  use_attenuation: false,
   fade_in: 0.5,
   fade_out: 2.0,
   on_exit: 'stop' as const,
-  on_end: 'loop' as const,
+  on_end: 'stop' as const,
   lock_type: 'none' as const,
   voice_enabled: false,
 };
