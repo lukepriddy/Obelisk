@@ -1283,7 +1283,7 @@ export const Player: React.FC = () => {
                     style={{ backgroundColor: `${resource.color || accent}22`, color: resource.color || accent }}
                   >
                     {resource.image_url
-                      ? <img src={resource.image_url} alt="" className="w-full h-full object-cover" />
+                      ? <img src={resource.image_url} alt="" className="w-full h-full object-contain p-1" />
                       : resource.type === 'item' ? <KeyRound size={19} /> : <Gem size={19} />
                     }
                   </div>
@@ -1424,7 +1424,7 @@ export const Player: React.FC = () => {
                         style={{ backgroundColor: `${visible.color || accent}22`, color: visible.color || accent }}
                       >
                         {visible.image_url
-                          ? <img src={visible.image_url} alt="" className="w-full h-full object-cover" />
+                          ? <img src={visible.image_url} alt="" className="w-full h-full object-contain p-0.5" />
                           : visible.type === 'item' ? <KeyRound size={12} /> : <Gem size={12} />
                         }
                       </span>

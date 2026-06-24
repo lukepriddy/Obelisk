@@ -115,7 +115,7 @@ export const ProgressionSettings: React.FC<ProgressionSettingsProps> = ({ tour, 
                   {uploading && uploadResourceId === resource.id
                     ? <Loader2 size={16} className="animate-spin" />
                     : resource.image_url
-                      ? <img src={resource.image_url} alt="" className="w-full h-full object-cover" />
+                      ? <img src={resource.image_url} alt="" className="w-full h-full object-contain p-1" />
                       : <ImageIcon size={17} />
                   }
                 </button>

@@ -73,7 +73,7 @@ export const ZoneProgressionSettings: React.FC<ZoneProgressionSettingsProps> = (
               <select
                 value={reward.resource_id}
                 onChange={e => updateReward(index, { resource_id: e.target.value })}
-                className="flex-1 min-w-0 bg-zinc-800 border border-zinc-700 rounded px-2 py-2 text-xs text-white"
+                className="h-10 flex-1 min-w-0 bg-zinc-800 border border-zinc-700 rounded px-2 text-xs text-white"
               >
                 {resources.map(resource => (
                   <option key={resource.id} value={resource.id}>{resource.name}</option>
@@ -85,7 +85,7 @@ export const ZoneProgressionSettings: React.FC<ZoneProgressionSettingsProps> = (
                 step="1"
                 value={reward.amount}
                 onChange={e => updateReward(index, { amount: Math.max(1, Number(e.target.value) || 1) })}
-                className="w-16 bg-zinc-800 border border-zinc-700 rounded px-2 py-2 text-xs text-white text-center"
+                className="h-10 w-16 bg-zinc-800 border border-zinc-700 rounded px-2 text-xs text-white text-center"
                 aria-label="Reward amount"
               />
               <button
@@ -121,7 +121,7 @@ export const ZoneProgressionSettings: React.FC<ZoneProgressionSettingsProps> = (
                   <select
                     value={requirement.resource_id}
                     onChange={e => updateRequirement(index, { resource_id: e.target.value })}
-                    className="flex-1 min-w-0 bg-zinc-800 border border-zinc-700 rounded px-2 py-2 text-xs text-white"
+                    className="h-10 flex-1 min-w-0 bg-zinc-800 border border-zinc-700 rounded px-2 text-xs text-white"
                   >
                     {resources.map(item => (
                       <option key={item.id} value={item.id}>{item.name}</option>
@@ -133,7 +133,7 @@ export const ZoneProgressionSettings: React.FC<ZoneProgressionSettingsProps> = (
                     step="1"
                     value={requirement.amount}
                     onChange={e => updateRequirement(index, { amount: Math.max(1, Number(e.target.value) || 1) })}
-                    className="w-16 bg-zinc-800 border border-zinc-700 rounded px-2 py-2 text-xs text-white text-center"
+                    className="h-10 w-16 bg-zinc-800 border border-zinc-700 rounded px-2 text-xs text-white text-center"
                     aria-label="Required amount"
                   />
                   <button
