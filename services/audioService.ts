@@ -78,12 +78,39 @@ export class AudioService {
     await this.resumeContext();
   }
 
+  prepareForInterruption() {
+    this.nodes.forEach(nodeData => {
+      if (!nodeData.hasStarted || nodeData.destroyed || nodeData.played) return;
+      this.cancelFade(nodeData);
+      if (nodeData.gainNode && this.context) {
+        const now = this.context.currentTime;
+        nodeData.gainNode.gain.cancelScheduledValues(now);
+        nodeData.gainNode.gain.setValueAtTime(nodeData.currentVolume, now);
+        nodeData.gainNode.gain.linearRampToValueAtTime(0, now + 0.08);
+        nodeData.currentVolume = 0;
+      } else {
+        this.fadeTo(nodeData, 0, 0.08);
+      }
+    });
+  }
+
   /**
    * Restore playback after iOS interrupts the page audio session when Safari
    * is backgrounded or the device is locked. Playback position is preserved.
    */
   async recoverFromInterruption(): Promise<boolean> {
     if (!this.isUnlocked) return true;
+    const recoveryTargets = new Map<NodeData, number>();
+    this.nodes.forEach(nodeData => {
+      const shouldAdvance =
+        nodeData.isInside ||
+        (nodeData.exitBehavior === 'keep' && nodeData.audioEl.currentTime > 0);
+      if (!shouldAdvance || !nodeData.hasStarted || nodeData.destroyed || nodeData.played) return;
+      recoveryTargets.set(nodeData, nodeData.isInside ? nodeData.desiredVolume : 0);
+      this.cancelFade(nodeData);
+      this.setNodeVolume(nodeData, 0);
+    });
+
     const contextRunning = await this.resumeContext();
 
     const recoveries: Promise<void>[] = [];
@@ -118,13 +145,7 @@ export class AudioService {
 
       recoveries.push(
         audioEl.play()
-          .then(() => {
-            this.cancelFade(nodeData);
-            this.setNodeVolume(
-              nodeData,
-              nodeData.isInside ? nodeData.desiredVolume : 0,
-            );
-          })
+          .then(() => {})
           .catch(error => {
             console.warn(`Zone audio recovery failed (${zoneId}):`, error);
           }),
@@ -132,6 +153,9 @@ export class AudioService {
     });
 
     await Promise.all(recoveries);
+    recoveryTargets.forEach((target, nodeData) => {
+      this.fadeTo(nodeData, target, 0.25);
+    });
     if (!contextRunning) return false;
     if (playbackChecks.length === 0) return true;
 
@@ -151,7 +175,6 @@ export class AudioService {
 
     const AudioContextClass = (window.AudioContext || (window as any).webkitAudioContext);
     const oldContext = this.context;
-    void oldContext?.close().catch(() => {});
     let newContext: AudioContext | null = null;
     try {
       newContext = AudioContextClass ? new AudioContextClass() : null;
@@ -169,6 +192,7 @@ export class AudioService {
     this.nodes.forEach((oldNode, zoneId) => {
       if (oldNode.playTimer) clearTimeout(oldNode.playTimer);
       this.cancelFade(oldNode);
+      this.setNodeVolume(oldNode, 0);
       oldNode.audioEl.pause();
       oldNode.sourceNode?.disconnect();
       oldNode.gainNode?.disconnect();
@@ -205,11 +229,11 @@ export class AudioService {
         gainNode,
         playTimer: null,
         fadeTimer: null,
-        currentVolume: shouldRestart ? oldNode.desiredVolume : 0,
+        currentVolume: 0,
         hasStarted: shouldRestart,
         played: shouldRestart ? false : oldNode.played,
       };
-      this.setNodeVolume(rebuilt, shouldRestart ? oldNode.desiredVolume : 0);
+      this.setNodeVolume(rebuilt, 0);
       this.attachEndBehavior(rebuilt);
       rebuiltNodes.set(zoneId, rebuilt);
 
@@ -225,12 +249,18 @@ export class AudioService {
     });
 
     this.nodes = rebuiltNodes;
+    void oldContext?.close().catch(() => {});
     const contextResume = newContext
       ? newContext.resume().catch(error => {
           console.warn('Rebuilt audio context resume failed:', error);
         })
       : Promise.resolve();
     await Promise.all([contextResume, ...playAttempts]);
+    rebuiltNodes.forEach(nodeData => {
+      if (nodeData.isInside && nodeData.hasStarted) {
+        this.fadeTo(nodeData, nodeData.desiredVolume, 0.25);
+      }
+    });
     if (newContext && newContext.state !== 'running') return false;
     if (activeCount === 0) return true;
 

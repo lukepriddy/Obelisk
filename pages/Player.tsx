@@ -512,6 +512,7 @@ export const Player: React.FC = () => {
     const handleVisibility = () => {
       if (document.visibilityState === 'hidden') {
         wasBackgrounded = true;
+        audioService.prepareForInterruption();
         return;
       }
       recoverAudio();
@@ -533,12 +534,18 @@ export const Player: React.FC = () => {
     };
   }, [audioStarted]);
 
+  useEffect(() => {
+    if (!showAudioResume) return;
+    const timer = window.setTimeout(() => setShowAudioResume(false), 12000);
+    return () => window.clearTimeout(timer);
+  }, [showAudioResume]);
+
   const handleTappedAudioResume = async () => {
     if (resumingAudio) return;
+    setShowAudioResume(false);
     setResumingAudio(true);
-    const recovered = await audioService.restartActiveAudioFromBeginning();
+    await audioService.restartActiveAudioFromBeginning();
     setResumingAudio(false);
-    if (recovered) setShowAudioResume(false);
   };
 
   // GPS Watcher
@@ -1309,9 +1316,9 @@ export const Player: React.FC = () => {
               <Volume2 size={19} />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-xs font-bold" style={{ color: th.hudText }}>Audio paused</div>
+              <div className="text-xs font-bold" style={{ color: th.hudText }}>Audio check</div>
               <p className="text-[11px] leading-snug mt-0.5" style={{ color: th.barMuted }}>
-                iOS paused this experience while the screen was locked.
+                Locking your device can disrupt audio.
               </p>
             </div>
             <button
