@@ -7,7 +7,7 @@ import { audioService } from '../services/audioService';
 import { getDistance, calculateAttenuation } from '../utils/geo';
 import { Tour, Zone } from '../types';
 import { FONT_STYLES, MAP_STYLES } from '../constants';
-import { PlayCircle, Volume2, Mic, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu, Layers, Locate, RotateCcw } from 'lucide-react';
+import { PlayCircle, Volume2, Mic, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu, Layers, Locate, RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
 import { ChatInterface } from '../components/ChatInterface';
 
 // Custom icons
@@ -82,6 +82,7 @@ export const Player: React.FC = () => {
   const [mapStyleOverride, setMapStyleOverride] = useState<string | null>(null);
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [welcomeMapInteractive, setWelcomeMapInteractive] = useState(false);
+  const welcomeMapRef = useRef<L.Map | null>(null);
 
   // Character Interaction
   const [activeCharacterZone, setActiveCharacterZone] = useState<Zone | null>(null);
@@ -682,6 +683,7 @@ export const Player: React.FC = () => {
 
                 <div className="relative w-full aspect-[4/3] max-h-[240px] rounded-xl overflow-hidden border border-white/10 shadow-lg">
                   <MapContainer
+                    ref={welcomeMapRef}
                     center={[tour.lat, tour.lng]}
                     zoom={tour.start_zoom ?? 18}
                     style={{ width: '100%', height: '100%' }}
@@ -711,14 +713,40 @@ export const Player: React.FC = () => {
                       </span>
                     </button>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() => setWelcomeMapInteractive(false)}
-                      className="absolute top-2 right-2 z-[500] rounded-full px-3 py-1.5 text-xs font-semibold backdrop-blur-md border border-white/15 shadow-lg"
-                      style={{ backgroundColor: `${bg}dd`, color: textColor }}
-                    >
-                      Done
-                    </button>
+                    <>
+                      <div
+                        className="absolute top-2 left-2 z-[500] flex flex-col overflow-hidden rounded-lg backdrop-blur-md border border-white/15 shadow-lg"
+                        style={{ backgroundColor: `${bg}dd`, color: textColor }}
+                      >
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); welcomeMapRef.current?.zoomIn(); }}
+                          className="w-11 h-11 flex items-center justify-center active:bg-white/15"
+                          aria-label="Zoom in"
+                          title="Zoom in"
+                        >
+                          <ZoomIn size={20} />
+                        </button>
+                        <div className="h-px bg-white/15" />
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); welcomeMapRef.current?.zoomOut(); }}
+                          className="w-11 h-11 flex items-center justify-center active:bg-white/15"
+                          aria-label="Zoom out"
+                          title="Zoom out"
+                        >
+                          <ZoomOut size={20} />
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setWelcomeMapInteractive(false)}
+                        className="absolute top-2 right-2 z-[500] rounded-full px-3 py-1.5 text-xs font-semibold backdrop-blur-md border border-white/15 shadow-lg"
+                        style={{ backgroundColor: `${bg}dd`, color: textColor }}
+                      >
+                        Done
+                      </button>
+                    </>
                   )}
                 </div>
 
