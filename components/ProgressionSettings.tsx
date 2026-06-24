@@ -84,8 +84,8 @@ export const ProgressionSettings: React.FC<ProgressionSettingsProps> = ({ tour, 
           }`}
           aria-label={tour.progression_enabled ? 'Disable progression' : 'Enable progression'}
         >
-          <span className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
-            tour.progression_enabled ? 'translate-x-5' : 'translate-x-1'
+          <span className={`absolute left-1 top-1 w-4 h-4 rounded-full bg-white transition-transform ${
+            tour.progression_enabled ? 'translate-x-4' : 'translate-x-0'
           }`} />
         </button>
       </div>
@@ -206,6 +206,12 @@ export const ProgressionSettings: React.FC<ProgressionSettingsProps> = ({ tour, 
           {resources.length === 0 && (
             <p className="text-[10px] text-zinc-600 text-center">
               Add a resource before assigning rewards to zones.
+            </p>
+          )}
+
+          {resources.length > 0 && (
+            <p className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2.5 text-[11px] leading-relaxed text-zinc-400">
+              Next, open a zone and use its Progression section to award these resources or require them to unlock the zone.
             </p>
           )}
         </div>
