@@ -25,6 +25,9 @@ interface NodeData {
   isInside: boolean;
   exitBehavior: 'stop' | 'pause' | 'keep';
   hasStarted: boolean;
+  loop: boolean;
+  destroyOnEnd: boolean;
+  fadeIn: number;
 }
 
 // Audio waits this long after the player enters a zone before starting, so the
@@ -146,48 +149,104 @@ export class AudioService {
   async restartActiveAudioFromBeginning(): Promise<boolean> {
     if (!this.isUnlocked) return false;
 
-    // Call resume() and play() synchronously within the originating tap. Safari
-    // may reject either call once the user-activation window has passed.
-    const contextResume = this.context && this.context.state !== 'running'
-      ? this.context.resume().catch(error => {
-          console.warn('Tapped audio context resume failed:', error);
-        })
-      : Promise.resolve();
+    const AudioContextClass = (window.AudioContext || (window as any).webkitAudioContext);
+    const oldContext = this.context;
+    void oldContext?.close().catch(() => {});
+    let newContext: AudioContext | null = null;
+    try {
+      newContext = AudioContextClass ? new AudioContextClass() : null;
+    } catch (error) {
+      console.warn('Could not create replacement audio context:', error);
+    }
+    this.context = newContext;
 
-    const activeNodes: NodeData[] = [];
+    // Rebuild every media element and connection. iOS can leave the old graph
+    // reporting "running" while producing silence after a lock-screen interruption.
+    const rebuiltNodes = new Map<string, NodeData>();
     const playAttempts: Promise<void>[] = [];
-    this.nodes.forEach((nodeData, zoneId) => {
-      if (
-        !nodeData.isInside ||
-        nodeData.destroyed ||
-        nodeData.played ||
-        nodeData.audioEl.ended
-      ) return;
-      activeNodes.push(nodeData);
-      if (nodeData.playTimer) {
-        clearTimeout(nodeData.playTimer);
-        nodeData.playTimer = null;
+    let activeCount = 0;
+
+    this.nodes.forEach((oldNode, zoneId) => {
+      if (oldNode.playTimer) clearTimeout(oldNode.playTimer);
+      this.cancelFade(oldNode);
+      oldNode.audioEl.pause();
+      oldNode.sourceNode?.disconnect();
+      oldNode.gainNode?.disconnect();
+
+      const audioEl = new Audio();
+      const useGainNode = !!newContext && canUseWebAudioGain(oldNode.url);
+      if (useGainNode) audioEl.crossOrigin = 'anonymous';
+      audioEl.src = oldNode.url;
+      audioEl.preload = 'none';
+      audioEl.loop = oldNode.loop;
+
+      let sourceNode: MediaElementAudioSourceNode | null = null;
+      let gainNode: GainNode | null = null;
+      if (newContext && useGainNode) {
+        try {
+          sourceNode = newContext.createMediaElementSource(audioEl);
+          gainNode = newContext.createGain();
+          sourceNode.connect(gainNode);
+          gainNode.connect(newContext.destination);
+        } catch (error) {
+          console.warn(`Rebuilt Web Audio connection failed (${zoneId}):`, error);
+        }
       }
-      this.cancelFade(nodeData);
-      nodeData.audioEl.pause();
-      try { nodeData.audioEl.currentTime = 0; } catch { /* metadata may not be ready */ }
-      nodeData.played = false;
-      nodeData.hasStarted = true;
-      this.setNodeVolume(nodeData, nodeData.desiredVolume);
-      playAttempts.push(
-        nodeData.audioEl.play().catch(error => {
-          console.warn(`Tapped zone audio restart failed (${zoneId}):`, error);
-        }),
-      );
+
+      const shouldRestart =
+        oldNode.isInside &&
+        !oldNode.destroyed &&
+        !oldNode.played &&
+        !oldNode.audioEl.ended;
+      const rebuilt: NodeData = {
+        ...oldNode,
+        audioEl,
+        sourceNode,
+        gainNode,
+        playTimer: null,
+        fadeTimer: null,
+        currentVolume: shouldRestart ? oldNode.desiredVolume : 0,
+        hasStarted: shouldRestart,
+        played: shouldRestart ? false : oldNode.played,
+      };
+      this.setNodeVolume(rebuilt, shouldRestart ? oldNode.desiredVolume : 0);
+      this.attachEndBehavior(rebuilt);
+      rebuiltNodes.set(zoneId, rebuilt);
+
+      if (shouldRestart) {
+        activeCount += 1;
+        try { audioEl.currentTime = 0; } catch { /* metadata may not be ready */ }
+        playAttempts.push(
+          audioEl.play().catch(error => {
+            console.warn(`Tapped zone audio restart failed (${zoneId}):`, error);
+          }),
+        );
+      }
     });
 
+    this.nodes = rebuiltNodes;
+    const contextResume = newContext
+      ? newContext.resume().catch(error => {
+          console.warn('Rebuilt audio context resume failed:', error);
+        })
+      : Promise.resolve();
     await Promise.all([contextResume, ...playAttempts]);
-    if (this.context && this.context.state !== 'running') return false;
-    if (activeNodes.length === 0) return true;
+    if (newContext && newContext.state !== 'running') return false;
+    if (activeCount === 0) return true;
 
     await new Promise<void>(resolve => window.setTimeout(resolve, 350));
-    return activeNodes.every(nodeData =>
+    return [...rebuiltNodes.values()].filter(nodeData => nodeData.isInside && nodeData.hasStarted).every(nodeData =>
       !nodeData.audioEl.paused && nodeData.audioEl.currentTime > 0.03
+    );
+  }
+
+  hasActiveAudio() {
+    return [...this.nodes.values()].some(nodeData =>
+      nodeData.isInside &&
+      nodeData.hasStarted &&
+      !nodeData.destroyed &&
+      !nodeData.played &&
+      !nodeData.audioEl.ended
     );
   }
 
@@ -238,6 +297,9 @@ export class AudioService {
         isInside: false,
         exitBehavior: 'stop',
         hasStarted: false,
+        loop: false,
+        destroyOnEnd: false,
+        fadeIn: 0,
       });
     } catch (e) {
       console.error(`Failed to set up audio for zone ${zoneId}:`, e);
@@ -318,6 +380,9 @@ export class AudioService {
 
       const { audioEl } = nodeData;
       nodeData.exitBehavior = zone.exitBehavior ?? 'stop';
+      nodeData.loop = zone.loop === true;
+      nodeData.destroyOnEnd = zone.destroyOnEnd === true;
+      nodeData.fadeIn = Number(zone.fadeIn) || 0;
 
       // Destroyed zones stay silent for the session.
       if (nodeData.destroyed) {
@@ -391,12 +456,21 @@ export class AudioService {
     const { audioEl } = nodeData;
     audioEl.loop = loop;
     nodeData.hasStarted = true;
+    nodeData.loop = loop;
+    nodeData.destroyOnEnd = destroyOnEnd;
+    nodeData.fadeIn = fadeIn;
     this.setNodeVolume(nodeData, 0);
     audioEl.play().catch(e => console.warn(`Zone audio play failed (${zoneId}):`, e));
     this.fadeTo(nodeData, nodeData.desiredVolume, fadeIn);
-    if (!loop) {
+    this.attachEndBehavior(nodeData);
+  }
+
+  private attachEndBehavior(nodeData: NodeData) {
+    const { audioEl } = nodeData;
+    audioEl.loop = nodeData.loop;
+    if (!nodeData.loop) {
       audioEl.onended = () => {
-        if (destroyOnEnd) {
+        if (nodeData.destroyOnEnd) {
           nodeData.destroyed = true;
           this.setNodeVolume(nodeData, 0);
         } else {
@@ -404,6 +478,8 @@ export class AudioService {
           nodeData.played = true;
         }
       };
+    } else {
+      audioEl.onended = null;
     }
   }
 

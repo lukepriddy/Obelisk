@@ -482,10 +482,13 @@ export const Player: React.FC = () => {
     if (!audioStarted) return;
     let recoveryRun = 0;
     let cancelled = false;
+    let wasBackgrounded = false;
 
     const recoverAudio = () => {
-      if (document.visibilityState !== 'visible') return;
+      if (document.visibilityState !== 'visible' || !wasBackgrounded) return;
+      wasBackgrounded = false;
       const run = ++recoveryRun;
+      const hadActiveAudio = audioService.hasActiveAudio();
       void (async () => {
         for (const delay of [0, 400, 1200]) {
           if (delay > 0) {
@@ -494,22 +497,37 @@ export const Player: React.FC = () => {
           if (cancelled || run !== recoveryRun || document.visibilityState !== 'visible') return;
           const recovered = await audioService.recoverFromInterruption();
           if (recovered) {
-            setShowAudioResume(false);
-            return;
+            break;
           }
         }
-        if (!cancelled && run === recoveryRun) setShowAudioResume(true);
+        // Safari can advance currentTime while its Web Audio output remains
+        // silent. If audio was active before backgrounding, always offer the
+        // explicit audio-graph rebuild even when automatic recovery looks healthy.
+        if (!cancelled && run === recoveryRun && hadActiveAudio) {
+          setShowAudioResume(true);
+        }
       })();
     };
 
-    document.addEventListener('visibilitychange', recoverAudio);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        wasBackgrounded = true;
+        return;
+      }
+      recoverAudio();
+    };
+    const markBackgrounded = () => { wasBackgrounded = true; };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('pagehide', markBackgrounded);
     window.addEventListener('pageshow', recoverAudio);
     window.addEventListener('focus', recoverAudio);
 
     return () => {
       cancelled = true;
       recoveryRun += 1;
-      document.removeEventListener('visibilitychange', recoverAudio);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('pagehide', markBackgrounded);
       window.removeEventListener('pageshow', recoverAudio);
       window.removeEventListener('focus', recoverAudio);
     };
