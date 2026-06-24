@@ -78,6 +78,8 @@ export const Player: React.FC = () => {
   const [audioStarted, setAudioStarted] = useState(false);
   const [simulationMode, setSimulationMode] = useState(isPreview);
   const [activeZones, setActiveZones] = useState<{id: string, title: string, volume: number, replayable: boolean}[]>([]);
+  const [activeMediaZone, setActiveMediaZone] = useState<Zone | null>(null);
+  const dismissedMediaZoneIdsRef = useRef<Set<string>>(new Set());
   // Map style — starts at the tour's chosen style, user can override in-session
   const [mapStyleOverride, setMapStyleOverride] = useState<string | null>(null);
   const [showMapPicker, setShowMapPicker] = useState(false);
@@ -263,6 +265,7 @@ export const Player: React.FC = () => {
       const audioUpdates: { id: string; volume: number; loop?: boolean; destroyOnEnd?: boolean; exitBehavior?: 'stop' | 'pause' | 'keep' }[] = [];
       const activeState: { id: string; title: string; volume: number; replayable: boolean }[] = [];
       let foundCharZone: Zone | null = null;
+      let foundMediaZone: Zone | null = null;
       const currentZoneIds = new Set<string>();
 
       zones.forEach(zone => {
@@ -300,18 +303,27 @@ export const Player: React.FC = () => {
             if (zone.type === 'character') {
               foundCharZone = zone;
             } else {
-              const zoneVolume = Math.min(1, Math.max(0, Number(zone.volume ?? 1.0)));
-              let volume = zone.use_attenuation
-                ? calculateAttenuation(dist, zone.radius)
-                : 1.0;
-              volume = volume * zoneVolume;
-              activeState.push({
-                id: zone.id,
-                title: zone.title,
-                volume: Math.min(100, Math.round(volume * 100)),
-                // A non-looping track that already finished can be replayed from the card.
-                replayable: zone.on_end !== 'loop' && audioService.hasFinished(zone.id),
-              });
+              if (
+                !foundMediaZone &&
+                (zone.zone_image_url || (!zone.media_url && zone.description)) &&
+                !dismissedMediaZoneIdsRef.current.has(zone.id)
+              ) {
+                foundMediaZone = zone;
+              }
+              if (zone.media_url) {
+                const zoneVolume = Math.min(1, Math.max(0, Number(zone.volume ?? 1.0)));
+                let volume = zone.use_attenuation
+                  ? calculateAttenuation(dist, zone.radius)
+                  : 1.0;
+                volume = volume * zoneVolume;
+                activeState.push({
+                  id: zone.id,
+                  title: zone.title,
+                  volume: Math.min(100, Math.round(volume * 100)),
+                  // A non-looping track that already finished can be replayed from the card.
+                  replayable: zone.on_end !== 'loop' && audioService.hasFinished(zone.id),
+                });
+              }
             }
           }
         }
@@ -334,8 +346,12 @@ export const Player: React.FC = () => {
       });
 
       prevZoneIdsRef.current = currentZoneIds;
+      dismissedMediaZoneIdsRef.current = new Set(
+        [...dismissedMediaZoneIdsRef.current].filter(id => currentZoneIds.has(id))
+      );
       audioService.updateVolumes(audioUpdates);
       setActiveZones(activeState);
+      setActiveMediaZone(foundMediaZone);
 
       if (foundCharZone?.id !== activeCharZoneRef.current?.id) {
         if (foundCharZone) {
@@ -979,6 +995,50 @@ export const Player: React.FC = () => {
               </div>
             </div>
           ) : null}
+
+          {/* Media-zone content — additive to the existing audio card. */}
+          {activeMediaZone && (
+            <div
+              className="w-full rounded-2xl overflow-hidden animate-in slide-in-from-bottom-4 duration-300"
+              style={{
+                backgroundColor: th.cardBg,
+                border: `1px solid ${th.cardBorder}`,
+                backdropFilter: 'blur(18px)',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+              }}
+            >
+              <div className="flex items-start gap-3 p-3">
+                {activeMediaZone.zone_image_url && (
+                  <img
+                    src={activeMediaZone.zone_image_url}
+                    alt={activeMediaZone.title}
+                    className="w-20 h-20 rounded-xl object-cover shrink-0"
+                  />
+                )}
+                <div className="flex-1 min-w-0 py-0.5">
+                  <h3 className="font-bold text-sm leading-tight" style={{ color: th.cardText }}>
+                    {activeMediaZone.title}
+                  </h3>
+                  {activeMediaZone.description && (
+                    <p className="text-xs mt-1.5 leading-relaxed whitespace-pre-wrap" style={{ color: th.cardMuted }}>
+                      {activeMediaZone.description}
+                    </p>
+                  )}
+                </div>
+                <button
+                  onClick={() => {
+                    dismissedMediaZoneIdsRef.current.add(activeMediaZone.id);
+                    setActiveMediaZone(null);
+                  }}
+                  className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 active:opacity-60"
+                  style={{ color: th.cardMuted }}
+                  aria-label="Dismiss zone details"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Now Playing card — rendered below character presence so it sits closer to the bottom bar */}
           {activeZones.length > 0 && (

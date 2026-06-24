@@ -46,8 +46,9 @@ export interface Zone {
   // Type Discriminator
   type: ZoneType;
 
-  // Audio Zone Props
+  // Media Zone Props
   media_url: string;
+  zone_image_url?: string | null;       // Optional square image shown on the media-zone card
   voiceover_script?: string;        // Saved ElevenLabs voiceover script (so it survives a reopen)
   volume: number; // 0.0 to 1.0
   is_visible: boolean;

@@ -289,6 +289,33 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
     }
   };
 
+  const handleImageUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    field: 'character_image_url' | 'zone_image_url',
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setImageUploadError(null);
+    const name = file.name.toLowerCase();
+    if (name.endsWith('.heic') || name.endsWith('.heif') || file.type === 'image/heic' || file.type === 'image/heif') {
+      setImageUploadError("iPhone HEIC photos aren't supported. In Photos, tap Share → Options → \"Most Compatible\" to export as JPEG.");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setImageUploadError('Image too large (max 10 MB).');
+      return;
+    }
+    setImageUploading(true);
+    const url = await uploadImage(file, zone.tour_id);
+    setImageUploading(false);
+    if (!url) {
+      setImageUploadError('Upload failed — check your connection and try again.');
+      return;
+    }
+    onUpdate({ [field]: url });
+  };
+
   return (
     <div className="text-zinc-200 pb-20">
       <div className="mb-6">
@@ -300,7 +327,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
                onClick={() => onUpdate({ type: 'audio' })}
                className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded transition-colors ${zone.type !== 'character' ? 'bg-emerald-600 text-white shadow' : 'text-zinc-400 hover:text-zinc-200'}`}
              >
-               <Music size={14} /> Audio Zone
+               <Music size={14} /> Media Zone
              </button>
              <button 
                onClick={() => onUpdate({ type: 'character' })}
@@ -384,23 +411,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
               type="file"
               accept="image/*"
               className="hidden"
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                e.target.value = '';
-                setImageUploadError(null);
-                const name = file.name.toLowerCase();
-                if (name.endsWith('.heic') || name.endsWith('.heif') || file.type === 'image/heic' || file.type === 'image/heif') {
-                  setImageUploadError("iPhone HEIC photos aren't supported. In Photos, tap Share → Options → \"Most Compatible\" to export as JPEG.");
-                  return;
-                }
-                if (file.size > 10 * 1024 * 1024) { setImageUploadError('Image too large (max 10 MB).'); return; }
-                setImageUploading(true);
-                const url = await uploadImage(file, zone.tour_id);
-                setImageUploading(false);
-                if (!url) { setImageUploadError('Upload failed — check your connection and try again.'); return; }
-                onUpdate({ character_image_url: url });
-              }}
+              onChange={(e) => handleImageUpload(e, 'character_image_url')}
             />
             {zone.character_image_url ? (
               <div className="relative w-24 h-24 group">
@@ -642,12 +653,69 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
           </label>
         </div>
       ) : (
-        /* --- AUDIO SETTINGS --- */
+        /* --- MEDIA ZONE SETTINGS --- */
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
+          {/* Optional media-zone image */}
+          <div>
+            <label className="block text-xs font-bold text-zinc-400 uppercase mb-2 flex items-center gap-2">
+              <ImageIcon size={14} /> Zone Image <span className="normal-case font-normal text-zinc-500">(optional)</span>
+            </label>
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => handleImageUpload(e, 'zone_image_url')}
+            />
+            {zone.zone_image_url ? (
+              <div className="relative w-24 h-24 group">
+                <img
+                  src={zone.zone_image_url}
+                  alt="Zone image"
+                  className="w-24 h-24 object-cover rounded-xl border border-zinc-700"
+                />
+                <button
+                  onClick={() => onUpdate({ zone_image_url: null })}
+                  className="absolute -top-2 -right-2 z-10 w-6 h-6 bg-red-500 hover:bg-red-400 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                  aria-label="Remove zone image"
+                >
+                  <X size={12} />
+                </button>
+                <button
+                  onClick={() => imageInputRef.current?.click()}
+                  className="absolute inset-0 rounded-xl bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold"
+                >
+                  Replace
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => !imageUploading && imageInputRef.current?.click()}
+                className="w-24 h-24 rounded-xl border-2 border-dashed border-zinc-700 hover:border-emerald-500 hover:bg-emerald-500/5 flex flex-col items-center justify-center gap-1.5 text-zinc-500 hover:text-emerald-400 transition-all"
+              >
+                {imageUploading
+                  ? <Loader2 size={18} className="animate-spin" />
+                  : <Upload size={18} />
+                }
+                <span className="text-[10px] font-bold uppercase tracking-wide">
+                  {imageUploading ? 'Uploading' : 'Upload'}
+                </span>
+              </button>
+            )}
+            {imageUploadError && (
+              <p className="text-xs text-red-400 mt-1.5 leading-snug">{imageUploadError}</p>
+            )}
+            {!imageUploadError && (
+              <p className="text-[10px] text-zinc-500 mt-1.5">
+                Shown with this zone's title and description. Audio is optional.
+              </p>
+            )}
+          </div>
+
           {/* Audio Source (Preset/Upload/Link) */}
            <div>
             <label className="block text-xs font-bold text-zinc-400 uppercase mb-2 flex items-center gap-2">
-              <Music size={14} /> Audio Source
+              <Music size={14} /> Audio <span className="normal-case font-normal text-zinc-500">(optional)</span>
             </label>
             <div className="flex bg-zinc-800 rounded p-1 mb-3">
               <button onClick={() => setSourceType('upload')} className={`flex-1 py-1 text-xs rounded ${sourceType === 'upload' ? 'bg-emerald-600 text-white' : 'text-zinc-400'}`}>Upload</button>
@@ -795,27 +863,43 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
             </div>
             {/* Preview player — shown whenever there's a valid URL */}
             {zone.media_url && !zone.media_url.startsWith('blob:temp') && (
-              <AudioPreview key={zone.media_url} url={zone.media_url} volume={zone.volume ?? 1} />
+              <>
+                <AudioPreview key={zone.media_url} url={zone.media_url} volume={zone.volume ?? 1} />
+                <button
+                  type="button"
+                  onClick={() => { onUpdate({ media_url: '', voiceover_script: '' }); setFileName(''); setTtsDone(false); }}
+                  className="mt-2 flex items-center gap-1.5 text-xs text-zinc-500 hover:text-red-400 transition-colors"
+                >
+                  <Trash2 size={12} /> Remove audio
+                </button>
+              </>
+            )}
+            {!zone.media_url && (
+              <p className="text-[10px] text-zinc-500 mt-2">
+                Leave audio empty for an image-only or text-only zone.
+              </p>
             )}
           </div>
 
-          {/* Volume & Radius */}
+          {/* Audio volume + universal radius */}
           <div className="space-y-4">
-            <div>
-              <div className="flex justify-between text-xs font-bold text-zinc-400 uppercase mb-1">
-                <span>Volume</span>
-                <span>{Math.round((zone.volume ?? 1) * 100)}%</span>
+            {zone.media_url && (
+              <div>
+                <div className="flex justify-between text-xs font-bold text-zinc-400 uppercase mb-1">
+                  <span>Volume</span>
+                  <span>{Math.round((zone.volume ?? 1) * 100)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  className="w-full accent-emerald-500 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
+                  value={zone.volume ?? 1}
+                  onChange={(e) => onUpdate({ volume: parseFloat(e.target.value) })}
+                />
               </div>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                className="w-full accent-emerald-500 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
-                value={zone.volume ?? 1}
-                onChange={(e) => onUpdate({ volume: parseFloat(e.target.value) })}
-              />
-            </div>
+            )}
             
             <div>
               <div className="flex justify-between text-xs font-bold text-zinc-400 uppercase mb-1">
@@ -843,65 +927,71 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
               <input type="checkbox" className="hidden" checked={!zone.is_visible} onChange={(e) => onUpdate({ is_visible: !e.target.checked })} />
               <span className="text-sm text-zinc-300">Invisible on Map</span>
             </label>
-            <label className="flex items-center gap-3 cursor-pointer group">
-              <div className={`w-4 h-4 border rounded transition-colors flex items-center justify-center ${zone.use_attenuation ? 'bg-emerald-500 border-emerald-500' : 'border-zinc-600 bg-transparent'}`}>
-                {zone.use_attenuation && <div className="w-2 h-2 bg-white rounded-sm" />}
-              </div>
-              <input type="checkbox" className="hidden" checked={zone.use_attenuation} onChange={(e) => onUpdate({ use_attenuation: e.target.checked })} />
-              <span className="text-sm text-zinc-300">Distance Attenuation</span>
-            </label>
+            {zone.media_url && (
+              <label className="flex items-center gap-3 cursor-pointer group">
+                <div className={`w-4 h-4 border rounded transition-colors flex items-center justify-center ${zone.use_attenuation ? 'bg-emerald-500 border-emerald-500' : 'border-zinc-600 bg-transparent'}`}>
+                  {zone.use_attenuation && <div className="w-2 h-2 bg-white rounded-sm" />}
+                </div>
+                <input type="checkbox" className="hidden" checked={zone.use_attenuation} onChange={(e) => onUpdate({ use_attenuation: e.target.checked })} />
+                <span className="text-sm text-zinc-300">Distance Attenuation</span>
+              </label>
+            )}
           </div>
           
-          <div className="grid grid-cols-2 gap-4 border-t border-zinc-800 pt-4">
-            <div>
-              <div className="flex justify-between text-xs font-bold text-zinc-400 uppercase mb-1">
-                <span>Fade In</span>
-                <span>{zone.fade_in > 0 ? `${zone.fade_in}s` : 'Off'}</span>
+          {zone.media_url && (
+            <>
+              <div className="grid grid-cols-2 gap-4 border-t border-zinc-800 pt-4">
+                <div>
+                  <div className="flex justify-between text-xs font-bold text-zinc-400 uppercase mb-1">
+                    <span>Fade In</span>
+                    <span>{zone.fade_in > 0 ? `${zone.fade_in}s` : 'Off'}</span>
+                  </div>
+                  <input type="range" min="0" max="5" step="0.5" className="w-full h-1 bg-zinc-700 rounded accent-emerald-500" value={zone.fade_in} onChange={(e) => onUpdate({ fade_in: parseFloat(e.target.value) })} />
+                </div>
+                <div>
+                  <div className="flex justify-between text-xs font-bold text-zinc-400 uppercase mb-1">
+                    <span>Fade Out</span>
+                    <span>{zone.fade_out > 0 ? `${zone.fade_out}s` : 'Off'}</span>
+                  </div>
+                  <input type="range" min="0" max="5" step="0.5" className="w-full h-1 bg-zinc-700 rounded accent-emerald-500" value={zone.fade_out} onChange={(e) => onUpdate({ fade_out: parseFloat(e.target.value) })} />
+                </div>
               </div>
-              <input type="range" min="0" max="5" step="0.5" className="w-full h-1 bg-zinc-700 rounded accent-emerald-500" value={zone.fade_in} onChange={(e) => onUpdate({ fade_in: parseFloat(e.target.value) })} />
-            </div>
-            <div>
-              <div className="flex justify-between text-xs font-bold text-zinc-400 uppercase mb-1">
-                <span>Fade Out</span>
-                <span>{zone.fade_out > 0 ? `${zone.fade_out}s` : 'Off'}</span>
-              </div>
-              <input type="range" min="0" max="5" step="0.5" className="w-full h-1 bg-zinc-700 rounded accent-emerald-500" value={zone.fade_out} onChange={(e) => onUpdate({ fade_out: parseFloat(e.target.value) })} />
-            </div>
-          </div>
 
-          {/* Playback Behavior */}
-          <div className="border-t border-zinc-800 pt-4 space-y-3">
-            <div>
-              <label className="block text-xs font-bold text-zinc-400 uppercase mb-1.5">On Exit</label>
-              <div className="flex gap-1">
-                {(['stop', 'pause', 'keep'] as ZoneExitBehavior[]).map(val => (
-                  <button
-                    key={val}
-                    onClick={() => onUpdate({ on_exit: val })}
-                    className={`flex-1 py-1.5 text-xs rounded capitalize border transition-colors ${zone.on_exit === val ? 'bg-emerald-600 text-white border-emerald-500' : 'border-zinc-700 text-zinc-400 hover:text-zinc-200'}`}
-                  >{val}</button>
-                ))}
+              {/* Playback Behavior */}
+              <div className="border-t border-zinc-800 pt-4 space-y-3">
+                <div>
+                  <label className="block text-xs font-bold text-zinc-400 uppercase mb-1.5">On Exit</label>
+                  <div className="flex gap-1">
+                    {(['stop', 'pause', 'keep'] as ZoneExitBehavior[]).map(val => (
+                      <button
+                        key={val}
+                        onClick={() => onUpdate({ on_exit: val })}
+                        className={`flex-1 py-1.5 text-xs rounded capitalize border transition-colors ${zone.on_exit === val ? 'bg-emerald-600 text-white border-emerald-500' : 'border-zinc-700 text-zinc-400 hover:text-zinc-200'}`}
+                      >{val}</button>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-zinc-500 mt-1">What happens when the player leaves this zone.</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-zinc-400 uppercase mb-1.5">On End</label>
+                  <div className="flex gap-1">
+                    {(['stop', 'loop', 'destroy'] as ZoneEndBehavior[]).map(val => (
+                      <button
+                        key={val}
+                        onClick={() => onUpdate({ on_end: val })}
+                        className={`flex-1 py-1.5 text-xs rounded capitalize border transition-colors ${(zone.on_end || 'stop') === val ? (val === 'destroy' ? 'bg-red-600/40 text-red-300 border-red-500/50' : 'bg-emerald-600 text-white border-emerald-500') : 'border-zinc-700 text-zinc-400 hover:text-zinc-200'}`}
+                      >{val}</button>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-zinc-500 mt-1">
+                    <strong className="text-zinc-400">Stop</strong> — plays once per visit, replays on re-entry. &nbsp;
+                    <strong className="text-zinc-400">Loop</strong> — repeats. &nbsp;
+                    <strong className="text-red-400">Destroy</strong> — plays once, then gone for the session.
+                  </p>
+                </div>
               </div>
-              <p className="text-[10px] text-zinc-500 mt-1">What happens when the player leaves this zone.</p>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-zinc-400 uppercase mb-1.5">On End</label>
-              <div className="flex gap-1">
-                {(['stop', 'loop', 'destroy'] as ZoneEndBehavior[]).map(val => (
-                  <button
-                    key={val}
-                    onClick={() => onUpdate({ on_end: val })}
-                    className={`flex-1 py-1.5 text-xs rounded capitalize border transition-colors ${(zone.on_end || 'stop') === val ? (val === 'destroy' ? 'bg-red-600/40 text-red-300 border-red-500/50' : 'bg-emerald-600 text-white border-emerald-500') : 'border-zinc-700 text-zinc-400 hover:text-zinc-200'}`}
-                  >{val}</button>
-                ))}
-              </div>
-              <p className="text-[10px] text-zinc-500 mt-1">
-                <strong className="text-zinc-400">Stop</strong> — plays once per visit, replays on re-entry. &nbsp;
-                <strong className="text-zinc-400">Loop</strong> — repeats. &nbsp;
-                <strong className="text-red-400">Destroy</strong> — plays once, then gone for the session.
-              </p>
-            </div>
-          </div>
+            </>
+          )}
         </div>
       )}
 
