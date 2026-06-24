@@ -311,6 +311,28 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
   const updateTourFields = (updates: Partial<typeof tour>) => {
     if (!tour) return;
     setTour({ ...tour, ...updates });
+    if (updates.progression_resources) {
+      const validIds = new Set(updates.progression_resources.map(resource => resource.id));
+      setZones(prev => prev.map(zone => {
+        const progression_rewards = (zone.progression_rewards || [])
+          .filter(reward => validIds.has(reward.resource_id));
+        const progression_requirements = (zone.progression_requirements || [])
+          .filter(requirement => validIds.has(requirement.resource_id));
+        if (
+          progression_rewards.length === (zone.progression_rewards || []).length &&
+          progression_requirements.length === (zone.progression_requirements || []).length
+        ) return zone;
+        if (!zone.id.startsWith('temp_')) {
+          const existing = pendingZoneUpdatesRef.current.get(zone.id) ?? {};
+          pendingZoneUpdatesRef.current.set(zone.id, {
+            ...existing,
+            progression_rewards,
+            progression_requirements,
+          });
+        }
+        return { ...zone, progression_rewards, progression_requirements };
+      }));
+    }
     setHasUnsavedChanges(true);
   };
 
@@ -343,6 +365,8 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
           lat: tour.lat,
           lng: tour.lng,
           start_zoom: editorMapZoomRef.current,
+          progression_enabled: tour.progression_enabled,
+          progression_resources: tour.progression_resources || [],
         }),
       ]);
       pendingZoneUpdatesRef.current.clear();
@@ -591,6 +615,8 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
               onUpdate={(u) => updateZone(selectedZone.id, u)}
               onDelete={() => deleteZone(selectedZone.id)}
               zonesList={zones}
+              progressionEnabled={tour.progression_enabled === true}
+              progressionResources={tour.progression_resources || []}
             />
             )
           ) : rightPanel === 'tour' && tour ? (

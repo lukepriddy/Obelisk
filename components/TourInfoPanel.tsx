@@ -3,6 +3,7 @@ import { Tour } from '../types';
 import { MAP_STYLES, FONT_STYLES } from '../constants';
 import { uploadImage } from '../services/storageService';
 import { Image, Type, Palette, AlignLeft, AlignCenter, Upload, MapPin, Eye, Settings, Globe, Lock, Loader2, Sun, Moon } from 'lucide-react';
+import { ProgressionSettings } from './ProgressionSettings';
 
 interface TourInfoPanelProps {
   tour: Tour;
@@ -320,6 +321,9 @@ export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({ tour, onUpdate }) 
               <input type="text" className="flex-1 bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm text-white font-mono focus:border-emerald-500 focus:outline-none" value={bg} onChange={(e) => onUpdate({ bg_color: e.target.value })} />
             </div>
           </div>
+
+          {/* Player progression */}
+          <ProgressionSettings tour={tour} onUpdate={onUpdate} />
 
           {/* Visibility */}
           <div>

@@ -1,9 +1,10 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Zone, ZoneExitBehavior, ZoneEndBehavior } from '../types';
+import { ProgressionResource, Zone, ZoneExitBehavior, ZoneEndBehavior } from '../types';
 import { SAMPLE_AUDIO_FILES, VOICES, CHARACTER_TEMPLATES } from '../constants';
 import { uploadAudio, uploadImage } from '../services/storageService';
 import { supabase } from '../services/supabaseClient';
 import { Music, AlertCircle, Clock, Volume2, EyeOff, Radio, PlayCircle, Upload, Link as LinkIcon, FileAudio, ListMusic, Bot, MessageSquare, Lock, Unlock, GitBranch, Bell, Sparkles, KeySquare, ImageIcon, X, Trash2, Play, Pause, Loader2 } from 'lucide-react';
+import { ZoneProgressionSettings } from './ZoneProgressionSettings';
 
 // ── Mini audio preview player ───────────────────────────────────────────────
 const AudioPreview: React.FC<{ url: string; volume?: number }> = ({ url, volume = 1 }) => {
@@ -121,6 +122,8 @@ interface ZoneFormProps {
   onUpdate: (updates: Partial<Zone>) => void;
   onDelete?: () => void;
   zonesList?: Zone[];
+  progressionEnabled?: boolean;
+  progressionResources?: ProgressionResource[];
 }
 
 type AudioSourceType = 'preset' | 'upload' | 'url' | 'ai';
@@ -164,7 +167,14 @@ async function fnErrorMessage(error: unknown, data: { message?: string } | null)
   return null;
 }
 
-export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zonesList }) => {
+export const ZoneForm: React.FC<ZoneFormProps> = ({
+  zone,
+  onUpdate,
+  onDelete,
+  zonesList,
+  progressionEnabled = false,
+  progressionResources = [],
+}) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [sourceType, setSourceType] = useState<AudioSourceType>(() => {
@@ -1067,6 +1077,14 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({ zone, onUpdate, onDelete, zo
           )}
         </div>
       </div>
+
+      {progressionEnabled && progressionResources.length > 0 && (
+        <ZoneProgressionSettings
+          zone={zone}
+          resources={progressionResources}
+          onUpdate={onUpdate}
+        />
+      )}
 
       {/* Delete Zone */}
       {onDelete && (

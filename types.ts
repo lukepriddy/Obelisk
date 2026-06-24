@@ -27,12 +27,48 @@ export interface Tour {
   // Player UI theme — controls chrome colors (bars, cards, sheet)
   // Welcome screen always uses bg_color/text_color regardless of this setting
   player_theme?: 'dark' | 'light';
+
+  // Optional player progression
+  progression_enabled?: boolean;
+  progression_resources?: ProgressionResource[];
 }
 
 export type ZoneExitBehavior = 'pause' | 'stop' | 'keep';
 export type ZoneEndBehavior = 'loop' | 'stop' | 'destroy';
 export type ZoneType = 'audio' | 'character';
 export type ZoneLockType = 'none' | 'passphrase';
+export type ProgressionResourceType = 'currency' | 'item';
+
+export interface ProgressionResource {
+  id: string;
+  name: string;
+  type: ProgressionResourceType;
+  color: string;
+  image_url?: string | null;
+  starting_amount: number;
+  show_in_hud: boolean;
+}
+
+export interface ProgressionReward {
+  resource_id: string;
+  amount: number;
+}
+
+export interface ProgressionRequirement {
+  resource_id: string;
+  amount: number;
+  consume: boolean;
+}
+
+export interface PlayerProgress {
+  version: 1;
+  player_id: string;
+  tour_id: string;
+  balances: Record<string, number>;
+  granted_zone_ids: string[];
+  unlocked_zone_ids: string[];
+  updated_at: string;
+}
 
 export interface Zone {
   id: string;
@@ -75,6 +111,8 @@ export interface Zone {
   lock_passphrase?: string;     // Required passphrase to unlock
   lock_hint?: string;           // Optional hint shown to player
   requires_zone_id?: string | null;    // This zone only activates after the referenced zone is visited
+  progression_rewards?: ProgressionReward[];
+  progression_requirements?: ProgressionRequirement[];
 }
 
 export interface AudioState {

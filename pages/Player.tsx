@@ -4,10 +4,18 @@ import { MapContainer, TileLayer, Marker, Circle, useMap, useMapEvents } from 'r
 import L from 'leaflet';
 import { getTourById, getZonesByTourId, startSession, endSession, recordZoneVisit } from '../services/db';
 import { audioService } from '../services/audioService';
+import {
+  canMeetProgressionRequirements,
+  grantZoneRewards,
+  hasProgressionRequirements,
+  loadPlayerProgress,
+  resetPlayerProgress,
+  unlockProgressionZone,
+} from '../services/progressionService';
 import { getDistance, calculateAttenuation } from '../utils/geo';
-import { Tour, Zone } from '../types';
+import { PlayerProgress, ProgressionReward, Tour, Zone } from '../types';
 import { FONT_STYLES, MAP_STYLES } from '../constants';
-import { PlayCircle, Volume2, Mic, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu, Layers, Locate, RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
+import { PlayCircle, Volume2, Mic, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu, Layers, Locate, RotateCcw, ZoomIn, ZoomOut, Backpack, Gem, Trash2 } from 'lucide-react';
 import { ChatInterface } from '../components/ChatInterface';
 
 // Custom icons
@@ -85,6 +93,11 @@ export const Player: React.FC = () => {
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [welcomeMapInteractive, setWelcomeMapInteractive] = useState(false);
   const welcomeMapRef = useRef<L.Map | null>(null);
+
+  // Optional local-first progression
+  const [playerProgress, setPlayerProgress] = useState<PlayerProgress | null>(null);
+  const playerProgressRef = useRef<PlayerProgress | null>(null);
+  const [showInventory, setShowInventory] = useState(false);
 
   // Character Interaction
   const [activeCharacterZone, setActiveCharacterZone] = useState<Zone | null>(null);
@@ -229,6 +242,11 @@ export const Player: React.FC = () => {
   const isZoneAccessible = (zone: Zone): boolean => {
     if (zone.requires_zone_id && !visitedZoneIdsRef.current.has(zone.requires_zone_id)) return false;
     if (zone.lock_type === 'passphrase' && !unlockedZoneIdsRef.current.has(zone.id)) return false;
+    if (
+      tour?.progression_enabled &&
+      playerProgressRef.current &&
+      !canMeetProgressionRequirements(zone, playerProgressRef.current)
+    ) return false;
     return true;
   };
 
@@ -239,18 +257,52 @@ export const Player: React.FC = () => {
     setVisitedZoneIds(next);
   };
 
+  const applyProgressionForZone = (zone: Zone): ProgressionReward[] => {
+    if (!tour?.progression_enabled || !playerProgressRef.current) return [];
+
+    let next = playerProgressRef.current;
+    if (hasProgressionRequirements(zone)) {
+      next = unlockProgressionZone(zone, next);
+    }
+    const result = grantZoneRewards(zone, next);
+    next = result.progress;
+    playerProgressRef.current = next;
+    setPlayerProgress(next);
+    return result.granted;
+  };
+
+  const rewardMessage = (rewards: ProgressionReward[]) => {
+    const resources = tour?.progression_resources || [];
+    return rewards
+      .map(reward => {
+        const resource = resources.find(item => item.id === reward.resource_id);
+        return resource ? `+${reward.amount} ${resource.name}` : '';
+      })
+      .filter(Boolean)
+      .join(' · ');
+  };
+
+  const completeZoneEntry = (zone: Zone) => {
+    markZoneVisited(zone.id);
+    const rewards = applyProgressionForZone(zone);
+    const messages = [
+      zone.type !== 'character' ? zone.entry_message : '',
+      rewardMessage(rewards),
+    ].filter(Boolean);
+    if (messages.length > 0) showHud(zone.title, messages.join('\n'));
+  };
+
   const handlePassphraseSubmit = () => {
     const zone = passphraseChallenge;
     if (!zone) return;
     const correct = (zone.lock_passphrase || '').trim().toLowerCase();
     if (passphraseInput.trim().toLowerCase() === correct) {
       unlockedZoneIdsRef.current = new Set([...unlockedZoneIdsRef.current, zone.id]);
-      markZoneVisited(zone.id);
+      completeZoneEntry(zone);
       passphraseChallengeRef.current = null;
       setPassphraseChallenge(null);
       setPassphraseInput('');
       setPassphraseError(false);
-      if (zone.entry_message) showHud(zone.title, zone.entry_message);
     } else {
       setPassphraseError(true);
     }
@@ -272,8 +324,12 @@ export const Player: React.FC = () => {
         const dist = getDistance(currentPos[0], currentPos[1], zone.lat, zone.lng);
         const insideZone = dist < zone.radius;
         const prereqMet = !zone.requires_zone_id || visitedZoneIdsRef.current.has(zone.requires_zone_id);
+        const progressionMet =
+          !tour?.progression_enabled ||
+          !playerProgressRef.current ||
+          canMeetProgressionRequirements(zone, playerProgressRef.current);
 
-        if (insideZone && prereqMet) {
+        if (insideZone && prereqMet && progressionMet) {
           currentZoneIds.add(zone.id);
 
           // Zone entry event
@@ -287,8 +343,7 @@ export const Player: React.FC = () => {
                 setPassphraseChallenge(zone);
               }
             } else if (prereqMet) {
-              markZoneVisited(zone.id);
-              if (zone.entry_message && zone.type !== 'character') showHud(zone.title, zone.entry_message);
+              completeZoneEntry(zone);
             }
 
             // Analytics: record first visit to each zone (once per session).
@@ -406,7 +461,7 @@ export const Player: React.FC = () => {
     // activeCharacterZone intentionally excluded — we read it via activeCharZoneRef
     // so the interval doesn't restart on every zone entry/exit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [audioStarted, userPos, zones]);
+  }, [audioStarted, userPos, zones, tour]);
 
   // GPS Watcher
   useEffect(() => {
@@ -445,6 +500,14 @@ export const Player: React.FC = () => {
     const t = await getTourById(id);
     if (!t) { setNotFound(true); setLoading(false); return; }
     setTour(t);
+    if (t.progression_enabled) {
+      const progress = loadPlayerProgress(t.id, t.progression_resources || []);
+      playerProgressRef.current = progress;
+      setPlayerProgress(progress);
+    } else {
+      playerProgressRef.current = null;
+      setPlayerProgress(null);
+    }
     const z = await getZonesByTourId(id);
     setZones(z);
 
@@ -460,7 +523,12 @@ export const Player: React.FC = () => {
   };
 
   const startAudio = async () => {
-    await audioService.init();
+    // Some browsers can leave AudioContext.resume() pending indefinitely.
+    // Never block entry to the experience while the audio engine catches up.
+    await Promise.race([
+      audioService.init(),
+      new Promise<void>(resolve => window.setTimeout(resolve, 1500)),
+    ]);
     zones.filter(z => z.type === 'audio').forEach(z => audioService.loadAudio(z.id, z.media_url));
     setAudioStarted(true);
     // Start analytics session — skip in preview mode so creator test-runs don't pollute data.
@@ -571,6 +639,11 @@ export const Player: React.FC = () => {
              const isActive = activeZones.find(az => az.id === zone.id) || (activeCharacterZone?.id === zone.id);
              if (!zone.is_visible) return null;
              if (zone.requires_zone_id && !visitedZoneIds.has(zone.requires_zone_id)) return null;
+             if (
+               tour.progression_enabled &&
+               playerProgress &&
+               !canMeetProgressionRequirements(zone, playerProgress)
+             ) return null;
 
              const isChar = zone.type === 'character';
              const isLocked = zone.lock_type === 'passphrase';
@@ -1161,6 +1234,90 @@ export const Player: React.FC = () => {
         </div>
       )}
 
+      {/* ── PROGRESSION INVENTORY ── */}
+      {showInventory && tour.progression_enabled && playerProgress && (
+        <div
+          className="absolute inset-0 z-[2500] bg-black/60 backdrop-blur-sm flex items-end justify-center"
+          style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+          onClick={() => setShowInventory(false)}
+        >
+          <div
+            className="w-full max-w-lg rounded-t-3xl shadow-2xl p-6 pb-8"
+            style={{ backgroundColor: th.sheetBg, color: th.sheetText }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="w-10 h-1 rounded-full mx-auto mb-5" style={{ backgroundColor: th.sheetHandle }} />
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center"
+                  style={{ backgroundColor: `${accent}20`, color: accent }}
+                >
+                  <Backpack size={20} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg">Progress</h3>
+                  <p className="text-xs" style={{ color: th.sheetMuted }}>Saved on this device</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowInventory(false)}
+                className="w-9 h-9 flex items-center justify-center rounded-full"
+                style={{ color: th.sheetMuted }}
+                aria-label="Close progress"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {(tour.progression_resources || []).map(resource => (
+                <div
+                  key={resource.id}
+                  className="flex items-center gap-3 py-3 border-b last:border-b-0"
+                  style={{ borderColor: th.sheetBorder }}
+                >
+                  <div
+                    className="w-11 h-11 rounded-xl overflow-hidden flex items-center justify-center shrink-0"
+                    style={{ backgroundColor: `${resource.color || accent}22`, color: resource.color || accent }}
+                  >
+                    {resource.image_url
+                      ? <img src={resource.image_url} alt="" className="w-full h-full object-cover" />
+                      : resource.type === 'item' ? <KeyRound size={19} /> : <Gem size={19} />
+                    }
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm truncate">{resource.name}</p>
+                    <p className="text-[10px] uppercase tracking-wider" style={{ color: th.sheetMuted }}>
+                      {resource.type}
+                    </p>
+                  </div>
+                  <span className="text-xl font-bold tabular-nums">
+                    {playerProgress.balances[resource.id] || 0}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (!window.confirm('Reset all progression for this experience on this device?')) return;
+                const reset = resetPlayerProgress(tour.id, tour.progression_resources || []);
+                playerProgressRef.current = reset;
+                setPlayerProgress(reset);
+                setShowInventory(false);
+              }}
+              className="mt-6 flex items-center justify-center gap-2 w-full py-3 rounded-xl text-xs font-semibold border"
+              style={{ color: th.sheetMuted, borderColor: th.sheetBorder }}
+            >
+              <Trash2 size={13} /> Reset progress
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── PASSPHRASE MODAL ── */}
       {passphraseChallenge && (
         <div className="absolute inset-0 z-[2500] bg-black/70 backdrop-blur-sm flex items-end justify-center animate-in fade-in" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
@@ -1247,6 +1404,36 @@ export const Player: React.FC = () => {
                 <span className={`text-[10px] font-bold uppercase tracking-wide ${simulationMode ? 'text-amber-400' : 'text-emerald-400'}`}>
                   {simulationMode ? 'Sim' : 'GPS'}
                 </span>
+              </button>
+            )}
+            {tour.progression_enabled && playerProgress && (tour.progression_resources || []).length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowInventory(true)}
+                className="h-10 min-w-10 px-2 flex items-center justify-center gap-1.5 rounded-xl active:opacity-60 transition-opacity"
+                style={{ color: accent }}
+                title="Progress and inventory"
+              >
+                {(() => {
+                  const visible = (tour.progression_resources || []).find(resource => resource.show_in_hud);
+                  if (!visible) return <Backpack size={18} />;
+                  return (
+                    <>
+                      <span
+                        className="w-5 h-5 rounded-md overflow-hidden flex items-center justify-center"
+                        style={{ backgroundColor: `${visible.color || accent}22`, color: visible.color || accent }}
+                      >
+                        {visible.image_url
+                          ? <img src={visible.image_url} alt="" className="w-full h-full object-cover" />
+                          : visible.type === 'item' ? <KeyRound size={12} /> : <Gem size={12} />
+                        }
+                      </span>
+                      <span className="text-xs font-bold tabular-nums">
+                        {playerProgress.balances[visible.id] || 0}
+                      </span>
+                    </>
+                  );
+                })()}
               </button>
             )}
             {/* Map style picker */}
