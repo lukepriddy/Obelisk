@@ -685,7 +685,11 @@ export const Player: React.FC = () => {
             {/* ── SCROLL AREA — takes all remaining space between header and footer ── */}
             <div
               className="flex-1 overflow-y-auto"
-              style={{ scrollbarWidth: 'none', overscrollBehavior: 'none' }}
+              style={{
+                backgroundColor: th.sheetBg,
+                scrollbarWidth: 'none',
+                overscrollBehavior: 'none',
+              }}
             >
               <div className="w-full max-w-sm mx-auto px-5 flex flex-col items-center text-center gap-5 py-4">
 
