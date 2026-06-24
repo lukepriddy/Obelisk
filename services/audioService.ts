@@ -47,6 +47,7 @@ export class AudioService {
   public context: AudioContext | null = null;
   private nodes: Map<string, NodeData> = new Map();
   private isUnlocked = false;
+  private interruptionPaused = false;
 
   constructor() {
     const AudioContextClass = (window.AudioContext || (window as any).webkitAudioContext);
@@ -72,6 +73,7 @@ export class AudioService {
   async init() {
     await this.resumeContext();
     this.isUnlocked = true;
+    this.interruptionPaused = false;
   }
 
   async resume() {
@@ -79,6 +81,7 @@ export class AudioService {
   }
 
   prepareForInterruption() {
+    this.interruptionPaused = true;
     this.nodes.forEach(nodeData => {
       if (!nodeData.hasStarted || nodeData.destroyed || nodeData.played) return;
       this.cancelFade(nodeData);
@@ -173,6 +176,7 @@ export class AudioService {
    */
   async restartActiveAudioFromBeginning(): Promise<boolean> {
     if (!this.isUnlocked) return false;
+    this.interruptionPaused = false;
 
     const AudioContextClass = (window.AudioContext || (window as any).webkitAudioContext);
     const oldContext = this.context;
@@ -262,13 +266,18 @@ export class AudioService {
         this.fadeTo(nodeData, nodeData.desiredVolume, 0.25);
       }
     });
-    if (newContext && newContext.state !== 'running') return false;
+    if (newContext && newContext.state !== 'running') {
+      this.interruptionPaused = true;
+      return false;
+    }
     if (activeCount === 0) return true;
 
     await new Promise<void>(resolve => window.setTimeout(resolve, 350));
-    return [...rebuiltNodes.values()].filter(nodeData => nodeData.isInside && nodeData.hasStarted).every(nodeData =>
+    const recovered = [...rebuiltNodes.values()].filter(nodeData => nodeData.isInside && nodeData.hasStarted).every(nodeData =>
       !nodeData.audioEl.paused && nodeData.audioEl.currentTime > 0.03
     );
+    this.interruptionPaused = !recovered;
+    return recovered;
   }
 
   hasActiveAudio() {
@@ -448,6 +457,7 @@ export class AudioService {
       const justEntered = !nodeData.isInside;
       nodeData.isInside = true;
       nodeData.desiredVolume = volume;
+      if (this.interruptionPaused) return;
 
       // A keep-playing track may still be advancing silently outside the zone.
       // Fade it back up immediately when the player returns.
@@ -541,6 +551,7 @@ export class AudioService {
     });
     this.nodes.clear();
     this.isUnlocked = false;
+    this.interruptionPaused = false;
   }
 }
 

@@ -475,42 +475,22 @@ export const Player: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audioStarted, userPos, zones, tour]);
 
-  // iOS interrupts Web Audio when Safari is backgrounded or the phone locks.
-  // Recover automatically when the page becomes active again. Short retries
-  // cover the interval where Safari is visible but its audio session is not yet ready.
+  // Safari audio remains intentionally paused after backgrounding or locking.
+  // When the player returns, wait for an explicit tap before rebuilding and
+  // restarting active zone audio.
   useEffect(() => {
     if (!audioStarted) return;
-    let recoveryRun = 0;
-    let cancelled = false;
-    let wasBackgrounded = false;
+    let interruptedActiveAudio = false;
 
-    const recoverAudio = () => {
-      if (document.visibilityState !== 'visible' || !wasBackgrounded) return;
-      wasBackgrounded = false;
-      const run = ++recoveryRun;
-      const hadActiveAudio = audioService.hasActiveAudio();
-      void (async () => {
-        for (const delay of [0, 400, 1200]) {
-          if (delay > 0) {
-            await new Promise<void>(resolve => window.setTimeout(resolve, delay));
-          }
-          if (cancelled || run !== recoveryRun || document.visibilityState !== 'visible') return;
-          const recovered = await audioService.recoverFromInterruption();
-          if (recovered) {
-            break;
-          }
-        }
-        // Safari can advance currentTime while its Web Audio output remains
-        // silent. If audio was active before backgrounding, always offer the
-        // explicit audio-graph rebuild even when automatic recovery looks healthy.
-        if (!cancelled && run === recoveryRun && hadActiveAudio) {
-          setShowAudioResume(true);
-        }
-      })();
+    const showRecoveryWhenVisible = () => {
+      if (document.visibilityState !== 'visible' || !interruptedActiveAudio) return;
+      interruptedActiveAudio = false;
+      setShowAudioResume(true);
     };
 
     const markBackgrounded = () => {
-      wasBackgrounded = true;
+      interruptedActiveAudio =
+        interruptedActiveAudio || audioService.hasActiveAudio();
       audioService.prepareForInterruption();
     };
     const handleVisibility = () => {
@@ -518,36 +498,33 @@ export const Player: React.FC = () => {
         markBackgrounded();
         return;
       }
-      recoverAudio();
+      showRecoveryWhenVisible();
     };
 
     document.addEventListener('visibilitychange', handleVisibility);
     window.addEventListener('pagehide', markBackgrounded);
-    window.addEventListener('pageshow', recoverAudio);
-    window.addEventListener('focus', recoverAudio);
+    window.addEventListener('pageshow', showRecoveryWhenVisible);
+    window.addEventListener('focus', showRecoveryWhenVisible);
 
     return () => {
-      cancelled = true;
-      recoveryRun += 1;
       document.removeEventListener('visibilitychange', handleVisibility);
       window.removeEventListener('pagehide', markBackgrounded);
-      window.removeEventListener('pageshow', recoverAudio);
-      window.removeEventListener('focus', recoverAudio);
+      window.removeEventListener('pageshow', showRecoveryWhenVisible);
+      window.removeEventListener('focus', showRecoveryWhenVisible);
     };
   }, [audioStarted]);
 
   useEffect(() => {
-    if (!showAudioResume) return;
-    const timer = window.setTimeout(() => setShowAudioResume(false), 12000);
-    return () => window.clearTimeout(timer);
-  }, [showAudioResume]);
+    if (showAudioResume && activeZones.length === 0) setShowAudioResume(false);
+  }, [showAudioResume, activeZones.length]);
 
   const handleTappedAudioResume = async () => {
     if (resumingAudio) return;
     setShowAudioResume(false);
     setResumingAudio(true);
-    await audioService.restartActiveAudioFromBeginning();
+    const recovered = await audioService.restartActiveAudioFromBeginning();
     setResumingAudio(false);
+    if (!recovered) setShowAudioResume(true);
   };
 
   // GPS Watcher
