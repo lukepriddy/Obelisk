@@ -53,7 +53,8 @@ export class AudioService {
   }
 
   private async resumeContext() {
-    if (!this.context || this.context.state === 'running' || this.context.state === 'closed') return;
+    if (!this.context || this.context.state === 'running') return true;
+    if (this.context.state === 'closed') return false;
     try {
       await Promise.race([
         this.context.resume(),
@@ -62,6 +63,7 @@ export class AudioService {
     } catch (error) {
       console.warn('Audio context resume failed:', error);
     }
+    return this.context.state === 'running';
   }
 
   async init() {
@@ -77,11 +79,12 @@ export class AudioService {
    * Restore playback after iOS interrupts the page audio session when Safari
    * is backgrounded or the device is locked. Playback position is preserved.
    */
-  async recoverFromInterruption() {
-    if (!this.isUnlocked) return;
-    await this.resumeContext();
+  async recoverFromInterruption(): Promise<boolean> {
+    if (!this.isUnlocked) return true;
+    const contextRunning = await this.resumeContext();
 
     const recoveries: Promise<void>[] = [];
+    const playbackChecks: { nodeData: NodeData; startTime: number }[] = [];
     this.nodes.forEach((nodeData, zoneId) => {
       const { audioEl } = nodeData;
       const shouldAdvance =
@@ -90,6 +93,15 @@ export class AudioService {
       if (shouldAdvance && nodeData.hasStarted && nodeData.playTimer) {
         clearTimeout(nodeData.playTimer);
         nodeData.playTimer = null;
+      }
+      if (
+        shouldAdvance &&
+        nodeData.hasStarted &&
+        !nodeData.destroyed &&
+        !nodeData.played &&
+        !audioEl.ended
+      ) {
+        playbackChecks.push({ nodeData, startTime: audioEl.currentTime });
       }
       if (
         !shouldAdvance ||
@@ -117,6 +129,66 @@ export class AudioService {
     });
 
     await Promise.all(recoveries);
+    if (!contextRunning) return false;
+    if (playbackChecks.length === 0) return true;
+
+    await new Promise<void>(resolve => window.setTimeout(resolve, 450));
+    return playbackChecks.every(({ nodeData, startTime }) =>
+      !nodeData.audioEl.paused &&
+      nodeData.audioEl.currentTime > startTime + 0.03
+    );
+  }
+
+  /**
+   * User-gesture fallback for iOS. Restart active zone audio from the beginning
+   * so the player never returns halfway through a clip after unlocking.
+   */
+  async restartActiveAudioFromBeginning(): Promise<boolean> {
+    if (!this.isUnlocked) return false;
+
+    // Call resume() and play() synchronously within the originating tap. Safari
+    // may reject either call once the user-activation window has passed.
+    const contextResume = this.context && this.context.state !== 'running'
+      ? this.context.resume().catch(error => {
+          console.warn('Tapped audio context resume failed:', error);
+        })
+      : Promise.resolve();
+
+    const activeNodes: NodeData[] = [];
+    const playAttempts: Promise<void>[] = [];
+    this.nodes.forEach((nodeData, zoneId) => {
+      if (
+        !nodeData.isInside ||
+        nodeData.destroyed ||
+        nodeData.played ||
+        nodeData.audioEl.ended
+      ) return;
+      activeNodes.push(nodeData);
+      if (nodeData.playTimer) {
+        clearTimeout(nodeData.playTimer);
+        nodeData.playTimer = null;
+      }
+      this.cancelFade(nodeData);
+      nodeData.audioEl.pause();
+      try { nodeData.audioEl.currentTime = 0; } catch { /* metadata may not be ready */ }
+      nodeData.played = false;
+      nodeData.hasStarted = true;
+      this.setNodeVolume(nodeData, nodeData.desiredVolume);
+      playAttempts.push(
+        nodeData.audioEl.play().catch(error => {
+          console.warn(`Tapped zone audio restart failed (${zoneId}):`, error);
+        }),
+      );
+    });
+
+    await Promise.all([contextResume, ...playAttempts]);
+    if (this.context && this.context.state !== 'running') return false;
+    if (activeNodes.length === 0) return true;
+
+    await new Promise<void>(resolve => window.setTimeout(resolve, 350));
+    return activeNodes.every(nodeData =>
+      !nodeData.audioEl.paused && nodeData.audioEl.currentTime > 0.03
+    );
   }
 
   /**

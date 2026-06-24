@@ -84,6 +84,8 @@ export const Player: React.FC = () => {
   const [notFound, setNotFound] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [audioStarted, setAudioStarted] = useState(false);
+  const [showAudioResume, setShowAudioResume] = useState(false);
+  const [resumingAudio, setResumingAudio] = useState(false);
   const [simulationMode, setSimulationMode] = useState(isPreview);
   const [activeZones, setActiveZones] = useState<{id: string, title: string, volume: number, replayable: boolean}[]>([]);
   const [activeMediaZone, setActiveMediaZone] = useState<Zone | null>(null);
@@ -478,16 +480,26 @@ export const Player: React.FC = () => {
   // cover the interval where Safari is visible but its audio session is not yet ready.
   useEffect(() => {
     if (!audioStarted) return;
-    let retryTimers: number[] = [];
+    let recoveryRun = 0;
+    let cancelled = false;
 
     const recoverAudio = () => {
       if (document.visibilityState !== 'visible') return;
-      retryTimers.forEach(timer => window.clearTimeout(timer));
-      retryTimers = [0, 300, 1200].map(delay =>
-        window.setTimeout(() => {
-          void audioService.recoverFromInterruption();
-        }, delay)
-      );
+      const run = ++recoveryRun;
+      void (async () => {
+        for (const delay of [0, 400, 1200]) {
+          if (delay > 0) {
+            await new Promise<void>(resolve => window.setTimeout(resolve, delay));
+          }
+          if (cancelled || run !== recoveryRun || document.visibilityState !== 'visible') return;
+          const recovered = await audioService.recoverFromInterruption();
+          if (recovered) {
+            setShowAudioResume(false);
+            return;
+          }
+        }
+        if (!cancelled && run === recoveryRun) setShowAudioResume(true);
+      })();
     };
 
     document.addEventListener('visibilitychange', recoverAudio);
@@ -495,12 +507,21 @@ export const Player: React.FC = () => {
     window.addEventListener('focus', recoverAudio);
 
     return () => {
-      retryTimers.forEach(timer => window.clearTimeout(timer));
+      cancelled = true;
+      recoveryRun += 1;
       document.removeEventListener('visibilitychange', recoverAudio);
       window.removeEventListener('pageshow', recoverAudio);
       window.removeEventListener('focus', recoverAudio);
     };
   }, [audioStarted]);
+
+  const handleTappedAudioResume = async () => {
+    if (resumingAudio) return;
+    setResumingAudio(true);
+    const recovered = await audioService.restartActiveAudioFromBeginning();
+    setResumingAudio(false);
+    if (recovered) setShowAudioResume(false);
+  };
 
   // GPS Watcher
   useEffect(() => {
@@ -562,6 +583,7 @@ export const Player: React.FC = () => {
   };
 
   const startAudio = async () => {
+    setShowAudioResume(false);
     // Some browsers can leave AudioContext.resume() pending indefinitely.
     // Never block entry to the experience while the audio engine catches up.
     await Promise.race([
@@ -1249,6 +1271,45 @@ export const Player: React.FC = () => {
       )}
 
       {/* ── HUD NOTIFICATION — drops below top bar ── */}
+      {showAudioResume && audioStarted && (
+        <div
+          className="absolute left-4 right-4 z-[1700] animate-in slide-in-from-top-4 duration-300"
+          style={{ top: `calc(${TOP_BAR + 12}px + env(safe-area-inset-top, 0px))` }}
+        >
+          <div
+            className="max-w-sm mx-auto backdrop-blur-xl rounded-2xl shadow-2xl p-3 flex items-center gap-3"
+            style={{
+              backgroundColor: th.hudBg,
+              border: `1px solid ${accent}55`,
+              boxShadow: `0 10px 35px rgba(0,0,0,0.45), 0 0 20px ${accent}18`,
+            }}
+          >
+            <div
+              className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+              style={{ backgroundColor: `${accent}20`, color: accent }}
+            >
+              <Volume2 size={19} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-bold" style={{ color: th.hudText }}>Audio paused</div>
+              <p className="text-[11px] leading-snug mt-0.5" style={{ color: th.barMuted }}>
+                iOS paused this experience while the screen was locked.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleTappedAudioResume}
+              disabled={resumingAudio}
+              className="h-10 px-3 rounded-xl text-white text-xs font-bold flex items-center gap-1.5 shrink-0 active:scale-95 transition-transform disabled:opacity-60"
+              style={{ backgroundColor: accent }}
+            >
+              <PlayCircle size={15} />
+              {resumingAudio ? 'Starting...' : 'Tap to resume'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {hudNotification && (
         <div
           className="absolute left-4 right-4 z-[1500] animate-in slide-in-from-top-4 duration-300"
@@ -1429,7 +1490,11 @@ export const Player: React.FC = () => {
 
           {audioStarted ? (
             <button
-              onClick={() => { audioService.stopAll(); setAudioStarted(false); }}
+              onClick={() => {
+                audioService.stopAll();
+                setShowAudioResume(false);
+                setAudioStarted(false);
+              }}
               className="w-10 h-10 flex items-center justify-center rounded-xl shrink-0 active:opacity-60 transition-opacity"
               style={{ color: th.barMuted }}
             >
