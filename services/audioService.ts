@@ -82,15 +82,16 @@ export class AudioService {
     this.nodes.forEach(nodeData => {
       if (!nodeData.hasStarted || nodeData.destroyed || nodeData.played) return;
       this.cancelFade(nodeData);
+      // This must be synchronous: iOS may suspend JavaScript immediately after
+      // visibilitychange/pagehide. Mute before pause to avoid an output click.
       if (nodeData.gainNode && this.context) {
         const now = this.context.currentTime;
         nodeData.gainNode.gain.cancelScheduledValues(now);
-        nodeData.gainNode.gain.setValueAtTime(nodeData.currentVolume, now);
-        nodeData.gainNode.gain.linearRampToValueAtTime(0, now + 0.08);
-        nodeData.currentVolume = 0;
-      } else {
-        this.fadeTo(nodeData, 0, 0.08);
+        nodeData.gainNode.gain.setValueAtTime(0, now);
       }
+      nodeData.audioEl.volume = 0;
+      nodeData.currentVolume = 0;
+      nodeData.audioEl.pause();
     });
   }
 

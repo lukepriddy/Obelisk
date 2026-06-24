@@ -509,15 +509,17 @@ export const Player: React.FC = () => {
       })();
     };
 
+    const markBackgrounded = () => {
+      wasBackgrounded = true;
+      audioService.prepareForInterruption();
+    };
     const handleVisibility = () => {
       if (document.visibilityState === 'hidden') {
-        wasBackgrounded = true;
-        audioService.prepareForInterruption();
+        markBackgrounded();
         return;
       }
       recoverAudio();
     };
-    const markBackgrounded = () => { wasBackgrounded = true; };
 
     document.addEventListener('visibilitychange', handleVisibility);
     window.addEventListener('pagehide', markBackgrounded);
