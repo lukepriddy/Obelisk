@@ -23,6 +23,8 @@ interface NodeData {
   currentVolume: number;
   desiredVolume: number;
   isInside: boolean;
+  exitBehavior: 'stop' | 'pause' | 'keep';
+  hasStarted: boolean;
 }
 
 // Audio waits this long after the player enters a zone before starting, so the
@@ -50,17 +52,71 @@ export class AudioService {
     }
   }
 
-  async init() {
-    if (this.context?.state === 'suspended') {
-      await this.context.resume();
+  private async resumeContext() {
+    if (!this.context || this.context.state === 'running' || this.context.state === 'closed') return;
+    try {
+      await Promise.race([
+        this.context.resume(),
+        new Promise<void>(resolve => window.setTimeout(resolve, 1200)),
+      ]);
+    } catch (error) {
+      console.warn('Audio context resume failed:', error);
     }
+  }
+
+  async init() {
+    await this.resumeContext();
     this.isUnlocked = true;
   }
 
   async resume() {
-    if (this.context?.state === 'suspended') {
-      await this.context.resume();
-    }
+    await this.resumeContext();
+  }
+
+  /**
+   * Restore playback after iOS interrupts the page audio session when Safari
+   * is backgrounded or the device is locked. Playback position is preserved.
+   */
+  async recoverFromInterruption() {
+    if (!this.isUnlocked) return;
+    await this.resumeContext();
+
+    const recoveries: Promise<void>[] = [];
+    this.nodes.forEach((nodeData, zoneId) => {
+      const { audioEl } = nodeData;
+      const shouldAdvance =
+        nodeData.isInside ||
+        (nodeData.exitBehavior === 'keep' && audioEl.currentTime > 0);
+      if (shouldAdvance && nodeData.hasStarted && nodeData.playTimer) {
+        clearTimeout(nodeData.playTimer);
+        nodeData.playTimer = null;
+      }
+      if (
+        !shouldAdvance ||
+        nodeData.destroyed ||
+        nodeData.played ||
+        nodeData.playTimer ||
+        !nodeData.hasStarted ||
+        audioEl.ended ||
+        !audioEl.paused
+      ) return;
+
+      recoveries.push(
+        audioEl.play()
+          .then(() => {
+            this.cancelFade(nodeData);
+            this.setNodeVolume(
+              nodeData,
+              nodeData.isInside ? nodeData.desiredVolume : 0,
+            );
+          })
+          .catch(error => {
+            console.warn(`Zone audio recovery failed (${zoneId}):`, error);
+          }),
+      );
+    });
+
+    await Promise.all(recoveries);
   }
 
   /**
@@ -108,6 +164,8 @@ export class AudioService {
         currentVolume: 0,
         desiredVolume: 0,
         isInside: false,
+        exitBehavior: 'stop',
+        hasStarted: false,
       });
     } catch (e) {
       console.error(`Failed to set up audio for zone ${zoneId}:`, e);
@@ -166,6 +224,7 @@ export class AudioService {
     if (!audioEl.paused) audioEl.pause();
     if (exitBehavior === 'stop') {
       try { audioEl.currentTime = 0; } catch { /* metadata may not be ready */ }
+      nodeData.hasStarted = false;
     }
     nodeData.played = false;
   }
@@ -186,6 +245,7 @@ export class AudioService {
       if (!nodeData) return;
 
       const { audioEl } = nodeData;
+      nodeData.exitBehavior = zone.exitBehavior ?? 'stop';
 
       // Destroyed zones stay silent for the session.
       if (nodeData.destroyed) {
@@ -205,7 +265,7 @@ export class AudioService {
           clearTimeout(nodeData.playTimer);
           nodeData.playTimer = null;
         }
-        const exit = zone.exitBehavior ?? 'stop';
+        const exit = nodeData.exitBehavior;
         if (justExited) {
           this.fadeTo(nodeData, 0, Number(zone.fadeOut) || 0, () => {
             this.finishExit(nodeData, exit);
@@ -258,6 +318,7 @@ export class AudioService {
   ) {
     const { audioEl } = nodeData;
     audioEl.loop = loop;
+    nodeData.hasStarted = true;
     this.setNodeVolume(nodeData, 0);
     audioEl.play().catch(e => console.warn(`Zone audio play failed (${zoneId}):`, e));
     this.fadeTo(nodeData, nodeData.desiredVolume, fadeIn);

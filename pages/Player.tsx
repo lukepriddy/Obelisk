@@ -473,6 +473,35 @@ export const Player: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audioStarted, userPos, zones, tour]);
 
+  // iOS interrupts Web Audio when Safari is backgrounded or the phone locks.
+  // Recover automatically when the page becomes active again. Short retries
+  // cover the interval where Safari is visible but its audio session is not yet ready.
+  useEffect(() => {
+    if (!audioStarted) return;
+    let retryTimers: number[] = [];
+
+    const recoverAudio = () => {
+      if (document.visibilityState !== 'visible') return;
+      retryTimers.forEach(timer => window.clearTimeout(timer));
+      retryTimers = [0, 300, 1200].map(delay =>
+        window.setTimeout(() => {
+          void audioService.recoverFromInterruption();
+        }, delay)
+      );
+    };
+
+    document.addEventListener('visibilitychange', recoverAudio);
+    window.addEventListener('pageshow', recoverAudio);
+    window.addEventListener('focus', recoverAudio);
+
+    return () => {
+      retryTimers.forEach(timer => window.clearTimeout(timer));
+      document.removeEventListener('visibilitychange', recoverAudio);
+      window.removeEventListener('pageshow', recoverAudio);
+      window.removeEventListener('focus', recoverAudio);
+    };
+  }, [audioStarted]);
+
   // GPS Watcher
   useEffect(() => {
     if (simulationMode) return;
