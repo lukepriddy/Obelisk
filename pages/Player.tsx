@@ -26,6 +26,8 @@ const UserIcon = L.divIcon({
   iconAnchor: [8, 8]
 });
 
+const PLAYER_MAP_STYLE_ORDER = ['satellite', 'voyager', 'dark', 'light'] as const;
+
 // Map controller — only re-centers when `enabled` (user hasn't manually panned away).
 const MapRecenter = ({ lat, lng, enabled }: { lat: number; lng: number; enabled: boolean }) => {
   const map = useMap();
@@ -234,10 +236,35 @@ export const Player: React.FC = () => {
 
     if (!shouldAccept) return;
 
-    gpsFixRef.current = { pos: newPos, accuracy, timestamp: now };
-    setUserPos(newPos);
+    let acceptedPos = newPos;
+    if (prev) {
+      const movement = getDistance(
+        prev.pos[0],
+        prev.pos[1],
+        newPos[0],
+        newPos[1],
+      );
+      const jitterRadius = Math.max(
+        3,
+        Math.min(prev.accuracy, accuracy) * 0.45,
+      );
+
+      // GPS fixes wander slightly even when the phone is stationary. Smooth
+      // movement inside the current accuracy envelope while allowing larger,
+      // deliberate movement to update immediately.
+      if (movement < jitterRadius && now - prev.timestamp < 8000) {
+        const smoothing = 0.22;
+        acceptedPos = [
+          prev.pos[0] + (newPos[0] - prev.pos[0]) * smoothing,
+          prev.pos[1] + (newPos[1] - prev.pos[1]) * smoothing,
+        ];
+      }
+    }
+
+    gpsFixRef.current = { pos: acceptedPos, accuracy, timestamp: now };
+    setUserPos(acceptedPos);
     setGpsAccuracy(Number.isFinite(accuracy) ? accuracy : null);
-    simPosRef.current = newPos;
+    simPosRef.current = acceptedPos;
     setGpsError(null);
   };
 
@@ -517,6 +544,12 @@ export const Player: React.FC = () => {
   useEffect(() => {
     if (showAudioResume && activeZones.length === 0) setShowAudioResume(false);
   }, [showAudioResume, activeZones.length]);
+
+  useEffect(() => {
+    if (!showAudioResume) return;
+    const timer = window.setTimeout(() => setShowAudioResume(false), 12000);
+    return () => window.clearTimeout(timer);
+  }, [showAudioResume]);
 
   const handleTappedAudioResume = async () => {
     if (resumingAudio) return;
@@ -1192,9 +1225,22 @@ export const Player: React.FC = () => {
                 boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
               }}
             >
-              <div className="flex items-center gap-2 mb-1.5">
-                <Volume2 className="animate-pulse shrink-0" size={12} style={{ color: accent }} />
-                <span className="font-bold uppercase text-[9px] tracking-widest" style={{ color: accent }}>Now Playing</span>
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Volume2 className="animate-pulse shrink-0" size={12} style={{ color: accent }} />
+                  <span className="font-bold uppercase text-[9px] tracking-widest" style={{ color: accent }}>Now Playing</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleTappedAudioResume}
+                  disabled={resumingAudio}
+                  className="w-7 h-7 -my-1 flex items-center justify-center rounded-lg active:opacity-60 disabled:opacity-40"
+                  style={{ color: th.cardMuted }}
+                  aria-label="Restart audio"
+                  title="Restart audio"
+                >
+                  <RotateCcw size={12} className={resumingAudio ? 'animate-spin' : ''} />
+                </button>
               </div>
               <div className="space-y-1">
                 {activeZones.map((az, idx) => (
@@ -1361,7 +1407,10 @@ export const Player: React.FC = () => {
               <div className="w-10 h-1 rounded-full" style={{ backgroundColor: th.sheetHandle }} />
             </div>
 
-            <div className="px-6 pt-3 pb-6 overflow-y-auto overscroll-contain">
+            <div
+              className="px-6 pt-3 overflow-y-auto overscroll-contain"
+              style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 88px)' }}
+            >
               <div className="flex items-center justify-between mb-5">
                 <div className="flex items-center gap-3">
                   <div
@@ -1571,7 +1620,8 @@ export const Player: React.FC = () => {
                   className="absolute right-0 top-full rounded-2xl shadow-2xl overflow-hidden z-[2000] w-36"
                   style={{ backgroundColor: th.cardBg, border: `1px solid ${th.cardBorder}` }}
                 >
-                  {Object.entries(MAP_STYLES).map(([key, val]) => {
+                  {PLAYER_MAP_STYLE_ORDER.map(key => {
+                    const val = MAP_STYLES[key];
                     const active = (mapStyleOverride || tour?.map_style || 'dark') === key;
                     return (
                       <button
