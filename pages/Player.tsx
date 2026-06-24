@@ -314,7 +314,15 @@ export const Player: React.FC = () => {
 
     const interval = setInterval(() => {
       const currentPos = simPosRef.current || userPos;
-      const audioUpdates: { id: string; volume: number; loop?: boolean; destroyOnEnd?: boolean; exitBehavior?: 'stop' | 'pause' | 'keep' }[] = [];
+      const audioUpdates: {
+        id: string;
+        volume: number;
+        loop?: boolean;
+        destroyOnEnd?: boolean;
+        exitBehavior?: 'stop' | 'pause' | 'keep';
+        fadeIn?: number;
+        fadeOut?: number;
+      }[] = [];
       const activeState: { id: string; title: string; volume: number; replayable: boolean }[] = [];
       let foundCharZone: Zone | null = null;
       let foundMediaZone: Zone | null = null;
@@ -396,6 +404,8 @@ export const Player: React.FC = () => {
             loop: zone.on_end === 'loop',
             destroyOnEnd: zone.on_end === 'destroy',
             exitBehavior: zone.on_exit,
+            fadeIn: zone.fade_in,
+            fadeOut: zone.fade_out,
           });
         }
       });
@@ -1241,82 +1251,91 @@ export const Player: React.FC = () => {
       {showInventory && tour.progression_enabled && playerProgress && (
         <div
           className="absolute inset-0 z-[2500] bg-black/60 backdrop-blur-sm flex items-end justify-center"
-          style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
           onClick={() => setShowInventory(false)}
         >
           <div
-            className="w-full max-w-lg rounded-t-3xl shadow-2xl p-6 pb-8"
-            style={{ backgroundColor: th.sheetBg, color: th.sheetText }}
+            className="w-full max-w-lg flex flex-col rounded-t-3xl shadow-2xl overflow-hidden"
+            style={{
+              backgroundColor: th.sheetBg,
+              color: th.sheetText,
+              maxHeight: 'calc(100dvh - 72px)',
+              paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+            }}
             onClick={e => e.stopPropagation()}
           >
-            <div className="w-10 h-1 rounded-full mx-auto mb-5" style={{ backgroundColor: th.sheetHandle }} />
-            <div className="flex items-center justify-between mb-5">
-              <div className="flex items-center gap-3">
-                <div
-                  className="w-10 h-10 rounded-xl flex items-center justify-center"
-                  style={{ backgroundColor: `${accent}20`, color: accent }}
+            <div className="flex flex-col items-center pt-3 pb-1 shrink-0">
+              <div className="w-10 h-1 rounded-full" style={{ backgroundColor: th.sheetHandle }} />
+            </div>
+
+            <div className="px-6 pt-3 pb-6 overflow-y-auto overscroll-contain">
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-3">
+                  <div
+                    className="w-10 h-10 rounded-xl flex items-center justify-center"
+                    style={{ backgroundColor: `${accent}20`, color: accent }}
+                  >
+                    <Backpack size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-lg">Progress</h3>
+                    <p className="text-xs" style={{ color: th.sheetMuted }}>Saved on this device</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowInventory(false)}
+                  className="w-9 h-9 flex items-center justify-center rounded-full"
+                  style={{ color: th.sheetMuted }}
+                  aria-label="Close progress"
                 >
-                  <Backpack size={20} />
-                </div>
-                <div>
-                  <h3 className="font-bold text-lg">Progress</h3>
-                  <p className="text-xs" style={{ color: th.sheetMuted }}>Saved on this device</p>
-                </div>
+                  <X size={18} />
+                </button>
               </div>
+
+              <div className="space-y-2">
+                {(tour.progression_resources || []).map(resource => (
+                  <div
+                    key={resource.id}
+                    className="flex items-center gap-3 py-3 border-b last:border-b-0"
+                    style={{ borderColor: th.sheetBorder }}
+                  >
+                    <div
+                      className="w-11 h-11 rounded-xl overflow-hidden flex items-center justify-center shrink-0"
+                      style={{ backgroundColor: `${resource.color || accent}22`, color: resource.color || accent }}
+                    >
+                      {resource.image_url
+                        ? <img src={resource.image_url} alt="" className="w-full h-full object-contain p-1" />
+                        : resource.type === 'item' ? <KeyRound size={19} /> : <Gem size={19} />
+                      }
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm truncate">{resource.name}</p>
+                      <p className="text-[10px] uppercase tracking-wider" style={{ color: th.sheetMuted }}>
+                        {resource.type}
+                      </p>
+                    </div>
+                    <span className="text-xl font-bold tabular-nums">
+                      {playerProgress.balances[resource.id] || 0}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
               <button
                 type="button"
-                onClick={() => setShowInventory(false)}
-                className="w-9 h-9 flex items-center justify-center rounded-full"
-                style={{ color: th.sheetMuted }}
-                aria-label="Close progress"
+                onClick={() => {
+                  if (!window.confirm('Reset all progression for this experience on this device?')) return;
+                  const reset = resetPlayerProgress(tour.id, tour.progression_resources || []);
+                  playerProgressRef.current = reset;
+                  setPlayerProgress(reset);
+                  setShowInventory(false);
+                }}
+                className="mt-6 flex items-center justify-center gap-2 w-full py-3 rounded-xl text-xs font-semibold border"
+                style={{ color: th.sheetMuted, borderColor: th.sheetBorder }}
               >
-                <X size={18} />
+                <Trash2 size={13} /> Reset progress
               </button>
             </div>
-
-            <div className="space-y-2">
-              {(tour.progression_resources || []).map(resource => (
-                <div
-                  key={resource.id}
-                  className="flex items-center gap-3 py-3 border-b last:border-b-0"
-                  style={{ borderColor: th.sheetBorder }}
-                >
-                  <div
-                    className="w-11 h-11 rounded-xl overflow-hidden flex items-center justify-center shrink-0"
-                    style={{ backgroundColor: `${resource.color || accent}22`, color: resource.color || accent }}
-                  >
-                    {resource.image_url
-                      ? <img src={resource.image_url} alt="" className="w-full h-full object-contain p-1" />
-                      : resource.type === 'item' ? <KeyRound size={19} /> : <Gem size={19} />
-                    }
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm truncate">{resource.name}</p>
-                    <p className="text-[10px] uppercase tracking-wider" style={{ color: th.sheetMuted }}>
-                      {resource.type}
-                    </p>
-                  </div>
-                  <span className="text-xl font-bold tabular-nums">
-                    {playerProgress.balances[resource.id] || 0}
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                if (!window.confirm('Reset all progression for this experience on this device?')) return;
-                const reset = resetPlayerProgress(tour.id, tour.progression_resources || []);
-                playerProgressRef.current = reset;
-                setPlayerProgress(reset);
-                setShowInventory(false);
-              }}
-              className="mt-6 flex items-center justify-center gap-2 w-full py-3 rounded-xl text-xs font-semibold border"
-              style={{ color: th.sheetMuted, borderColor: th.sheetBorder }}
-            >
-              <Trash2 size={13} /> Reset progress
-            </button>
           </div>
         </div>
       )}

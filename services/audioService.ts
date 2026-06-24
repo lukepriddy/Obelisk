@@ -18,6 +18,11 @@ interface NodeData {
   destroyed: boolean;
   /** Pending 2-second entry delay timer, or null when idle. */
   playTimer: ReturnType<typeof setTimeout> | null;
+  /** Active volume fade timer, or null when volume is stable. */
+  fadeTimer: ReturnType<typeof setInterval> | null;
+  currentVolume: number;
+  desiredVolume: number;
+  isInside: boolean;
 }
 
 // Audio waits this long after the player enters a zone before starting, so the
@@ -91,7 +96,19 @@ export class AudioService {
         }
       }
 
-      this.nodes.set(zoneId, { audioEl, sourceNode, gainNode, url, played: false, destroyed: false, playTimer: null });
+      this.nodes.set(zoneId, {
+        audioEl,
+        sourceNode,
+        gainNode,
+        url,
+        played: false,
+        destroyed: false,
+        playTimer: null,
+        fadeTimer: null,
+        currentVolume: 0,
+        desiredVolume: 0,
+        isInside: false,
+      });
     } catch (e) {
       console.error(`Failed to set up audio for zone ${zoneId}:`, e);
     }
@@ -103,9 +120,65 @@ export class AudioService {
     if (nodeData.gainNode) {
       nodeData.gainNode.gain.value = clamped;
     }
+    nodeData.currentVolume = clamped;
   }
 
-  updateVolumes(zones: { id: string; volume: number; loop?: boolean; destroyOnEnd?: boolean; exitBehavior?: 'stop' | 'pause' | 'keep' }[]) {
+  private cancelFade(nodeData: NodeData) {
+    if (!nodeData.fadeTimer) return;
+    clearInterval(nodeData.fadeTimer);
+    nodeData.fadeTimer = null;
+  }
+
+  private fadeTo(
+    nodeData: NodeData,
+    target: number,
+    durationSeconds: number,
+    onComplete?: () => void,
+  ) {
+    this.cancelFade(nodeData);
+    const clampedTarget = Math.min(1, Math.max(0, target));
+    const durationMs = Math.max(0, durationSeconds) * 1000;
+    if (durationMs === 0 || Math.abs(nodeData.currentVolume - clampedTarget) < 0.005) {
+      this.setNodeVolume(nodeData, clampedTarget);
+      onComplete?.();
+      return;
+    }
+
+    const startVolume = nodeData.currentVolume;
+    const startedAt = performance.now();
+    nodeData.fadeTimer = setInterval(() => {
+      const progress = Math.min(1, (performance.now() - startedAt) / durationMs);
+      this.setNodeVolume(
+        nodeData,
+        startVolume + (clampedTarget - startVolume) * progress,
+      );
+      if (progress >= 1) {
+        this.cancelFade(nodeData);
+        onComplete?.();
+      }
+    }, 50);
+  }
+
+  private finishExit(nodeData: NodeData, exitBehavior: 'stop' | 'pause' | 'keep') {
+    if (nodeData.isInside) return;
+    const { audioEl } = nodeData;
+    if (exitBehavior === 'keep') return;
+    if (!audioEl.paused) audioEl.pause();
+    if (exitBehavior === 'stop') {
+      try { audioEl.currentTime = 0; } catch { /* metadata may not be ready */ }
+    }
+    nodeData.played = false;
+  }
+
+  updateVolumes(zones: {
+    id: string;
+    volume: number;
+    loop?: boolean;
+    destroyOnEnd?: boolean;
+    exitBehavior?: 'stop' | 'pause' | 'keep';
+    fadeIn?: number;
+    fadeOut?: number;
+  }[]) {
     if (!this.isUnlocked) return;
 
     zones.forEach(zone => {
@@ -124,54 +197,70 @@ export class AudioService {
       const volume = Number(zone.volume);
 
       if (volume <= 0.01 || !Number.isFinite(volume)) {
-        this.setNodeVolume(nodeData, 0);
+        const justExited = nodeData.isInside;
+        nodeData.isInside = false;
+        nodeData.desiredVolume = 0;
         // Cancel any pending entry delay — the player left before it fired.
         if (nodeData.playTimer) {
           clearTimeout(nodeData.playTimer);
           nodeData.playTimer = null;
         }
         const exit = zone.exitBehavior ?? 'stop';
-        if (exit === 'keep') {
-          // Triggered audio plays to completion regardless of zone exit.
-          // Leave it running — volume is 0 but the element keeps advancing.
-          return;
+        if (justExited) {
+          this.fadeTo(nodeData, 0, Number(zone.fadeOut) || 0, () => {
+            this.finishExit(nodeData, exit);
+          });
+        } else if (!nodeData.fadeTimer && nodeData.currentVolume > 0) {
+          this.setNodeVolume(nodeData, 0);
+          this.finishExit(nodeData, exit);
         }
-        if (exit === 'pause') {
-          // Pause at current position; resume from here on re-entry.
-          if (!audioEl.paused) audioEl.pause();
-          nodeData.played = false; // allows .play() on re-entry
-          return;
-        }
-        // 'stop' (default): pause and rewind to start.
-        if (!audioEl.paused) audioEl.pause();
-        // A finished element reports paused=true. Always rewinding prevents a
-        // later visit from restarting at the end and producing silence.
-        try { audioEl.currentTime = 0; } catch { /* metadata may not be ready */ }
-        nodeData.played = false;
         return;
       }
 
-      // Inside zone — HTMLAudioElement.volume must be 0–1. Keep it live every
-      // tick (attenuation) even while the entry delay is still counting down.
-      this.setNodeVolume(nodeData, volume);
+      const justEntered = !nodeData.isInside;
+      nodeData.isInside = true;
+      nodeData.desiredVolume = volume;
+
+      // A keep-playing track may still be advancing silently outside the zone.
+      // Fade it back up immediately when the player returns.
+      if (!audioEl.paused && justEntered) {
+        this.fadeTo(nodeData, volume, Number(zone.fadeIn) || 0);
+      } else if (!audioEl.paused && !nodeData.fadeTimer) {
+        // Keep attenuation responsive while the player moves inside the zone.
+        this.setNodeVolume(nodeData, volume);
+      }
 
       // Schedule playback once per visit, after a short delay, if not already
       // playing or scheduled. The delay makes the audio feel like an arrival.
       if (!nodeData.played && audioEl.paused && !nodeData.playTimer) {
         nodeData.playTimer = setTimeout(() => {
           nodeData.playTimer = null;
-          if (nodeData.played || nodeData.destroyed) return;
-          this.beginPlayback(nodeData, zone.id, zone.loop === true, zone.destroyOnEnd === true);
+          if (nodeData.played || nodeData.destroyed || !nodeData.isInside) return;
+          this.beginPlayback(
+            nodeData,
+            zone.id,
+            zone.loop === true,
+            zone.destroyOnEnd === true,
+            Number(zone.fadeIn) || 0,
+          );
         }, ENTRY_DELAY_MS);
       }
     });
   }
 
   /** Start a node's audio element playing and wire up its end behaviour. */
-  private beginPlayback(nodeData: NodeData, zoneId: string, loop: boolean, destroyOnEnd: boolean) {
+  private beginPlayback(
+    nodeData: NodeData,
+    zoneId: string,
+    loop: boolean,
+    destroyOnEnd: boolean,
+    fadeIn = 0,
+  ) {
     const { audioEl } = nodeData;
     audioEl.loop = loop;
+    this.setNodeVolume(nodeData, 0);
     audioEl.play().catch(e => console.warn(`Zone audio play failed (${zoneId}):`, e));
+    this.fadeTo(nodeData, nodeData.desiredVolume, fadeIn);
     if (!loop) {
       audioEl.onended = () => {
         if (destroyOnEnd) {
@@ -203,6 +292,8 @@ export class AudioService {
 
   stopAll() {
     this.nodes.forEach((data) => {
+      if (data.playTimer) clearTimeout(data.playTimer);
+      this.cancelFade(data);
       data.audioEl.pause();
       data.audioEl.src = '';
       data.sourceNode?.disconnect();
