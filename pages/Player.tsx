@@ -1172,17 +1172,17 @@ export const Player: React.FC = () => {
               <div className="relative shrink-0" style={{ width: 80, height: 80 }}>
                 {/* Pulsing outer ring — "the being is present" */}
                 <span
-                  className="absolute inset-0 rounded-2xl animate-ping"
+                  className="absolute inset-0 rounded-full animate-ping"
                   style={{ backgroundColor: accent, opacity: 0.25, animationDuration: '2.5s' }}
                 />
                 {/* Character artwork */}
                 <div
-                  className="absolute inset-0 rounded-2xl overflow-hidden shadow-2xl"
-                  style={{ border: `2px solid ${accent}`, boxShadow: `0 0 20px ${accent}55` }}
+                  className="absolute inset-0 rounded-full overflow-hidden shadow-2xl flex items-center justify-center"
+                  style={{ backgroundColor: th.cardBg, boxShadow: `0 0 20px ${accent}45` }}
                 >
                   {activeCharacterZone.character_image_url
-                    ? <img src={activeCharacterZone.character_image_url} alt={activeCharacterZone.title} className="w-full h-full object-cover" />
-                    : <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: `${accent}30` }}><Mic size={22} color={accent} /></div>
+                    ? <img src={activeCharacterZone.character_image_url} alt={activeCharacterZone.title} className="w-[70%] h-[70%] object-contain" />
+                    : <div className="w-full h-full flex items-center justify-center"><Mic size={22} color={accent} /></div>
                   }
                 </div>
               </div>

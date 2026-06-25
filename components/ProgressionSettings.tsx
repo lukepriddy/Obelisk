@@ -135,7 +135,7 @@ export const ProgressionSettings: React.FC<ProgressionSettingsProps> = ({ tour, 
                         resource.type === 'currency' ? 'bg-emerald-600 text-white' : 'bg-zinc-800 text-zinc-500'
                       }`}
                     >
-                      <Gem size={11} /> Currency
+                      <Gem size={11} /> Crncy
                     </button>
                     <button
                       type="button"
