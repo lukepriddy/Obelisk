@@ -1203,16 +1203,16 @@ export const Player: React.FC = () => {
               <div className="flex flex-col items-center pt-6 pb-2 min-h-0">
                 <div className="relative mb-3 shrink-0" style={{ width: 88, height: 88 }}>
                   <span
-                    className="absolute inset-0 rounded-2xl animate-ping"
+                    className="absolute inset-0 rounded-full animate-ping"
                     style={{ backgroundColor: accent, opacity: 0.2, animationDuration: '2.5s' }}
                   />
                   <div
-                    className="absolute inset-0 rounded-2xl overflow-hidden shadow-xl"
-                    style={{ border: `2px solid ${accent}`, boxShadow: `0 0 24px ${accent}44` }}
+                    className="absolute inset-0 rounded-full overflow-hidden shadow-xl flex items-center justify-center"
+                    style={{ backgroundColor: th.cardBg, boxShadow: `0 0 24px ${accent}40` }}
                   >
                     {activeCharacterZone.character_image_url
-                      ? <img src={activeCharacterZone.character_image_url} alt={activeCharacterZone.title} className="w-full h-full object-cover" />
-                      : <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: `${accent}25` }}><Mic size={26} color={accent} /></div>
+                      ? <img src={activeCharacterZone.character_image_url} alt={activeCharacterZone.title} className="w-[70%] h-[70%] object-contain" />
+                      : <div className="w-full h-full flex items-center justify-center"><Mic size={26} color={accent} /></div>
                     }
                   </div>
                 </div>
