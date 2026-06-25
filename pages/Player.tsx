@@ -88,6 +88,8 @@ export const Player: React.FC = () => {
   const [audioStarted, setAudioStarted] = useState(false);
   const [showAudioResume, setShowAudioResume] = useState(false);
   const [resumingAudio, setResumingAudio] = useState(false);
+  const [bottomBarHeight, setBottomBarHeight] = useState(104);
+  const bottomBarRef = useRef<HTMLDivElement | null>(null);
   const [simulationMode, setSimulationMode] = useState(isPreview);
   const [activeZones, setActiveZones] = useState<{id: string, title: string, volume: number, replayable: boolean}[]>([]);
   const [activeMediaZone, setActiveMediaZone] = useState<Zone | null>(null);
@@ -538,6 +540,25 @@ export const Player: React.FC = () => {
       window.removeEventListener('pagehide', markBackgrounded);
       window.removeEventListener('pageshow', showRecoveryWhenVisible);
       window.removeEventListener('focus', showRecoveryWhenVisible);
+    };
+  }, [audioStarted]);
+
+  useEffect(() => {
+    if (!audioStarted || !bottomBarRef.current) return;
+
+    const bottomBar = bottomBarRef.current;
+    const updateBottomBarHeight = () => {
+      setBottomBarHeight(Math.ceil(bottomBar.getBoundingClientRect().height));
+    };
+
+    updateBottomBarHeight();
+    const observer = new ResizeObserver(updateBottomBarHeight);
+    observer.observe(bottomBar);
+    window.addEventListener('resize', updateBottomBarHeight);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateBottomBarHeight);
     };
   }, [audioStarted]);
 
@@ -1070,12 +1091,12 @@ export const Player: React.FC = () => {
           desktop anchored bottom-left so it never collides with the chat panel (bottom-right) */}
       {audioStarted && (
         <div
-          className={`absolute z-[1500] flex-col items-end gap-2 w-full max-w-sm px-4 ${
+          className={`fixed z-[1500] flex-col items-end gap-2 w-full max-w-sm px-4 ${
             showChat ? 'hidden md:flex left-2' : 'flex left-1/2 -translate-x-1/2'
           }`}
           style={{
-            bottom: 'calc(104px + env(safe-area-inset-bottom, 0px))',
-            maxHeight: 'calc(100dvh - 176px - env(safe-area-inset-bottom, 0px))',
+            bottom: `${bottomBarHeight + 12}px`,
+            maxHeight: `calc(100dvh - ${bottomBarHeight + 84}px)`,
           }}
         >
           {/* ── Character presence ─────────────────────────────────────────────
@@ -1656,6 +1677,7 @@ export const Player: React.FC = () => {
       {/* ── BOTTOM BAR ── */}
       {audioStarted && (
         <div
+          ref={bottomBarRef}
           className="fixed bottom-0 left-0 right-0 z-[1000]"
           style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
         >
