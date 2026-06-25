@@ -15,7 +15,7 @@ import {
 import { getDistance, calculateAttenuation } from '../utils/geo';
 import { PlayerProgress, ProgressionReward, Tour, Zone } from '../types';
 import { FONT_STYLES, MAP_STYLES } from '../constants';
-import { PlayCircle, Volume2, Mic, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu, Layers, Locate, RotateCcw, ZoomIn, ZoomOut, Backpack, Gem, Trash2 } from 'lucide-react';
+import { PlayCircle, Volume2, Mic, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu, Layers, Locate, RotateCcw, ZoomIn, ZoomOut, Backpack, Gem, Trash2, Info, RefreshCw, LogOut, Bug, Navigation, ChevronRight } from 'lucide-react';
 import { ChatInterface } from '../components/ChatInterface';
 
 // Custom icons
@@ -96,9 +96,10 @@ export const Player: React.FC = () => {
   const dismissedMediaZoneIdsRef = useRef<Set<string>>(new Set());
   // Map style — starts at the tour's chosen style, user can override in-session
   const [mapStyleOverride, setMapStyleOverride] = useState<string | null>(null);
-  const [showMapPicker, setShowMapPicker] = useState(false);
   const [welcomeMapInteractive, setWelcomeMapInteractive] = useState(false);
   const welcomeMapRef = useRef<L.Map | null>(null);
+  const [showPlayerMenu, setShowPlayerMenu] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
 
   // Optional local-first progression
   const [playerProgress, setPlayerProgress] = useState<PlayerProgress | null>(null);
@@ -142,6 +143,57 @@ export const Player: React.FC = () => {
 
   const openTourInfo  = () => { setTourInfoMounted(true); requestAnimationFrame(() => setTourInfoVisible(true)); };
   const closeTourInfo = () => { setTourInfoVisible(false); setTimeout(() => setTourInfoMounted(false), 380); };
+
+  const exitExperience = () => {
+    audioService.stopAll();
+    setShowAudioResume(false);
+    setShowPlayerMenu(false);
+    setShowInventory(false);
+    setShowChat(false);
+    setShowDebug(false);
+    setActiveZones([]);
+    setActiveMediaZone(null);
+    setActiveCharacterZone(null);
+    activeCharZoneRef.current = null;
+    setAudioStarted(false);
+    if (sessionIdRef.current) {
+      endSession(sessionIdRef.current);
+      sessionIdRef.current = null;
+    }
+  };
+
+  const restartExperience = () => {
+    if (!tour) return;
+    if (!window.confirm('Start over? This clears visited zones, chats, items, and progress for this experience.')) return;
+
+    zones.forEach(zone => {
+      try { sessionStorage.removeItem(`obelisk_chat_${zone.id}`); } catch {}
+    });
+
+    const emptySet = new Set<string>();
+    visitedZoneIdsRef.current = emptySet;
+    unlockedZoneIdsRef.current = new Set();
+    prevZoneIdsRef.current = new Set();
+    recordedVisitsRef.current = new Set();
+    setVisitedZoneIds(emptySet);
+    dismissedMediaZoneIdsRef.current = new Set();
+    setPersistedCharacterZone(null);
+    persistedCharZoneRef.current = null;
+    setChatEverOpened(false);
+    setChatKey(key => key + 1);
+    setPassphraseChallenge(null);
+    passphraseChallengeRef.current = null;
+    setPassphraseInput('');
+    setPassphraseError(false);
+
+    if (tour.progression_enabled) {
+      const reset = resetPlayerProgress(tour.id, tour.progression_resources || []);
+      playerProgressRef.current = reset;
+      setPlayerProgress(reset);
+    }
+
+    exitExperience();
+  };
 
   // HUD notification
   const [hudNotification, setHudNotification] = useState<{ title: string; message: string } | null>(null);
@@ -719,7 +771,7 @@ export const Player: React.FC = () => {
   const mapCenter: [number, number] = userPos ?? [tour.lat, tour.lng];
 
   return (
-    <div className="h-full relative bg-zinc-950 overflow-hidden" onClick={() => setShowMapPicker(false)}>
+    <div className="h-full relative bg-zinc-950 overflow-hidden">
 
       {/* ── FULL-SCREEN MAP ── */}
       {/* touch-action:none tells the browser to hand ALL touch events to Leaflet,
@@ -1408,6 +1460,49 @@ export const Player: React.FC = () => {
         </div>
       )}
 
+      {/* ── CREATOR DEBUG ── */}
+      {isPreview && showDebug && audioStarted && (
+        <div
+          className="absolute left-4 right-4 z-[1500]"
+          style={{ top: `calc(${TOP_BAR + 12}px + env(safe-area-inset-top, 0px))` }}
+        >
+          <div
+            className="max-w-sm mx-auto rounded-2xl px-4 py-3 shadow-2xl backdrop-blur-md"
+            style={{ backgroundColor: th.cardBg, border: `1px solid ${accent}40` }}
+          >
+            <div className="flex items-center justify-between gap-3 mb-2">
+              <div className="flex items-center gap-2">
+                <Bug size={14} style={{ color: accent }} />
+                <span className="text-xs font-bold" style={{ color: th.cardText }}>Debug mode</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDebug(false)}
+                className="w-7 h-7 flex items-center justify-center rounded-lg active:opacity-60"
+                style={{ color: th.cardMuted }}
+                aria-label="Close debug mode"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]" style={{ color: th.cardMuted }}>
+              <span>Mode</span>
+              <span className="text-right font-semibold" style={{ color: th.cardText }}>{simulationMode ? 'Simulation' : 'GPS'}</span>
+              <span>Accuracy</span>
+              <span className="text-right font-semibold" style={{ color: th.cardText }}>{gpsAccuracy ? `${Math.round(gpsAccuracy)} m` : '—'}</span>
+              <span>Position</span>
+              <span className="text-right font-mono" style={{ color: th.cardText }}>
+                {userPos ? `${userPos[0].toFixed(5)}, ${userPos[1].toFixed(5)}` : 'Waiting'}
+              </span>
+              <span>Active zones</span>
+              <span className="text-right font-semibold truncate" style={{ color: th.cardText }}>
+                {activeZones.length > 0 ? activeZones.map(zone => zone.title).join(', ') : 'None'}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── PROGRESSION INVENTORY ── */}
       {showInventory && tour.progression_enabled && playerProgress && (
         <div
@@ -1504,6 +1599,181 @@ export const Player: React.FC = () => {
         </div>
       )}
 
+      {/* ── PLAYER MENU ── */}
+      {showPlayerMenu && audioStarted && (
+        <div
+          className="absolute inset-0 z-[2600] bg-black/60 backdrop-blur-sm flex items-end justify-center"
+          onClick={() => setShowPlayerMenu(false)}
+        >
+          <div
+            className="w-full max-w-lg rounded-t-3xl shadow-2xl overflow-hidden flex flex-col"
+            style={{
+              backgroundColor: th.sheetBg,
+              color: th.sheetText,
+              maxHeight: 'calc(100dvh - 56px)',
+              paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+            }}
+            onClick={event => event.stopPropagation()}
+          >
+            <div className="flex flex-col items-center pt-3 pb-1">
+              <div className="w-10 h-1 rounded-full" style={{ backgroundColor: th.sheetHandle }} />
+            </div>
+
+            <div className="px-5 pt-3 pb-6 overflow-y-auto overscroll-contain flex-1 min-h-0">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-lg">Player menu</h3>
+                <button
+                  type="button"
+                  onClick={() => setShowPlayerMenu(false)}
+                  className="w-9 h-9 flex items-center justify-center rounded-full"
+                  style={{ color: th.sheetMuted }}
+                  aria-label="Close player menu"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="divide-y" style={{ borderColor: th.sheetBorder }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPlayerMenu(false);
+                    openTourInfo();
+                  }}
+                  className="w-full min-h-14 py-3 flex items-center gap-3 text-left"
+                >
+                  <Info size={18} style={{ color: accent }} />
+                  <span className="flex-1 text-sm font-semibold">About this experience</span>
+                  <ChevronRight size={16} style={{ color: th.sheetMuted }} />
+                </button>
+
+                {tour.progression_enabled && playerProgress && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowPlayerMenu(false);
+                      setShowInventory(true);
+                    }}
+                    className="w-full min-h-14 py-3 flex items-center gap-3 text-left"
+                  >
+                    <Backpack size={18} style={{ color: accent }} />
+                    <span className="flex-1 text-sm font-semibold">Progress &amp; inventory</span>
+                    <ChevronRight size={16} style={{ color: th.sheetMuted }} />
+                  </button>
+                )}
+
+                <div className="py-4">
+                  <div className="flex items-center gap-3 mb-3">
+                    <Layers size={18} style={{ color: accent }} />
+                    <span className="text-sm font-semibold">Map appearance</span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2">
+                    {PLAYER_MAP_STYLE_ORDER.map(key => {
+                      const val = MAP_STYLES[key];
+                      const active = (mapStyleOverride || tour.map_style || 'dark') === key;
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => setMapStyleOverride(key)}
+                          className="h-10 rounded-xl text-[11px] font-semibold border"
+                          style={{
+                            color: active ? accent : th.sheetMuted,
+                            borderColor: active ? `${accent}80` : th.sheetBorder,
+                            backgroundColor: active ? `${accent}18` : 'transparent',
+                          }}
+                        >
+                          {val.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="py-4">
+                  <div className="flex items-center gap-3">
+                    <Volume2 size={18} style={{ color: accent }} />
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold">Audio help</p>
+                      <p className="text-xs mt-0.5" style={{ color: th.sheetMuted }}>Having trouble with audio?</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => window.location.reload()}
+                      className="h-10 px-3 rounded-xl text-xs font-bold flex items-center gap-2"
+                      style={{ backgroundColor: `${accent}20`, color: accent }}
+                    >
+                      <RefreshCw size={14} />
+                      Refresh player
+                    </button>
+                  </div>
+                </div>
+
+                {isPreview && (
+                  <div className="py-4">
+                    <p className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: th.sheetMuted }}>Creator preview</p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSimulationMode(mode => !mode)}
+                        className="flex-1 h-11 rounded-xl border flex items-center justify-center gap-2 text-xs font-semibold"
+                        style={{
+                          borderColor: th.sheetBorder,
+                          color: simulationMode ? '#fbbf24' : accent,
+                        }}
+                      >
+                        <Navigation size={15} />
+                        {simulationMode ? 'Simulation' : 'GPS'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowDebug(value => !value);
+                          setShowPlayerMenu(false);
+                        }}
+                        className="flex-1 h-11 rounded-xl border flex items-center justify-center gap-2 text-xs font-semibold"
+                        style={{
+                          borderColor: showDebug ? `${accent}80` : th.sheetBorder,
+                          color: showDebug ? accent : th.sheetMuted,
+                          backgroundColor: showDebug ? `${accent}18` : 'transparent',
+                        }}
+                      >
+                        <Bug size={15} />
+                        Debug mode
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={restartExperience}
+                  className="w-full min-h-14 py-3 flex items-center gap-3 text-left"
+                >
+                  <RotateCcw size={18} style={{ color: th.sheetMuted }} />
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold">Restart experience</p>
+                    <p className="text-xs mt-0.5" style={{ color: th.sheetMuted }}>Clears visits, chats, items, and progress</p>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={exitExperience}
+                  className="w-full min-h-14 py-3 flex items-center gap-3 text-left"
+                >
+                  <LogOut size={18} style={{ color: th.sheetMuted }} />
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold">Exit experience</p>
+                    <p className="text-xs mt-0.5" style={{ color: th.sheetMuted }}>Returns to welcome without deleting progress</p>
+                  </div>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── PASSPHRASE MODAL ── */}
       {passphraseChallenge && (
         <div className="absolute inset-0 z-[2500] bg-black/70 backdrop-blur-sm flex items-end justify-center animate-in fade-in" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
@@ -1564,11 +1834,7 @@ export const Player: React.FC = () => {
 
           {audioStarted ? (
             <button
-              onClick={() => {
-                audioService.stopAll();
-                setShowAudioResume(false);
-                setAudioStarted(false);
-              }}
+              onClick={exitExperience}
               className="w-10 h-10 flex items-center justify-center rounded-xl shrink-0 active:opacity-60 transition-opacity"
               style={{ color: th.barMuted }}
             >
@@ -1584,18 +1850,6 @@ export const Player: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-1 shrink-0">
-            {isPreview && (
-              <button
-                onClick={() => setSimulationMode(!simulationMode)}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg active:opacity-60 transition-opacity"
-                title="Toggle GPS / Simulation"
-              >
-                <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${simulationMode ? 'bg-amber-400' : 'bg-emerald-400'}`} />
-                <span className={`text-[10px] font-bold uppercase tracking-wide ${simulationMode ? 'text-amber-400' : 'text-emerald-400'}`}>
-                  {simulationMode ? 'Sim' : 'GPS'}
-                </span>
-              </button>
-            )}
             {tour.progression_enabled && playerProgress && (tour.progression_resources || []).length > 0 && (
               <button
                 type="button"
@@ -1626,46 +1880,11 @@ export const Player: React.FC = () => {
                 })()}
               </button>
             )}
-            {/* Map style picker */}
-            <div className="relative" onClick={e => e.stopPropagation()}>
-              <button
-                onClick={() => setShowMapPicker(p => !p)}
-                className="w-10 h-10 flex items-center justify-center rounded-xl active:opacity-60 transition-opacity"
-                style={{ color: mapStyleOverride ? accent : th.barMuted }}
-                title="Change map style"
-              >
-                <Layers size={18} />
-              </button>
-              {showMapPicker && (
-                <div
-                  className="absolute right-0 top-full rounded-2xl shadow-2xl overflow-hidden z-[2000] w-36"
-                  style={{ backgroundColor: th.cardBg, border: `1px solid ${th.cardBorder}` }}
-                >
-                  {PLAYER_MAP_STYLE_ORDER.map(key => {
-                    const val = MAP_STYLES[key];
-                    const active = (mapStyleOverride || tour?.map_style || 'dark') === key;
-                    return (
-                      <button
-                        key={key}
-                        onClick={() => { setMapStyleOverride(key); setShowMapPicker(false); }}
-                        className="w-full px-4 py-2.5 text-left text-sm flex items-center justify-between"
-                        style={{
-                          color: active ? accent : th.cardText,
-                          backgroundColor: active ? `${accent}18` : 'transparent',
-                        }}
-                      >
-                        {val.label}
-                        {active && <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: accent }} />}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
             <button
-              onClick={openTourInfo}
+              onClick={() => setShowPlayerMenu(true)}
               className="w-10 h-10 flex items-center justify-center rounded-xl active:opacity-60 transition-opacity"
               style={{ color: th.barMuted }}
+              aria-label="Open player menu"
             >
               <Menu size={20} />
             </button>
