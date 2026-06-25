@@ -1207,11 +1207,11 @@ export const Player: React.FC = () => {
                     style={{ backgroundColor: accent, opacity: 0.2, animationDuration: '2.5s' }}
                   />
                   <div
-                    className="absolute inset-0 rounded-full overflow-hidden shadow-xl flex items-center justify-center"
-                    style={{ backgroundColor: th.cardBg, boxShadow: `0 0 24px ${accent}40` }}
+                    className="absolute inset-0 flex items-center justify-center"
+                    style={{ filter: `drop-shadow(0 0 12px ${accent}35)` }}
                   >
                     {activeCharacterZone.character_image_url
-                      ? <img src={activeCharacterZone.character_image_url} alt={activeCharacterZone.title} className="w-[70%] h-[70%] object-contain" />
+                      ? <img src={activeCharacterZone.character_image_url} alt={activeCharacterZone.title} className="w-full h-full object-contain" />
                       : <div className="w-full h-full flex items-center justify-center"><Mic size={26} color={accent} /></div>
                     }
                   </div>
