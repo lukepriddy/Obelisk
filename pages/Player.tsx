@@ -96,7 +96,6 @@ export const Player: React.FC = () => {
   const [mapStyleOverride, setMapStyleOverride] = useState<string | null>(null);
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [welcomeMapInteractive, setWelcomeMapInteractive] = useState(false);
-  const [browserBottomOffset, setBrowserBottomOffset] = useState(0);
   const welcomeMapRef = useRef<L.Map | null>(null);
 
   // Optional local-first progression
@@ -180,37 +179,6 @@ export const Player: React.FC = () => {
       if (sessionIdRef.current) endSession(sessionIdRef.current);
     };
   }, [tourId]);
-
-  // Mobile Safari and Chrome expose different portions of the layout viewport
-  // behind their expanding URL/tool bars. Measure the actually obscured bottom
-  // area so every player surface shares one visible-bottom anchor.
-  useEffect(() => {
-    const updateViewportInset = () => {
-      const viewport = window.visualViewport;
-      if (!viewport) {
-        setBrowserBottomOffset(0);
-        return;
-      }
-      const layoutHeight = document.documentElement.clientHeight;
-      const obscuredBottom = Math.max(
-        0,
-        Math.round(layoutHeight - viewport.height - viewport.offsetTop),
-      );
-      setBrowserBottomOffset(current =>
-        Math.abs(current - obscuredBottom) > 1 ? obscuredBottom : current
-      );
-    };
-
-    updateViewportInset();
-    window.visualViewport?.addEventListener('resize', updateViewportInset);
-    window.visualViewport?.addEventListener('scroll', updateViewportInset);
-    window.addEventListener('resize', updateViewportInset);
-    return () => {
-      window.visualViewport?.removeEventListener('resize', updateViewportInset);
-      window.visualViewport?.removeEventListener('scroll', updateViewportInset);
-      window.removeEventListener('resize', updateViewportInset);
-    };
-  }, []);
 
   // Keep the ref in sync so the audio-loop closure always has the latest zone
   // without needing activeCharacterZone in the interval's dependency array.
@@ -730,11 +698,7 @@ export const Player: React.FC = () => {
   const mapCenter: [number, number] = userPos ?? [tour.lat, tour.lng];
 
   return (
-    <div
-      className="h-full relative bg-zinc-950 overflow-hidden"
-      style={{ '--browser-bottom-offset': `${browserBottomOffset}px` } as React.CSSProperties}
-      onClick={() => setShowMapPicker(false)}
-    >
+    <div className="h-full relative bg-zinc-950 overflow-hidden" onClick={() => setShowMapPicker(false)}>
 
       {/* ── FULL-SCREEN MAP ── */}
       {/* touch-action:none tells the browser to hand ALL touch events to Leaflet,
@@ -1031,7 +995,6 @@ export const Player: React.FC = () => {
             backgroundColor: 'rgba(0,0,0,0.55)',
             opacity: tourInfoVisible ? 1 : 0,
             transition: 'opacity 0.3s',
-            paddingBottom: 'var(--browser-bottom-offset, 0px)',
           }}
           onClick={closeTourInfo}
         >
@@ -1111,8 +1074,8 @@ export const Player: React.FC = () => {
             showChat ? 'hidden md:flex left-2' : 'flex left-1/2 -translate-x-1/2'
           }`}
           style={{
-            bottom: 'calc(104px + env(safe-area-inset-bottom, 0px) + var(--browser-bottom-offset, 0px))',
-            maxHeight: 'calc(100dvh - 176px - env(safe-area-inset-bottom, 0px) - var(--browser-bottom-offset, 0px))',
+            bottom: 'calc(104px + env(safe-area-inset-bottom, 0px))',
+            maxHeight: 'calc(100dvh - 176px - env(safe-area-inset-bottom, 0px))',
           }}
         >
           {/* ── Character presence ─────────────────────────────────────────────
@@ -1428,7 +1391,6 @@ export const Player: React.FC = () => {
       {showInventory && tour.progression_enabled && playerProgress && (
         <div
           className="absolute inset-0 z-[2500] bg-black/60 backdrop-blur-sm flex items-end justify-center"
-          style={{ paddingBottom: 'var(--browser-bottom-offset, 0px)' }}
           onClick={() => setShowInventory(false)}
         >
           <div
@@ -1436,7 +1398,7 @@ export const Player: React.FC = () => {
             style={{
               backgroundColor: th.sheetBg,
               color: th.sheetText,
-              maxHeight: 'calc(100dvh - 72px - var(--browser-bottom-offset, 0px))',
+              maxHeight: 'calc(100dvh - 72px)',
               paddingBottom: 'env(safe-area-inset-bottom, 0px)',
             }}
             onClick={e => e.stopPropagation()}
@@ -1447,7 +1409,7 @@ export const Player: React.FC = () => {
 
             <div
               className="px-6 pt-3 overflow-y-auto overscroll-contain"
-              style={{ paddingBottom: '24px' }}
+              style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 88px)' }}
             >
               <div className="flex items-center justify-between mb-5">
                 <div className="flex items-center gap-3">
@@ -1695,10 +1657,7 @@ export const Player: React.FC = () => {
       {audioStarted && (
         <div
           className="fixed bottom-0 left-0 right-0 z-[1000]"
-          style={{
-            bottom: 'var(--browser-bottom-offset, 0px)',
-            paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-          }}
+          style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
         >
           <button
             onClick={openTourInfo}
