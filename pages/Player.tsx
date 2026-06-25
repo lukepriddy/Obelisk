@@ -99,6 +99,7 @@ export const Player: React.FC = () => {
   const [welcomeMapInteractive, setWelcomeMapInteractive] = useState(false);
   const welcomeMapRef = useRef<L.Map | null>(null);
   const [showPlayerMenu, setShowPlayerMenu] = useState(false);
+  const [playerMenuView, setPlayerMenuView] = useState<'main' | 'about' | 'progress'>('main');
   const [showDebug, setShowDebug] = useState(false);
 
   // Optional local-first progression
@@ -143,11 +144,15 @@ export const Player: React.FC = () => {
 
   const openTourInfo  = () => { setTourInfoMounted(true); requestAnimationFrame(() => setTourInfoVisible(true)); };
   const closeTourInfo = () => { setTourInfoVisible(false); setTimeout(() => setTourInfoMounted(false), 380); };
+  const closePlayerMenu = () => {
+    setShowPlayerMenu(false);
+    window.setTimeout(() => setPlayerMenuView('main'), 250);
+  };
 
   const exitExperience = () => {
     audioService.stopAll();
     setShowAudioResume(false);
-    setShowPlayerMenu(false);
+    closePlayerMenu();
     setShowInventory(false);
     setShowChat(false);
     setShowDebug(false);
@@ -1603,171 +1608,290 @@ export const Player: React.FC = () => {
       {showPlayerMenu && audioStarted && (
         <div
           className="absolute inset-0 z-[2600] bg-black/60 backdrop-blur-sm flex items-end justify-center"
-          onClick={() => setShowPlayerMenu(false)}
+          onClick={closePlayerMenu}
         >
           <div
             className="w-full max-w-lg rounded-t-3xl shadow-2xl overflow-hidden flex flex-col"
             style={{
               backgroundColor: th.sheetBg,
               color: th.sheetText,
-              maxHeight: 'calc(100dvh - 56px)',
+              height: 'min(680px, calc(100dvh - 96px))',
               paddingBottom: 'env(safe-area-inset-bottom, 0px)',
             }}
             onClick={event => event.stopPropagation()}
           >
-            <div className="flex flex-col items-center pt-3 pb-1">
+            <div className="flex flex-col items-center pt-3 pb-1 shrink-0">
               <div className="w-10 h-1 rounded-full" style={{ backgroundColor: th.sheetHandle }} />
             </div>
 
-            <div className="px-5 pt-3 pb-6 overflow-y-auto overscroll-contain flex-1 min-h-0">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-bold text-lg">Player menu</h3>
-                <button
-                  type="button"
-                  onClick={() => setShowPlayerMenu(false)}
-                  className="w-9 h-9 flex items-center justify-center rounded-full"
-                  style={{ color: th.sheetMuted }}
-                  aria-label="Close player menu"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              <div className="divide-y" style={{ borderColor: th.sheetBorder }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowPlayerMenu(false);
-                    openTourInfo();
-                  }}
-                  className="w-full min-h-14 py-3 flex items-center gap-3 text-left"
-                >
-                  <Info size={18} style={{ color: accent }} />
-                  <span className="flex-1 text-sm font-semibold">About this experience</span>
-                  <ChevronRight size={16} style={{ color: th.sheetMuted }} />
-                </button>
-
-                {tour.progression_enabled && playerProgress && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowPlayerMenu(false);
-                      setShowInventory(true);
-                    }}
-                    className="w-full min-h-14 py-3 flex items-center gap-3 text-left"
-                  >
-                    <Backpack size={18} style={{ color: accent }} />
-                    <span className="flex-1 text-sm font-semibold">Progress &amp; inventory</span>
-                    <ChevronRight size={16} style={{ color: th.sheetMuted }} />
-                  </button>
-                )}
-
-                <div className="py-4">
-                  <div className="flex items-center gap-3 mb-3">
-                    <Layers size={18} style={{ color: accent }} />
-                    <span className="text-sm font-semibold">Map appearance</span>
-                  </div>
-                  <div className="grid grid-cols-4 gap-2">
-                    {PLAYER_MAP_STYLE_ORDER.map(key => {
-                      const val = MAP_STYLES[key];
-                      const active = (mapStyleOverride || tour.map_style || 'dark') === key;
-                      return (
-                        <button
-                          key={key}
-                          type="button"
-                          onClick={() => setMapStyleOverride(key)}
-                          className="h-10 rounded-xl text-[11px] font-semibold border"
-                          style={{
-                            color: active ? accent : th.sheetMuted,
-                            borderColor: active ? `${accent}80` : th.sheetBorder,
-                            backgroundColor: active ? `${accent}18` : 'transparent',
-                          }}
-                        >
-                          {val.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="py-4">
-                  <div className="flex items-center gap-3">
-                    <Volume2 size={18} style={{ color: accent }} />
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold">Audio help</p>
-                      <p className="text-xs mt-0.5" style={{ color: th.sheetMuted }}>Having trouble with audio?</p>
-                    </div>
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <div
+                className="h-full flex transition-transform duration-300 ease-out"
+                style={{
+                  width: '200%',
+                  transform: playerMenuView === 'main' ? 'translateX(0)' : 'translateX(-50%)',
+                }}
+              >
+                {/* Main menu */}
+                <div className="w-1/2 h-full px-5 pt-3 pb-6 overflow-y-auto overscroll-contain shrink-0">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-bold text-lg">Player menu</h3>
                     <button
                       type="button"
-                      onClick={() => window.location.reload()}
-                      className="h-10 px-3 rounded-xl text-xs font-bold flex items-center gap-2"
-                      style={{ backgroundColor: `${accent}20`, color: accent }}
+                      onClick={closePlayerMenu}
+                      className="w-9 h-9 flex items-center justify-center rounded-full"
+                      style={{ color: th.sheetMuted }}
+                      aria-label="Close player menu"
                     >
-                      <RefreshCw size={14} />
-                      Refresh player
+                      <X size={18} />
+                    </button>
+                  </div>
+
+                  <div className="divide-y" style={{ borderColor: th.sheetBorder }}>
+                    <button
+                      type="button"
+                      onClick={() => setPlayerMenuView('about')}
+                      className="w-full min-h-14 py-3 flex items-center gap-3 text-left"
+                    >
+                      <Info size={18} style={{ color: accent }} />
+                      <span className="flex-1 text-sm font-semibold">About this experience</span>
+                      <ChevronRight size={16} style={{ color: th.sheetMuted }} />
+                    </button>
+
+                    {tour.progression_enabled && playerProgress && (
+                      <button
+                        type="button"
+                        onClick={() => setPlayerMenuView('progress')}
+                        className="w-full min-h-14 py-3 flex items-center gap-3 text-left"
+                      >
+                        <Backpack size={18} style={{ color: accent }} />
+                        <span className="flex-1 text-sm font-semibold">Progress &amp; inventory</span>
+                        <ChevronRight size={16} style={{ color: th.sheetMuted }} />
+                      </button>
+                    )}
+
+                    <div className="py-4">
+                      <div className="flex items-center gap-3 mb-3">
+                        <Layers size={18} style={{ color: accent }} />
+                        <span className="text-sm font-semibold">Map appearance</span>
+                      </div>
+                      <div className="grid grid-cols-4 gap-2">
+                        {PLAYER_MAP_STYLE_ORDER.map(key => {
+                          const val = MAP_STYLES[key];
+                          const active = (mapStyleOverride || tour.map_style || 'dark') === key;
+                          return (
+                            <button
+                              key={key}
+                              type="button"
+                              onClick={() => setMapStyleOverride(key)}
+                              className="h-10 rounded-xl text-[11px] font-semibold border"
+                              style={{
+                                color: active ? accent : th.sheetMuted,
+                                borderColor: active ? `${accent}80` : th.sheetBorder,
+                                backgroundColor: active ? `${accent}18` : 'transparent',
+                              }}
+                            >
+                              {val.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="py-4">
+                      <div className="flex items-center gap-3">
+                        <Volume2 size={18} style={{ color: accent }} />
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold">Audio help</p>
+                          <p className="text-xs mt-0.5" style={{ color: th.sheetMuted }}>Having trouble with audio?</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => window.location.reload()}
+                          className="h-10 px-3 rounded-xl text-xs font-bold flex items-center gap-2"
+                          style={{ backgroundColor: `${accent}20`, color: accent }}
+                        >
+                          <RefreshCw size={14} />
+                          Refresh player
+                        </button>
+                      </div>
+                    </div>
+
+                    {isPreview && (
+                      <div className="py-4">
+                        <p className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: th.sheetMuted }}>Creator preview</p>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setSimulationMode(mode => !mode)}
+                            className="flex-1 h-11 rounded-xl border flex items-center justify-center gap-2 text-xs font-semibold"
+                            style={{
+                              borderColor: th.sheetBorder,
+                              color: simulationMode ? '#fbbf24' : accent,
+                            }}
+                          >
+                            <Navigation size={15} />
+                            {simulationMode ? 'Simulation' : 'GPS'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowDebug(value => !value);
+                              closePlayerMenu();
+                            }}
+                            className="flex-1 h-11 rounded-xl border flex items-center justify-center gap-2 text-xs font-semibold"
+                            style={{
+                              borderColor: showDebug ? `${accent}80` : th.sheetBorder,
+                              color: showDebug ? accent : th.sheetMuted,
+                              backgroundColor: showDebug ? `${accent}18` : 'transparent',
+                            }}
+                          >
+                            <Bug size={15} />
+                            Debug mode
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={restartExperience}
+                      className="w-full min-h-14 py-3 flex items-center gap-3 text-left"
+                    >
+                      <RotateCcw size={18} style={{ color: th.sheetMuted }} />
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold">Restart experience</p>
+                        <p className="text-xs mt-0.5" style={{ color: th.sheetMuted }}>Clears visits, chats, items, and progress</p>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={exitExperience}
+                      className="w-full min-h-14 py-3 flex items-center gap-3 text-left"
+                    >
+                      <LogOut size={18} style={{ color: th.sheetMuted }} />
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold">Exit experience</p>
+                        <p className="text-xs mt-0.5" style={{ color: th.sheetMuted }}>Returns to welcome without deleting progress</p>
+                      </div>
                     </button>
                   </div>
                 </div>
 
-                {isPreview && (
-                  <div className="py-4">
-                    <p className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: th.sheetMuted }}>Creator preview</p>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setSimulationMode(mode => !mode)}
-                        className="flex-1 h-11 rounded-xl border flex items-center justify-center gap-2 text-xs font-semibold"
-                        style={{
-                          borderColor: th.sheetBorder,
-                          color: simulationMode ? '#fbbf24' : accent,
-                        }}
-                      >
-                        <Navigation size={15} />
-                        {simulationMode ? 'Simulation' : 'GPS'}
-                      </button>
+                {/* About / Progress detail page */}
+                <div className="w-1/2 h-full px-5 pt-3 pb-6 overflow-y-auto overscroll-contain shrink-0">
+                  <div className="flex items-center gap-2 mb-5">
+                    <button
+                      type="button"
+                      onClick={() => setPlayerMenuView('main')}
+                      className="w-9 h-9 -ml-2 flex items-center justify-center rounded-full active:opacity-60"
+                      style={{ color: th.sheetMuted }}
+                      aria-label="Back to player menu"
+                    >
+                      <ArrowLeft size={19} />
+                    </button>
+                    <h3 className="font-bold text-lg flex-1">
+                      {playerMenuView === 'progress' ? 'Progress & inventory' : 'About this experience'}
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={closePlayerMenu}
+                      className="w-9 h-9 flex items-center justify-center rounded-full"
+                      style={{ color: th.sheetMuted }}
+                      aria-label="Close player menu"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+
+                  {playerMenuView === 'about' ? (
+                    <div className="space-y-5">
+                      <div className="flex items-center gap-4">
+                        {tour.welcome_image_url && (
+                          <img
+                            src={tour.welcome_image_url}
+                            alt=""
+                            className="w-16 h-16 rounded-xl object-cover shrink-0"
+                          />
+                        )}
+                        <div className="min-w-0">
+                          <h4 className="font-bold text-xl leading-tight">{tour.title}</h4>
+                          {tour.welcome_subtitle && (
+                            <p className="text-sm mt-1" style={{ color: accent }}>{tour.welcome_subtitle}</p>
+                          )}
+                        </div>
+                      </div>
+
+                      {tour.description && (
+                        <p
+                          className="text-sm leading-relaxed whitespace-pre-wrap"
+                          style={{ color: th.sheetMuted, textAlign: tour.description_align === 'left' ? 'left' : 'center' }}
+                        >
+                          {tour.description}
+                        </p>
+                      )}
+
                       <button
                         type="button"
                         onClick={() => {
-                          setShowDebug(value => !value);
-                          setShowPlayerMenu(false);
+                          navigator.clipboard.writeText(`${tour.lat.toFixed(6)}, ${tour.lng.toFixed(6)}`);
+                          setCoordsCopied(true);
+                          window.setTimeout(() => setCoordsCopied(false), 2000);
                         }}
-                        className="flex-1 h-11 rounded-xl border flex items-center justify-center gap-2 text-xs font-semibold"
-                        style={{
-                          borderColor: showDebug ? `${accent}80` : th.sheetBorder,
-                          color: showDebug ? accent : th.sheetMuted,
-                          backgroundColor: showDebug ? `${accent}18` : 'transparent',
-                        }}
+                        className="w-full min-h-12 px-4 rounded-xl border flex items-center justify-center gap-2 text-sm font-semibold"
+                        style={{ color: th.sheetMuted, borderColor: th.sheetBorder }}
                       >
-                        <Bug size={15} />
-                        Debug mode
+                        {coordsCopied ? <Check size={15} /> : <MapPin size={15} />}
+                        {coordsCopied ? 'Copied' : `${tour.lat.toFixed(5)}, ${tour.lng.toFixed(5)}`}
                       </button>
                     </div>
-                  </div>
-                )}
+                  ) : playerMenuView === 'progress' && playerProgress ? (
+                    <div>
+                      <p className="text-xs mb-4" style={{ color: th.sheetMuted }}>Saved on this device</p>
+                      <div className="space-y-1">
+                        {(tour.progression_resources || []).map(resource => (
+                          <div
+                            key={resource.id}
+                            className="flex items-center gap-3 py-3 border-b last:border-b-0"
+                            style={{ borderColor: th.sheetBorder }}
+                          >
+                            <div
+                              className="w-11 h-11 rounded-xl overflow-hidden flex items-center justify-center shrink-0"
+                              style={{ backgroundColor: `${resource.color || accent}22`, color: resource.color || accent }}
+                            >
+                              {resource.image_url
+                                ? <img src={resource.image_url} alt="" className="w-full h-full object-contain p-1" />
+                                : resource.type === 'item' ? <KeyRound size={19} /> : <Gem size={19} />
+                              }
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-sm truncate">{resource.name}</p>
+                              <p className="text-[10px] uppercase tracking-wider" style={{ color: th.sheetMuted }}>{resource.type}</p>
+                            </div>
+                            <span className="text-xl font-bold tabular-nums">
+                              {playerProgress.balances[resource.id] || 0}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
 
-                <button
-                  type="button"
-                  onClick={restartExperience}
-                  className="w-full min-h-14 py-3 flex items-center gap-3 text-left"
-                >
-                  <RotateCcw size={18} style={{ color: th.sheetMuted }} />
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold">Restart experience</p>
-                    <p className="text-xs mt-0.5" style={{ color: th.sheetMuted }}>Clears visits, chats, items, and progress</p>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={exitExperience}
-                  className="w-full min-h-14 py-3 flex items-center gap-3 text-left"
-                >
-                  <LogOut size={18} style={{ color: th.sheetMuted }} />
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold">Exit experience</p>
-                    <p className="text-xs mt-0.5" style={{ color: th.sheetMuted }}>Returns to welcome without deleting progress</p>
-                  </div>
-                </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!window.confirm('Reset all progression for this experience on this device?')) return;
+                          const reset = resetPlayerProgress(tour.id, tour.progression_resources || []);
+                          playerProgressRef.current = reset;
+                          setPlayerProgress(reset);
+                        }}
+                        className="mt-6 flex items-center justify-center gap-2 w-full py-3 rounded-xl text-xs font-semibold border"
+                        style={{ color: th.sheetMuted, borderColor: th.sheetBorder }}
+                      >
+                        <Trash2 size={13} /> Reset progress
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </div>
           </div>
@@ -1881,7 +2005,10 @@ export const Player: React.FC = () => {
               </button>
             )}
             <button
-              onClick={() => setShowPlayerMenu(true)}
+              onClick={() => {
+                setPlayerMenuView('main');
+                setShowPlayerMenu(true);
+              }}
               className="w-10 h-10 flex items-center justify-center rounded-xl active:opacity-60 transition-opacity"
               style={{ color: th.barMuted }}
               aria-label="Open player menu"
