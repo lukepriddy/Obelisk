@@ -6,7 +6,7 @@ import { getTourById, getZonesByTourId, createZone as dbCreateZone, updateZone a
 import { ZoneForm } from '../components/ZoneForm';
 import { TourInfoPanel } from '../components/TourInfoPanel';
 import { Tour, Zone, User } from '../types';
-import { Save, Loader2, MousePointer2, PlusCircle, Trash2, Home, Search, Info, MapPin, Undo2 } from 'lucide-react';
+import { Save, Loader2, MousePointer2, PlusCircle, Home, Search, Info, MapPin, Undo2, Copy } from 'lucide-react';
 import { MAP_DEFAULT_CENTER, MAP_DEFAULT_ZOOM, MAP_STYLES } from '../constants';
 
 // Leaflet Icon Fix
@@ -57,6 +57,32 @@ type RightPanel = 'zone' | 'tour';
 type UndoEntry =
   | { type: 'create' | 'delete'; zone: Zone }
   | { type: 'edit'; tour: Tour; zones: Zone[] };
+
+const isTextEditingTarget = (target: EventTarget | null) => {
+  if (!(target instanceof HTMLElement)) return false;
+  const tagName = target.tagName.toLowerCase();
+  return tagName === 'input' || tagName === 'textarea' || target.isContentEditable;
+};
+
+const offsetDuplicatePosition = (zone: Zone): Pick<Zone, 'lat' | 'lng'> => {
+  const offsetMeters = Math.min(Math.max(zone.radius * 0.35, 5), 18);
+  const latOffset = offsetMeters / 111_320;
+  const lngOffset = offsetMeters / (111_320 * Math.cos((zone.lat * Math.PI) / 180) || 1);
+  return {
+    lat: zone.lat + latOffset,
+    lng: zone.lng + lngOffset,
+  };
+};
+
+const cloneZoneForInsert = (zone: Zone): Partial<Zone> => {
+  const { id: _id, ...fields } = zone as Zone & { created_at?: string };
+  delete (fields as any).created_at;
+  return {
+    ...JSON.parse(JSON.stringify(fields)),
+    ...offsetDuplicatePosition(zone),
+    title: `Copy of ${zone.title || 'Zone'}`,
+  };
+};
 
 // Geocoding search — uses a map ref instead of useMap() so it can live outside MapContainer
 const LocationSearch: React.FC<{ mapRef: React.RefObject<L.Map | null> }> = ({ mapRef }) => {
@@ -218,22 +244,42 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
   // Initialized with a no-op; the effect below syncs it before any user interaction.
   const saveTourRef = useRef<() => Promise<void>>(() => Promise.resolve());
   useEffect(() => { saveTourRef.current = saveTour; });
+  const copyBufferRef = useRef<Zone | null>(null);
+  const duplicateZoneRef = useRef<() => Promise<void>>(() => Promise.resolve());
+  useEffect(() => { duplicateZoneRef.current = duplicateSelectedZone; });
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
         saveTourRef.current();
       }
+      if (isTextEditingTarget(e.target)) return;
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
         e.preventDefault();
         handleUndoRef.current();
       }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'c') {
+        const selected = zones.find(zone => zone.id === selectedZoneId && !zone.id.startsWith('temp_'));
+        if (!selected) return;
+        e.preventDefault();
+        copyBufferRef.current = selected;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'v') {
+        if (!copyBufferRef.current && !selectedZoneId) return;
+        e.preventDefault();
+        pasteCopiedZoneRef.current();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        duplicateZoneRef.current();
+      }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, []); // empty — always calls latest via ref
+  }, [selectedZoneId, zones]); // refs handle the actions; dependencies keep copy selection fresh
 
   const handleUndoRef = useRef<() => Promise<void>>(() => Promise.resolve());
+  const pasteCopiedZoneRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
 
   const loadData = async (id: string) => {
@@ -313,6 +359,45 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
       lastEditUndoRef.current = null;
     }
   };
+
+  const duplicateZone = async (source: Zone | null | undefined) => {
+    if (!source || source.id.startsWith('temp_')) return;
+
+    const tempId = 'temp_duplicate_' + Date.now();
+    const optimisticZone = {
+      ...source,
+      ...offsetDuplicatePosition(source),
+      id: tempId,
+      title: `Copy of ${source.title || 'Zone'}`,
+    };
+    setZones(prev => [...prev, optimisticZone]);
+    setSelectedZoneId(tempId);
+    setRightPanel('zone');
+
+    const saved = await dbCreateZone(cloneZoneForInsert(source));
+    if (saved) {
+      setZones(prev => prev.map(zone => zone.id === tempId ? saved : zone));
+      setSelectedZoneId(saved.id);
+      copyBufferRef.current = saved;
+      setUndoStack(prev => [...prev, { type: 'create', zone: saved }]);
+      lastEditUndoRef.current = null;
+    } else {
+      setZones(prev => prev.filter(zone => zone.id !== tempId));
+      setSelectedZoneId(source.id);
+    }
+  };
+
+  const duplicateSelectedZone = async () => {
+    const source = zones.find(zone => zone.id === selectedZoneId && !zone.id.startsWith('temp_'));
+    await duplicateZone(source);
+  };
+
+  const pasteCopiedZone = async () => {
+    const source = copyBufferRef.current
+      || zones.find(zone => zone.id === selectedZoneId && !zone.id.startsWith('temp_'));
+    await duplicateZone(source);
+  };
+  pasteCopiedZoneRef.current = pasteCopiedZone;
 
   const handleUndo = async () => {
     const last = undoStack[undoStack.length - 1];
@@ -483,6 +568,16 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
         </button>
 
         <div className="w-8 h-px bg-zinc-800" />
+
+        {/* Duplicate Zone */}
+        <button
+          onClick={duplicateSelectedZone}
+          disabled={!selectedZone || selectedZone.id.startsWith('temp_')}
+          className="p-3 rounded-lg transition-all text-zinc-400 hover:bg-zinc-800 hover:text-white disabled:opacity-25 disabled:cursor-not-allowed"
+          title="Duplicate selected zone (⌘D or ⌘C then ⌘V)"
+        >
+          <Copy size={22} />
+        </button>
 
         {/* Undo */}
         <button
