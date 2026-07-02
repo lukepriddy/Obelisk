@@ -35,7 +35,7 @@ export interface Tour {
 
 export type ZoneExitBehavior = 'pause' | 'stop' | 'keep';
 export type ZoneEndBehavior = 'loop' | 'stop' | 'destroy';
-export type ZoneType = 'audio' | 'character';
+export type ZoneType = 'audio' | 'character' | 'discoverable';
 export type ZoneLockType = 'none' | 'passphrase';
 export type ProgressionResourceType = 'currency' | 'item';
 
@@ -52,6 +52,7 @@ export interface ProgressionResource {
 export interface ProgressionReward {
   resource_id: string;
   amount: number;
+  amount_max?: number;   // when set and greater than `amount`, the actual grant is a random int in [amount, amount_max]
 }
 
 export interface ProgressionRequirement {
@@ -113,6 +114,10 @@ export interface Zone {
   requires_zone_id?: string | null;    // This zone only activates after the referenced zone is visited
   progression_rewards?: ProgressionReward[];
   progression_requirements?: ProgressionRequirement[];
+
+  // Discoverable Zone Props — a small collectible; grants progression_rewards on pickup
+  is_mystery?: boolean;            // hide zone_image_url (show a generic glyph) until collected
+  collect_radius?: number | null;  // inner pickup threshold in meters; falls back to `radius` when unset
 }
 
 export interface AudioState {

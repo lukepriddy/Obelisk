@@ -29,11 +29,12 @@ const StartPinIcon = L.divIcon({
 });
 
 // Zone colour language — matches the player exactly:
-//   selected/clicked → blue · locked → yellow · character → purple · audio → green
+//   selected/clicked → blue · locked → yellow · character → purple · discoverable → pink · audio → green
 const zoneColor = (type: string, locked: boolean, selected: boolean): string =>
   selected ? '#3b82f6'
   : locked  ? '#f59e0b'
   : type === 'character' ? '#8b5cf6'
+  : type === 'discoverable' ? '#ec4899'
   :          '#10b981';
 
 // A small dot centered on the zone's coordinate (so it sits dead-center in the

@@ -97,6 +97,14 @@ const requirementsFor = (zone: Zone): ProgressionRequirement[] =>
 const rewardsFor = (zone: Zone): ProgressionReward[] =>
   Array.isArray(zone.progression_rewards) ? zone.progression_rewards : [];
 
+// Rolled once at grant time so the same reward can vary between playthroughs
+// (a fixed reward is just the min/max case where they're equal).
+const resolveRewardAmount = (reward: ProgressionReward) => {
+  const min = clampAmount(reward.amount);
+  const max = clampAmount(reward.amount_max);
+  return max > min ? min + Math.floor(Math.random() * (max - min + 1)) : min;
+};
+
 export const hasProgressionRequirements = (zone: Zone) =>
   requirementsFor(zone).some(rule => rule.resource_id && clampAmount(rule.amount) > 0);
 
@@ -146,7 +154,7 @@ export const grantZoneRewards = (
   }
 
   const rewards = rewardsFor(zone)
-    .map(reward => ({ ...reward, amount: clampAmount(reward.amount) }))
+    .map(reward => ({ ...reward, amount: resolveRewardAmount(reward) }))
     .filter(reward => reward.resource_id && reward.amount > 0);
 
   if (rewards.length === 0) return { progress, granted: [] };

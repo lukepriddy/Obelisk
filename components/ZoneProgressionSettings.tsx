@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, Gift, LockKeyhole, Plus, Trash2 } from 'lucide-react';
+import { Check, ChevronDown, Dices, Gift, LockKeyhole, Plus, Trash2 } from 'lucide-react';
 import {
   ProgressionRequirement,
   ProgressionResource,
@@ -11,6 +11,9 @@ interface ZoneProgressionSettingsProps {
   zone: Zone;
   resources: ProgressionResource[];
   onUpdate: (updates: Partial<Zone>) => void;
+  // Hide the "resource requirements" (cost-to-unlock) section — used for
+  // discoverable zones, which only ever grant, never gate on a cost.
+  showRequirements?: boolean;
 }
 
 const ResourceSelect: React.FC<{
@@ -81,6 +84,7 @@ export const ZoneProgressionSettings: React.FC<ZoneProgressionSettingsProps> = (
   zone,
   resources,
   onUpdate,
+  showRequirements = true,
 }) => {
   const rewards = zone.progression_rewards || [];
   const requirements = zone.progression_requirements || [];
@@ -132,32 +136,61 @@ export const ZoneProgressionSettings: React.FC<ZoneProgressionSettingsProps> = (
           <Gift size={14} /> Rewards on first visit
         </label>
         <div className="space-y-2">
-          {rewards.map((reward, index) => (
-            <div key={`${reward.resource_id}-${index}`} className="flex items-center gap-2">
-              <ResourceSelect
-                value={reward.resource_id}
-                resources={resources}
-                onChange={resource_id => updateReward(index, { resource_id })}
-              />
-              <input
-                type="number"
-                min="1"
-                step="1"
-                value={reward.amount}
-                onChange={e => updateReward(index, { amount: Math.max(1, Number(e.target.value) || 1) })}
-                className="h-10 w-16 bg-zinc-800 border border-zinc-700 rounded px-2 text-xs text-white text-center"
-                aria-label="Reward amount"
-              />
-              <button
-                type="button"
-                onClick={() => onUpdate({ progression_rewards: rewards.filter((_, i) => i !== index) })}
-                className="w-8 h-8 flex items-center justify-center text-zinc-600 hover:text-red-400"
-                aria-label="Remove reward"
-              >
-                <Trash2 size={13} />
-              </button>
-            </div>
-          ))}
+          {rewards.map((reward, index) => {
+            const isVariable = typeof reward.amount_max === 'number' && reward.amount_max > reward.amount;
+            return (
+              <div key={`${reward.resource_id}-${index}`} className="flex items-center gap-2">
+                <ResourceSelect
+                  value={reward.resource_id}
+                  resources={resources}
+                  onChange={resource_id => updateReward(index, { resource_id })}
+                />
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={reward.amount}
+                  onChange={e => updateReward(index, { amount: Math.max(1, Number(e.target.value) || 1) })}
+                  className="h-10 w-16 bg-zinc-800 border border-zinc-700 rounded px-2 text-xs text-white text-center"
+                  aria-label="Reward amount"
+                />
+                {isVariable && (
+                  <>
+                    <span className="text-xs text-zinc-500">–</span>
+                    <input
+                      type="number"
+                      min={reward.amount}
+                      step="1"
+                      value={reward.amount_max}
+                      onChange={e => updateReward(index, { amount_max: Math.max(reward.amount, Number(e.target.value) || reward.amount) })}
+                      className="h-10 w-16 bg-zinc-800 border border-zinc-700 rounded px-2 text-xs text-white text-center"
+                      aria-label="Maximum reward amount"
+                    />
+                  </>
+                )}
+                <button
+                  type="button"
+                  onClick={() => updateReward(index, { amount_max: isVariable ? undefined : reward.amount + 2 })}
+                  className={`w-8 h-8 shrink-0 flex items-center justify-center rounded transition-colors ${
+                    isVariable ? 'text-emerald-400 bg-emerald-500/10' : 'text-zinc-600 hover:text-zinc-300'
+                  }`}
+                  aria-label="Toggle variable amount"
+                  aria-pressed={isVariable}
+                  title="Variable amount — grants a random number in this range"
+                >
+                  <Dices size={14} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onUpdate({ progression_rewards: rewards.filter((_, i) => i !== index) })}
+                  className="w-8 h-8 flex items-center justify-center text-zinc-600 hover:text-red-400"
+                  aria-label="Remove reward"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            );
+          })}
           <button
             type="button"
             onClick={addReward}
@@ -168,6 +201,7 @@ export const ZoneProgressionSettings: React.FC<ZoneProgressionSettingsProps> = (
         </div>
       </div>
 
+      {showRequirements && (
       <div>
         <label className="block text-xs font-bold text-zinc-400 uppercase mb-2 flex items-center gap-2">
           <LockKeyhole size={14} /> Resource requirements
@@ -222,6 +256,7 @@ export const ZoneProgressionSettings: React.FC<ZoneProgressionSettingsProps> = (
           </button>
         </div>
       </div>
+      )}
     </div>
   );
 };

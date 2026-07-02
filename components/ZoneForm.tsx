@@ -3,7 +3,7 @@ import { ProgressionResource, Zone, ZoneExitBehavior, ZoneEndBehavior } from '..
 import { SAMPLE_AUDIO_FILES, VOICES, CHARACTER_TEMPLATES } from '../constants';
 import { uploadAudio, uploadImage } from '../services/storageService';
 import { supabase } from '../services/supabaseClient';
-import { Music, AlertCircle, Clock, Volume2, EyeOff, Radio, PlayCircle, Upload, Link as LinkIcon, FileAudio, ListMusic, Bot, MessageSquare, Lock, Unlock, GitBranch, Bell, Sparkles, KeySquare, ImageIcon, X, Trash2, Play, Pause, Loader2 } from 'lucide-react';
+import { Music, AlertCircle, Clock, Volume2, EyeOff, Radio, PlayCircle, Upload, Link as LinkIcon, FileAudio, ListMusic, Bot, MessageSquare, Lock, Unlock, GitBranch, Bell, Sparkles, KeySquare, ImageIcon, X, Trash2, Play, Pause, Loader2, Gift, HelpCircle } from 'lucide-react';
 import { ZoneProgressionSettings } from './ZoneProgressionSettings';
 
 // ── Mini audio preview player ───────────────────────────────────────────────
@@ -342,26 +342,53 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
     onUpdate({ [field]: url });
   };
 
+  // A discoverable only ever grants a progression reward — it's a dead end
+  // without at least one resource defined for the tour.
+  const discoverableAvailable = progressionEnabled && progressionResources.length > 0;
+
   return (
     <div className="text-zinc-200 pb-20">
       <div className="mb-6">
         <h3 className="text-emerald-400 font-bold uppercase tracking-wider text-sm mb-4">Zone Properties</h3>
         
         {/* Type Selector */}
-        <div className="flex bg-zinc-800 rounded p-1 mb-6">
-             <button 
+        <div className="flex bg-zinc-800 rounded p-1 mb-1">
+             <button
                onClick={() => onUpdate({ type: 'audio' })}
-               className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded transition-colors ${zone.type !== 'character' ? 'bg-emerald-600 text-white shadow' : 'text-zinc-400 hover:text-zinc-200'}`}
+               className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded transition-colors ${zone.type === 'audio' ? 'bg-emerald-600 text-white shadow' : 'text-zinc-400 hover:text-zinc-200'}`}
              >
                <Music size={14} /> Media Zone
              </button>
-             <button 
+             <button
                onClick={() => onUpdate({ type: 'character' })}
                className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded transition-colors ${zone.type === 'character' ? 'bg-indigo-500 text-white shadow' : 'text-zinc-400 hover:text-zinc-200'}`}
              >
                <Bot size={14} /> AI Character
              </button>
+             <button
+               type="button"
+               disabled={!discoverableAvailable}
+               title={discoverableAvailable ? undefined : 'Enable Progression in Tour Settings first'}
+               onClick={() => {
+                 if (!discoverableAvailable) return;
+                 // Reset to sensible discoverable defaults — small, hidden,
+                 // and looping so the hint chime plays continuously on approach.
+                 onUpdate({ type: 'discoverable', radius: 15, is_visible: false, on_end: 'loop' });
+               }}
+               className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded transition-colors ${
+                 zone.type === 'discoverable'
+                   ? 'bg-pink-500 text-white shadow'
+                   : discoverableAvailable ? 'text-zinc-400 hover:text-zinc-200' : 'text-zinc-600 cursor-not-allowed'
+               }`}
+             >
+               <Gift size={14} /> Discoverable
+             </button>
         </div>
+        <p className="text-[10px] text-zinc-500 mb-5 min-h-[1em]">
+          {!discoverableAvailable && zone.type !== 'discoverable'
+            ? 'Enable Progression in Tour Settings to add Discoverable zones.'
+            : ''}
+        </p>
 
         {/* Name */}
         <div className="mb-4">
@@ -677,6 +704,350 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
               <EyeOff size={14} /> Invisible on Map
             </span>
           </label>
+        </div>
+      ) : zone.type === 'discoverable' ? (
+        /* --- DISCOVERABLE SETTINGS --- */
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
+          {/* Icon */}
+          <div>
+            <label className="block text-xs font-bold text-zinc-400 uppercase mb-2 flex items-center gap-2">
+              <ImageIcon size={14} /> Icon <span className="normal-case font-normal text-zinc-500">(optional)</span>
+            </label>
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => handleImageUpload(e, 'zone_image_url')}
+            />
+            {zone.zone_image_url ? (
+              <div className="relative w-24 h-24 group">
+                <img
+                  src={zone.zone_image_url}
+                  alt="Discoverable icon"
+                  className="w-24 h-24 object-cover rounded-xl border border-zinc-700"
+                />
+                <button
+                  onClick={() => onUpdate({ zone_image_url: null })}
+                  className="absolute -top-2 -right-2 z-10 w-6 h-6 bg-red-500 hover:bg-red-400 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                  aria-label="Remove icon"
+                >
+                  <X size={12} />
+                </button>
+                <button
+                  onClick={() => imageInputRef.current?.click()}
+                  className="absolute inset-0 rounded-xl bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold"
+                >
+                  Replace
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => !imageUploading && imageInputRef.current?.click()}
+                className="w-24 h-24 rounded-xl border-2 border-dashed border-zinc-700 hover:border-pink-500 hover:bg-pink-500/5 flex flex-col items-center justify-center gap-1.5 text-zinc-500 hover:text-pink-400 transition-all"
+              >
+                {imageUploading
+                  ? <Loader2 size={18} className="animate-spin" />
+                  : <Upload size={18} />
+                }
+                <span className="text-[10px] font-bold uppercase tracking-wide">
+                  {imageUploading ? 'Uploading' : 'Upload'}
+                </span>
+              </button>
+            )}
+            {imageUploadError && (
+              <p className="text-xs text-red-400 mt-1.5 leading-snug">{imageUploadError}</p>
+            )}
+            {!imageUploadError && (
+              <p className="text-[10px] text-zinc-500 mt-1.5">
+                Shown in the pickup notification. If "Hide Until Found" is on, players see a generic glyph instead until they collect it.
+              </p>
+            )}
+          </div>
+
+          {/* Hint Sound */}
+          <div>
+            <label className="block text-xs font-bold text-zinc-400 uppercase mb-2 flex items-center gap-2">
+              <Music size={14} /> Hint Sound <span className="normal-case font-normal text-zinc-500">(optional)</span>
+            </label>
+            <div className="flex bg-zinc-800 rounded p-1 mb-3">
+              <button onClick={() => setSourceType('upload')} className={`flex-1 py-1 text-xs rounded ${sourceType === 'upload' ? 'bg-emerald-600 text-white' : 'text-zinc-400'}`}>Upload</button>
+              <button onClick={() => setSourceType('ai')} className={`flex-1 py-1 text-xs rounded ${sourceType === 'ai' ? 'bg-indigo-600 text-white' : 'text-zinc-400'}`}>AI Voice</button>
+              <button onClick={() => setSourceType('url')} className={`flex-1 py-1 text-xs rounded ${sourceType === 'url' ? 'bg-emerald-600 text-white' : 'text-zinc-400'}`}>Link</button>
+              <button onClick={() => setSourceType('preset')} className={`flex-1 py-1 text-xs rounded ${sourceType === 'preset' ? 'bg-emerald-600 text-white' : 'text-zinc-400'}`}>Preset</button>
+            </div>
+
+            <div className="bg-zinc-800/50 rounded border border-zinc-800 p-3">
+              {sourceType === 'preset' && (
+                <select
+                  className="w-full bg-zinc-900 text-sm text-white border border-zinc-700 rounded p-2"
+                  value={zone.media_url.startsWith('data:') ? '' : zone.media_url}
+                  onChange={(e) => onUpdate({ media_url: e.target.value })}
+                >
+                  <option value="" disabled>Select Demo Track</option>
+                  {SAMPLE_AUDIO_FILES.map((file, idx) => (
+                    <option key={idx} value={file.url}>{file.label}</option>
+                  ))}
+                </select>
+              )}
+              {sourceType === 'upload' && (
+                <>
+                  <div
+                    onClick={() => !audioUploading && fileInputRef.current?.click()}
+                    className={`border border-dashed border-zinc-700 p-4 text-center rounded transition-colors ${audioUploading ? 'cursor-wait opacity-60' : 'cursor-pointer hover:bg-zinc-800'}`}
+                  >
+                    <input type="file" ref={fileInputRef} className="hidden" accept="audio/*" onChange={handleFileUpload} />
+                    {audioUploading ? (
+                      <span className="flex items-center justify-center gap-2 text-xs text-zinc-400">
+                        <Loader2 size={13} className="animate-spin" /> Uploading…
+                      </span>
+                    ) : (
+                      <span className="text-xs text-zinc-400">{fileName || 'Click to Upload'}</span>
+                    )}
+                  </div>
+                  {uploadError && (
+                    <p className="flex items-center gap-1.5 text-xs text-red-400 mt-1.5">
+                      <AlertCircle size={12} className="shrink-0" /> {uploadError}
+                    </p>
+                  )}
+                </>
+              )}
+              {sourceType === 'ai' && (
+                <div className="space-y-3">
+                  {ttsLoadingVoices && (
+                    <p className="flex items-center gap-2 text-xs text-zinc-400 py-2">
+                      <Loader2 size={13} className="animate-spin" /> Loading your ElevenLabs voices…
+                    </p>
+                  )}
+
+                  {ttsVoicesError && (
+                    <p className="flex items-start gap-1.5 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded p-2.5 leading-relaxed">
+                      <AlertCircle size={12} className="shrink-0 mt-0.5" /> {ttsVoicesError}
+                    </p>
+                  )}
+
+                  {ttsVoices && ttsVoices.length > 0 && (
+                    <>
+                      {/* Script */}
+                      <div>
+                        <div className="flex items-baseline justify-between mb-1">
+                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Voiceover script</label>
+                          <span className={`text-[10px] tabular-nums ${ttsScript.length > 9000 ? 'text-amber-400' : 'text-zinc-600'}`}>
+                            {ttsScript.length}/10000
+                          </span>
+                        </div>
+                        <textarea
+                          value={ttsScript}
+                          onChange={e => { onUpdate({ voiceover_script: e.target.value.slice(0, 10000) }); setTtsDone(false); }}
+                          rows={4}
+                          placeholder="Write the voiceover script…"
+                          className="w-full bg-zinc-900 border border-zinc-700 rounded p-2.5 text-xs text-white placeholder-zinc-600 leading-relaxed resize-y break-words whitespace-pre-wrap focus:outline-none focus:border-pink-500"
+                        />
+                      </div>
+
+                      {/* Voice picker */}
+                      <div>
+                        <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Voice</label>
+                        <div className="flex gap-2">
+                          <select
+                            value={ttsVoiceId}
+                            onChange={e => setTtsVoiceId(e.target.value)}
+                            className="flex-1 min-w-0 bg-zinc-900 border border-zinc-700 rounded p-2 text-xs text-white focus:outline-none focus:border-pink-500"
+                          >
+                            {ttsVoices.map(v => (
+                              <option key={v.voice_id} value={v.voice_id}>
+                                {v.name}{v.category === 'premade' ? '' : ` (${v.category})`}
+                              </option>
+                            ))}
+                          </select>
+                          {(() => {
+                            const v = ttsVoices.find(x => x.voice_id === ttsVoiceId);
+                            return v?.preview_url ? (
+                              <button
+                                onClick={() => playVoiceSample(v.name, v.preview_url!)}
+                                className="px-2.5 shrink-0 rounded bg-zinc-900 border border-zinc-700 text-zinc-400 hover:text-white transition-colors"
+                                title="Preview voice"
+                              >
+                                {playingVoice === v.name ? <Pause size={12} /> : <Play size={12} />}
+                              </button>
+                            ) : null;
+                          })()}
+                        </div>
+                      </div>
+
+                      {/* Generate */}
+                      <button
+                        onClick={generateVoiceover}
+                        disabled={!ttsScript.trim() || ttsGenerating}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {ttsGenerating
+                          ? <><Loader2 size={13} className="animate-spin" /> Generating voiceover…</>
+                          : <><Sparkles size={13} /> Generate Voiceover</>}
+                      </button>
+
+                      {ttsError && (
+                        <p className="flex items-start gap-1.5 text-xs text-red-400">
+                          <AlertCircle size={12} className="shrink-0 mt-0.5" /> {ttsError}
+                        </p>
+                      )}
+                      {ttsDone && (
+                        <p className="text-xs text-emerald-400">
+                          Voiceover saved as this zone's audio — preview it below. Generate again to replace it.
+                        </p>
+                      )}
+
+                      <p className="text-[10px] text-zinc-600 leading-relaxed">
+                        Generated once and saved with your experience — playback never uses your API quota.
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
+              {sourceType === 'url' && (
+                 <input
+                   type="text"
+                   className="w-full bg-zinc-900 border border-zinc-700 rounded p-2 text-xs text-white"
+                   placeholder="https://"
+                   value={zone.media_url}
+                   onChange={(e) => onUpdate({ media_url: e.target.value })}
+                 />
+              )}
+            </div>
+            {zone.media_url && !zone.media_url.startsWith('blob:temp') && (
+              <>
+                <AudioPreview key={zone.media_url} url={zone.media_url} volume={zone.volume ?? 1} />
+                <button
+                  type="button"
+                  onClick={() => { onUpdate({ media_url: '', voiceover_script: '' }); setFileName(''); setTtsDone(false); }}
+                  className="mt-2 flex items-center gap-1.5 text-xs text-zinc-500 hover:text-red-400 transition-colors"
+                >
+                  <Trash2 size={12} /> Remove hint sound
+                </button>
+              </>
+            )}
+            {!zone.media_url && (
+              <p className="text-[10px] text-zinc-500 mt-2">
+                Leave empty for a silent, purely audio-hunted discoverable — the player only ever hears their own footsteps.
+              </p>
+            )}
+          </div>
+
+          {zone.media_url && (
+            <div>
+              <div className="flex justify-between text-xs font-bold text-zinc-400 uppercase mb-1">
+                <span>Volume</span>
+                <span>{Math.round((zone.volume ?? 1) * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                className="w-full accent-pink-500 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
+                value={zone.volume ?? 1}
+                onChange={(e) => onUpdate({ volume: parseFloat(e.target.value) })}
+              />
+            </div>
+          )}
+
+          {/* Hint + Collect radii */}
+          <div className="space-y-4">
+            <div>
+              <div className="flex justify-between text-xs font-bold text-zinc-400 uppercase mb-1">
+                <span>Hint Radius</span>
+                <span>{Math.round(zone.radius * 3.28084)} ft</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max={RADIUS_SLIDER_MAX}
+                step="1"
+                className="w-full accent-pink-500 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
+                value={radiusToSlider(zone.radius)}
+                onChange={(e) => {
+                  const nextRadius = sliderToRadius(Number(e.target.value));
+                  const updates: Partial<Zone> = { radius: nextRadius };
+                  if (zone.collect_radius != null && zone.collect_radius > nextRadius) {
+                    updates.collect_radius = nextRadius;
+                  }
+                  onUpdate(updates);
+                }}
+              />
+              <p className="text-[10px] text-zinc-500 mt-1">How far away the hint sound can be heard.</p>
+            </div>
+            <div>
+              <div className="flex justify-between text-xs font-bold text-zinc-400 uppercase mb-1">
+                <span>Collect Radius</span>
+                <span>{Math.round((zone.collect_radius ?? zone.radius) * 3.28084)} ft</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max={radiusToSlider(zone.radius)}
+                step="1"
+                className="w-full accent-pink-500 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
+                value={radiusToSlider(zone.collect_radius ?? zone.radius)}
+                onChange={(e) => onUpdate({ collect_radius: Math.min(zone.radius, sliderToRadius(Number(e.target.value))) })}
+              />
+              <p className="text-[10px] text-zinc-500 mt-1">How close the player must walk to actually pick it up.</p>
+            </div>
+          </div>
+
+          {/* Toggles */}
+          <div className="space-y-2">
+            <label className="flex items-center gap-3 cursor-pointer group">
+              <div className={`w-4 h-4 border rounded transition-colors flex items-center justify-center ${zone.is_mystery ? 'bg-pink-500 border-pink-500' : 'border-zinc-600 bg-transparent'}`}>
+                {zone.is_mystery && <div className="w-2 h-2 bg-white rounded-sm" />}
+              </div>
+              <input
+                type="checkbox"
+                className="hidden"
+                checked={!!zone.is_mystery}
+                onChange={(e) => onUpdate({ is_mystery: e.target.checked })}
+              />
+              <span className="text-sm text-zinc-300 group-hover:text-white transition-colors flex items-center gap-2">
+                <HelpCircle size={14} /> Hide Until Found
+              </span>
+            </label>
+            <label className="flex items-center gap-3 cursor-pointer group">
+              <div className={`w-4 h-4 border rounded transition-colors flex items-center justify-center ${!zone.is_visible ? 'bg-pink-500 border-pink-500' : 'border-zinc-600 bg-transparent'}`}>
+                {!zone.is_visible && <div className="w-2 h-2 bg-white rounded-sm" />}
+              </div>
+              <input type="checkbox" className="hidden" checked={!zone.is_visible} onChange={(e) => onUpdate({ is_visible: !e.target.checked })} />
+              <span className="text-sm text-zinc-300 group-hover:text-white transition-colors flex items-center gap-2">
+                <EyeOff size={14} /> Invisible on Map
+              </span>
+            </label>
+            {zone.media_url && (
+              <label className="flex items-center gap-3 cursor-pointer group">
+                <div className={`w-4 h-4 border rounded transition-colors flex items-center justify-center ${zone.use_attenuation ? 'bg-pink-500 border-pink-500' : 'border-zinc-600 bg-transparent'}`}>
+                  {zone.use_attenuation && <div className="w-2 h-2 bg-white rounded-sm" />}
+                </div>
+                <input type="checkbox" className="hidden" checked={zone.use_attenuation} onChange={(e) => onUpdate({ use_attenuation: e.target.checked })} />
+                <span className="text-sm text-zinc-300">Distance Attenuation</span>
+              </label>
+            )}
+          </div>
+
+          {zone.media_url && (
+            <div className="grid grid-cols-2 gap-4 border-t border-zinc-800 pt-4">
+              <div>
+                <div className="flex justify-between text-xs font-bold text-zinc-400 uppercase mb-1">
+                  <span>Fade In</span>
+                  <span>{zone.fade_in > 0 ? `${zone.fade_in}s` : 'Off'}</span>
+                </div>
+                <input type="range" min="0" max="5" step="0.5" className="w-full h-1 bg-zinc-700 rounded accent-pink-500" value={zone.fade_in} onChange={(e) => onUpdate({ fade_in: parseFloat(e.target.value) })} />
+              </div>
+              <div>
+                <div className="flex justify-between text-xs font-bold text-zinc-400 uppercase mb-1">
+                  <span>Fade Out</span>
+                  <span>{zone.fade_out > 0 ? `${zone.fade_out}s` : 'Off'}</span>
+                </div>
+                <input type="range" min="0" max="5" step="0.5" className="w-full h-1 bg-zinc-700 rounded accent-pink-500" value={zone.fade_out} onChange={(e) => onUpdate({ fade_out: parseFloat(e.target.value) })} />
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         /* --- MEDIA ZONE SETTINGS --- */
@@ -1049,7 +1420,10 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
           </div>
         )}
 
-        {/* Lock Type */}
+        {/* Lock Type — omitted for discoverables: locking a hidden find behind a
+            passphrase the player would need to already know about undermines
+            the "surprise discovery" framing. */}
+        {zone.type !== 'discoverable' && (
         <div>
           <label className="block text-xs font-bold text-zinc-400 uppercase mb-2">Lock</label>
           <div className="flex bg-zinc-800 rounded p-1 mb-3">
@@ -1092,6 +1466,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
             </div>
           )}
         </div>
+        )}
       </div>
 
       {progressionEnabled && progressionResources.length > 0 && (
@@ -1099,6 +1474,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
           zone={zone}
           resources={progressionResources}
           onUpdate={onUpdate}
+          showRequirements={zone.type !== 'discoverable'}
         />
       )}
 

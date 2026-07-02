@@ -215,6 +215,10 @@ export const Player: React.FC = () => {
   const visitedZoneIdsRef = useRef<Set<string>>(new Set());
   const unlockedZoneIdsRef = useRef<Set<string>>(new Set());
   const prevZoneIdsRef = useRef<Set<string>>(new Set());
+  // Discoverable zones have a second, smaller threshold (collect_radius) for
+  // actual pickup, distinct from the outer radius used for the hint chime —
+  // tracked separately so pickup fires once per crossing, not once per tick.
+  const prevCollectZoneIdsRef = useRef<Set<string>>(new Set());
   const passphraseChallengeRef = useRef<Zone | null>(null);
 
   // Simulation ref to avoid state lag in drag handlers
@@ -415,6 +419,7 @@ export const Player: React.FC = () => {
       let foundCharZone: Zone | null = null;
       let foundMediaZone: Zone | null = null;
       const currentZoneIds = new Set<string>();
+      const currentCollectZoneIds = new Set<string>();
 
       zones.forEach(zone => {
         const dist = getDistance(currentPos[0], currentPos[1], zone.lat, zone.lng);
@@ -438,7 +443,9 @@ export const Player: React.FC = () => {
                 passphraseChallengeRef.current = zone;
                 setPassphraseChallenge(zone);
               }
-            } else if (prereqMet) {
+            } else if (prereqMet && zone.type !== 'discoverable') {
+              // Discoverables grant on crossing the smaller collect_radius,
+              // handled separately below — not on the outer hint radius.
               completeZoneEntry(zone);
             }
 
@@ -453,7 +460,9 @@ export const Player: React.FC = () => {
           if (isZoneAccessible(zone)) {
             if (zone.type === 'character') {
               foundCharZone = zone;
-            } else {
+            } else if (zone.type !== 'discoverable') {
+              // Discoverables intentionally produce no "Now Playing" card and
+              // no media-zone card — the hint plays silently, pickup is instant.
               if (
                 !foundMediaZone &&
                 (zone.zone_image_url || (!zone.media_url && zone.description)) &&
@@ -479,9 +488,17 @@ export const Player: React.FC = () => {
           }
         }
 
-        if (zone.type === 'audio') {
+        // Discoverables reuse the exact same attenuation pipeline as audio
+        // zones for their hint chime — the outer `radius` is the "you're
+        // getting warm" boundary. Once collected, force volume to 0 (still
+        // included every tick so the existing fade-out actually runs).
+        const discoverableCollected =
+          zone.type === 'discoverable' &&
+          !!playerProgressRef.current?.granted_zone_ids.includes(zone.id);
+
+        if (zone.type === 'audio' || zone.type === 'discoverable') {
           let volume = 0;
-          if (insideZone && isZoneAccessible(zone)) {
+          if (!discoverableCollected && insideZone && isZoneAccessible(zone)) {
             const zoneVolume = Math.min(1, Math.max(0, Number(zone.volume ?? 1.0)));
             volume = zone.use_attenuation ? calculateAttenuation(dist, zone.radius) : 1.0;
             volume = volume * zoneVolume;
@@ -496,7 +513,23 @@ export const Player: React.FC = () => {
             fadeOut: zone.fade_out,
           });
         }
+
+        // Pickup: crossing the inner collect_radius (defaults to the outer
+        // radius when unset), independent of the outer-radius "entry" event
+        // above — a discoverable has two meaningful thresholds where every
+        // other zone type has one.
+        if (zone.type === 'discoverable' && !discoverableCollected && isZoneAccessible(zone)) {
+          const collectRadius = zone.collect_radius ?? zone.radius;
+          if (dist <= collectRadius) {
+            currentCollectZoneIds.add(zone.id);
+            if (!prevCollectZoneIdsRef.current.has(zone.id)) {
+              completeZoneEntry(zone);
+            }
+          }
+        }
       });
+
+      prevCollectZoneIdsRef.current = currentCollectZoneIds;
 
       prevZoneIdsRef.current = currentZoneIds;
       dismissedMediaZoneIdsRef.current = new Set(
@@ -705,7 +738,9 @@ export const Player: React.FC = () => {
       audioService.init(),
       new Promise<void>(resolve => window.setTimeout(resolve, 1500)),
     ]);
-    zones.filter(z => z.type === 'audio').forEach(z => audioService.loadAudio(z.id, z.media_url));
+    // Discoverables reuse the same audio pipeline for their hint chime;
+    // loadAudio() already no-ops for zones with an empty media_url.
+    zones.filter(z => z.type === 'audio' || z.type === 'discoverable').forEach(z => audioService.loadAudio(z.id, z.media_url));
     setAudioStarted(true);
     // Start analytics session — skip in preview mode so creator test-runs don't pollute data.
     if (!isPreview && tour?.id) {
@@ -820,20 +855,36 @@ export const Player: React.FC = () => {
                playerProgress &&
                !canMeetProgressionRequirements(zone, playerProgress)
              ) return null;
+             // A found discoverable disappears cleanly rather than lingering
+             // as a dead spot — no circle, no icon, no hint audio (silenced
+             // separately in the geofencing loop).
+             const isDiscoverable = zone.type === 'discoverable';
+             if (isDiscoverable && playerProgress?.granted_zone_ids.includes(zone.id)) return null;
 
              const isChar = zone.type === 'character';
              const isLocked = zone.lock_type === 'passphrase';
 
              // Universal colour language for the player:
              //   active (any type) → blue · inactive audio → green
-             //   inactive character → purple · inactive locked → yellow
+             //   inactive character → purple · inactive discoverable → pink
+             //   inactive locked → yellow
              // (Invisible zones are never drawn — handled above.)
              const ACTIVE = '#3b82f6'; // blue-500
              const color = isActive
                ? ACTIVE
-               : isLocked ? '#f59e0b'   // amber/yellow
-               : isChar   ? '#8b5cf6'   // violet/purple
-               :            '#10b981';  // emerald/green
+               : isLocked      ? '#f59e0b'   // amber/yellow
+               : isChar        ? '#8b5cf6'   // violet/purple
+               : isDiscoverable ? '#ec4899'  // pink
+               :                 '#10b981';  // emerald/green
+
+             const DiscoverableIcon = isDiscoverable ? L.divIcon({
+               html: zone.is_mystery || !zone.zone_image_url
+                 ? `<div style="width:22px;height:22px;border-radius:50%;background:#ec4899;border:2px solid white;box-shadow:0 1px 5px rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;color:white;font-size:12px;font-weight:800">?</div>`
+                 : `<div style="width:26px;height:26px;border-radius:50%;background-image:url('${zone.zone_image_url}');background-size:cover;background-position:center;border:2px solid white;box-shadow:0 1px 5px rgba(0,0,0,0.5)"></div>`,
+               className: '',
+               iconSize: zone.is_mystery || !zone.zone_image_url ? [22, 22] : [26, 26],
+               iconAnchor: zone.is_mystery || !zone.zone_image_url ? [11, 11] : [13, 13],
+             }) : null;
 
              return (
               <React.Fragment key={zone.id}>
@@ -848,6 +899,9 @@ export const Player: React.FC = () => {
                     dashArray: isLocked && !isActive ? '6 4' : undefined
                   }}
                 />
+                {DiscoverableIcon && (
+                  <Marker position={[zone.lat, zone.lng]} icon={DiscoverableIcon} />
+                )}
               </React.Fragment>
              );
           })}
