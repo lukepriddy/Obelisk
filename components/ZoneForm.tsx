@@ -355,13 +355,13 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
         <div className="flex bg-zinc-800 rounded p-1 mb-1">
              <button
                onClick={() => onUpdate({ type: 'audio' })}
-               className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded transition-colors ${zone.type === 'audio' ? 'bg-emerald-600 text-white shadow' : 'text-zinc-400 hover:text-zinc-200'}`}
+               className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 text-[11px] font-bold rounded transition-colors whitespace-nowrap ${zone.type === 'audio' ? 'bg-emerald-600 text-white shadow' : 'text-zinc-400 hover:text-zinc-200'}`}
              >
                <Music size={14} /> Media Zone
              </button>
              <button
                onClick={() => onUpdate({ type: 'character' })}
-               className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded transition-colors ${zone.type === 'character' ? 'bg-indigo-500 text-white shadow' : 'text-zinc-400 hover:text-zinc-200'}`}
+               className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 text-[11px] font-bold rounded transition-colors whitespace-nowrap ${zone.type === 'character' ? 'bg-indigo-500 text-white shadow' : 'text-zinc-400 hover:text-zinc-200'}`}
              >
                <Bot size={14} /> AI Character
              </button>
@@ -375,7 +375,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
                  // and looping so the hint chime plays continuously on approach.
                  onUpdate({ type: 'discoverable', radius: 15, is_visible: false, on_end: 'loop' });
                }}
-               className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded transition-colors ${
+               className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 text-[11px] font-bold rounded transition-colors whitespace-nowrap ${
                  zone.type === 'discoverable'
                    ? 'bg-pink-500 text-white shadow'
                    : discoverableAvailable ? 'text-zinc-400 hover:text-zinc-200' : 'text-zinc-600 cursor-not-allowed'
