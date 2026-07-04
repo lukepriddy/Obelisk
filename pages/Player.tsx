@@ -77,6 +77,7 @@ export const Player: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const isPreview = searchParams.get('preview') === '1';
+  const gpsDebugEnabled = searchParams.get('debug') === 'gps';
   
   const [tour, setTour] = useState<Tour | null>(null);
   const [zones, setZones] = useState<Zone[]>([]);
@@ -85,6 +86,7 @@ export const Player: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
+  const [gpsDebugLog, setGpsDebugLog] = useState<string[]>([]);
   const [audioStarted, setAudioStarted] = useState(false);
   const [showAudioResume, setShowAudioResume] = useState(false);
   const [resumingAudio, setResumingAudio] = useState(false);
@@ -283,11 +285,18 @@ export const Player: React.FC = () => {
     hudTimerRef.current = setTimeout(() => setHudNotification(null), 5000);
   };
 
+  const appendGpsDebug = (message: string) => {
+    if (!gpsDebugEnabled) return;
+    const stamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    setGpsDebugLog(prev => [...prev.slice(-7), `${stamp} ${message}`]);
+  };
+
   const applyGpsFix = (pos: GeolocationPosition) => {
     const newPos: [number, number] = [pos.coords.latitude, pos.coords.longitude];
     const accuracy = Number.isFinite(pos.coords.accuracy) ? pos.coords.accuracy : Infinity;
     const now = Date.now();
     const prev = gpsFixRef.current;
+    appendGpsDebug(`fix accuracy=${Number.isFinite(accuracy) ? Math.round(accuracy) : 'unknown'}m`);
 
     // GPS often emits a stale coarse fix before the real high-accuracy fix.
     // Keep the best recent fix unless the new reading is comparable or the old
@@ -678,19 +687,31 @@ export const Player: React.FC = () => {
     if (simulationMode) return;
     if (!navigator.geolocation) {
       setGpsError('Location is not available in this browser.');
+      appendGpsDebug('geolocation unavailable');
       return;
     }
 
+    appendGpsDebug('starting geolocation');
+
     navigator.geolocation.getCurrentPosition(
-      applyGpsFix,
-      () => {},
+      pos => {
+        appendGpsDebug('getCurrentPosition success');
+        applyGpsFix(pos);
+      },
+      err => {
+        appendGpsDebug(`getCurrentPosition error code=${err.code}`);
+      },
       { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 }
     );
 
     const watchId = navigator.geolocation.watchPosition(
-      applyGpsFix,
+      pos => {
+        appendGpsDebug('watchPosition success');
+        applyGpsFix(pos);
+      },
       (err) => {
         console.error(err);
+        appendGpsDebug(`watchPosition error code=${err.code}`);
         if (err.code === err.PERMISSION_DENIED) {
           setGpsError('Location access was denied. Please enable location services and reload to play this experience.');
         } else if (err.code === err.POSITION_UNAVAILABLE) {
@@ -1123,6 +1144,25 @@ export const Player: React.FC = () => {
           </div>
         );
       })()}
+
+      {gpsDebugEnabled && (
+        <div className="fixed left-3 right-3 top-3 z-[6000] pointer-events-none">
+          <div className="mx-auto max-w-sm rounded-2xl border border-amber-500/40 bg-zinc-950/90 px-3 py-2 text-[11px] text-amber-100 shadow-2xl backdrop-blur-md">
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <span className="font-bold uppercase tracking-wider text-amber-300">GPS Debug</span>
+              <span className="font-mono text-amber-200/70">{userPos ? `${userPos[0].toFixed(5)}, ${userPos[1].toFixed(5)}` : 'no fix'}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-amber-100/80">
+              <span>Geolocation</span><span className="text-right">{navigator.geolocation ? 'available' : 'missing'}</span>
+              <span>Accuracy</span><span className="text-right">{gpsAccuracy ? `${Math.round(gpsAccuracy)}m` : '—'}</span>
+              <span>Error</span><span className="text-right truncate">{gpsError || 'none'}</span>
+            </div>
+            <div className="mt-1.5 space-y-0.5 font-mono text-[10px] text-amber-100/70">
+              {gpsDebugLog.length > 0 ? gpsDebugLog.map((line, index) => <div key={index}>{line}</div>) : <div>waiting for geolocation events</div>}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── TOUR INFO SHEET — smooth CSS transition ── */}
       {tourInfoMounted && tour && (
@@ -1959,8 +1999,15 @@ export const Player: React.FC = () => {
 
       {/* ── PASSPHRASE MODAL ── */}
       {passphraseChallenge && (
-        <div className="absolute inset-0 z-[2500] bg-black/70 backdrop-blur-sm flex items-end justify-center animate-in fade-in" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-          <div className="bg-zinc-900 border border-amber-500/30 rounded-t-3xl shadow-2xl w-full max-w-lg p-6 pb-8 animate-in slide-in-from-bottom-4">
+        <div
+          className="fixed inset-x-0 top-0 z-[2500] bg-black/70 backdrop-blur-sm flex items-end justify-center animate-in fade-in overflow-y-auto"
+          style={{
+            height: '100dvh',
+            paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)',
+            paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)',
+          }}
+        >
+          <div className="bg-zinc-900 border border-amber-500/30 rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-lg p-6 pb-6 animate-in slide-in-from-bottom-4 max-h-[calc(100dvh-32px)] overflow-y-auto">
             <div className="w-10 h-1 bg-zinc-700 rounded-full mx-auto mb-5" />
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0">
@@ -1989,7 +2036,7 @@ export const Player: React.FC = () => {
               placeholder="..."
             />
             {passphraseError && <p className="text-red-400 text-xs mb-3">Incorrect passphrase. Try again.</p>}
-            <div className="flex gap-3 mt-4">
+            <div className="flex gap-3 mt-4 sticky bottom-0 bg-zinc-900 pt-3 pb-1">
               <button
                 onClick={() => { setPassphraseChallenge(null); passphraseChallengeRef.current = null; setPassphraseInput(''); setPassphraseError(false); }}
                 className="flex-1 py-3.5 rounded-xl bg-zinc-800 text-zinc-400 text-sm font-medium active:bg-zinc-700"

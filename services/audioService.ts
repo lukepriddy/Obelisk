@@ -33,6 +33,7 @@ interface NodeData {
 // Audio waits this long after the player enters a zone before starting, so the
 // sound feels like an intentional arrival rather than an abrupt jump-cut.
 const ENTRY_DELAY_MS = 2000;
+const MIN_EDGE_FADE_SECONDS = 0.12;
 
 function canUseWebAudioGain(url: string) {
   try {
@@ -481,7 +482,7 @@ export class AudioService {
         }
         const exit = nodeData.exitBehavior;
         if (justExited) {
-          this.fadeTo(nodeData, 0, Number(zone.fadeOut) || 0, () => {
+          this.fadeTo(nodeData, 0, Math.max(Number(zone.fadeOut) || 0, MIN_EDGE_FADE_SECONDS), () => {
             this.finishExit(nodeData, exit);
           });
         } else if (!nodeData.fadeTimer && nodeData.currentVolume > 0) {
@@ -499,7 +500,7 @@ export class AudioService {
       // A keep-playing track may still be advancing silently outside the zone.
       // Fade it back up immediately when the player returns.
       if (!audioEl.paused && justEntered) {
-        this.fadeTo(nodeData, volume, Number(zone.fadeIn) || 0);
+        this.fadeTo(nodeData, volume, Math.max(Number(zone.fadeIn) || 0, MIN_EDGE_FADE_SECONDS));
       } else if (!audioEl.paused && !nodeData.fadeTimer) {
         // Keep attenuation responsive while the player moves inside the zone.
         this.setNodeVolume(nodeData, volume);
@@ -516,7 +517,7 @@ export class AudioService {
             zone.id,
             zone.loop === true,
             zone.destroyOnEnd === true,
-            Number(zone.fadeIn) || 0,
+            Math.max(Number(zone.fadeIn) || 0, MIN_EDGE_FADE_SECONDS),
           );
         }, ENTRY_DELAY_MS);
       }
@@ -536,7 +537,7 @@ export class AudioService {
     nodeData.hasStarted = true;
     nodeData.loop = loop;
     nodeData.destroyOnEnd = destroyOnEnd;
-    nodeData.fadeIn = fadeIn;
+    nodeData.fadeIn = Math.max(fadeIn, MIN_EDGE_FADE_SECONDS);
     audioEl.muted = false;
     this.setNodeVolume(nodeData, 0);
     audioEl.play().catch(e => {
@@ -545,7 +546,7 @@ export class AudioService {
       nodeData.playTimer = null;
       this.setNodeVolume(nodeData, 0);
     });
-    this.fadeTo(nodeData, nodeData.desiredVolume, fadeIn);
+    this.fadeTo(nodeData, nodeData.desiredVolume, nodeData.fadeIn);
     this.attachEndBehavior(nodeData);
   }
 

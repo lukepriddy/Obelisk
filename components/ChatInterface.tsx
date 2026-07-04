@@ -270,7 +270,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
             rows={1}
             disabled={isLoading || chatLocked}
             onChange={(e) => setInputText(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
             style={{ fontSize: '16px', overflowY: 'hidden' }}
           />
 
