@@ -86,6 +86,7 @@ export const Player: React.FC = () => {
   const [notFound, setNotFound] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [requestingLocation, setRequestingLocation] = useState(false);
+  const [gpsEnabled, setGpsEnabled] = useState(isPreview);
   const [audioStarted, setAudioStarted] = useState(false);
   const [showAudioResume, setShowAudioResume] = useState(false);
   const [resumingAudio, setResumingAudio] = useState(false);
@@ -676,7 +677,7 @@ export const Player: React.FC = () => {
 
   // GPS Watcher
   useEffect(() => {
-    if (simulationMode) return;
+    if (simulationMode || !gpsEnabled) return;
     if (!navigator.geolocation) {
       setGpsError('Location is not available in this browser.');
       return;
@@ -705,7 +706,7 @@ export const Player: React.FC = () => {
       { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
     );
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [simulationMode]);
+  }, [simulationMode, gpsEnabled]);
 
   const requestLocationFromUserGesture = () => new Promise<boolean>(resolve => {
     if (isPreview || simulationMode) {
@@ -720,11 +721,24 @@ export const Player: React.FC = () => {
 
     setRequestingLocation(true);
     setGpsError(null);
+    let settled = false;
+    const finish = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
+      setRequestingLocation(false);
+      resolve(ok);
+    };
+    const timeoutId = window.setTimeout(() => {
+      setGpsError('Chrome did not return a location prompt. Check site location permission, then tap Begin again.');
+      finish(false);
+    }, 18000);
+
     navigator.geolocation.getCurrentPosition(
       pos => {
         applyGpsFix(pos);
-        setRequestingLocation(false);
-        resolve(true);
+        setGpsEnabled(true);
+        finish(true);
       },
       err => {
         console.error(err);
@@ -737,8 +751,8 @@ export const Player: React.FC = () => {
         } else {
           setGpsError('Could not get your location. Please check your device settings and try again.');
         }
-        setRequestingLocation(false);
-        resolve(false);
+        setGpsEnabled(false);
+        finish(false);
       },
       { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
     );
