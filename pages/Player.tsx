@@ -1160,8 +1160,11 @@ export const Player: React.FC = () => {
                 )}
                 {!isPreview && !userPos && !gpsError && (
                   <div className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 flex items-center justify-center gap-2 text-sm" style={{ color: textColor }}>
-                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin opacity-60" />
-                    <span className="opacity-60">{requestingLocation ? 'Requesting location…' : 'Tap Begin to enable location.'}</span>
+                    {requestingLocation
+                      ? <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin opacity-60" />
+                      : <Locate size={16} className="opacity-60" />
+                    }
+                    <span className="opacity-60">{requestingLocation ? 'Requesting location…' : 'Chrome will ask for location after you tap below.'}</span>
                   </div>
                 )}
                 <button
@@ -1171,7 +1174,7 @@ export const Player: React.FC = () => {
                   style={{ backgroundColor: accent }}
                 >
                   {requestingLocation ? <RefreshCw size={22} className="animate-spin" /> : <PlayCircle size={22} />}
-                  {requestingLocation ? 'Checking location' : 'Begin'}
+                  {requestingLocation ? 'Checking location' : (!isPreview && !userPos ? 'Enable Location & Begin' : 'Begin')}
                 </button>
               </div>
             </div>
