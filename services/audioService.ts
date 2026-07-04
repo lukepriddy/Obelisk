@@ -206,7 +206,7 @@ export class AudioService {
       const useGainNode = !!newContext && canUseWebAudioGain(oldNode.url);
       if (useGainNode) audioEl.crossOrigin = 'anonymous';
       audioEl.src = oldNode.url;
-      audioEl.preload = 'none';
+      audioEl.preload = 'auto';
       audioEl.loop = oldNode.loop;
 
       let sourceNode: MediaElementAudioSourceNode | null = null;
@@ -303,9 +303,9 @@ export class AudioService {
       const useGainNode = !!this.context && canUseWebAudioGain(url);
       if (useGainNode) audioEl.crossOrigin = 'anonymous';
       audioEl.src = url;
-      // preload='none' — stream on demand; avoids any upfront network cost or
-      // accidental playback during initialisation.
-      audioEl.preload = 'none';
+      // Preload plus muted priming during Begin makes the first zone less
+      // vulnerable to browser autoplay and headphone-route timing quirks.
+      audioEl.preload = 'auto';
 
       let sourceNode: MediaElementAudioSourceNode | null = null;
       let gainNode: GainNode | null = null;
@@ -341,9 +341,46 @@ export class AudioService {
         destroyOnEnd: false,
         fadeIn: 0,
       });
+      audioEl.load();
     } catch (e) {
       console.error(`Failed to set up audio for zone ${zoneId}:`, e);
     }
+  }
+
+  async primeLoadedAudio(): Promise<void> {
+    if (!this.isUnlocked) return;
+
+    const attempts: Promise<void>[] = [];
+    this.nodes.forEach((nodeData, zoneId) => {
+      if (nodeData.destroyed || nodeData.hasStarted || nodeData.played) return;
+      const { audioEl } = nodeData;
+      const wasMuted = audioEl.muted;
+      const previousVolume = audioEl.volume;
+      audioEl.muted = true;
+      audioEl.volume = 0;
+      if (nodeData.gainNode) nodeData.gainNode.gain.value = 0;
+
+      attempts.push(
+        audioEl.play()
+          .then(() => {
+            audioEl.pause();
+            try { audioEl.currentTime = 0; } catch { /* not seekable yet */ }
+          })
+          .catch(error => {
+            console.warn(`Zone audio priming failed (${zoneId}):`, error);
+          })
+          .finally(() => {
+            audioEl.muted = wasMuted;
+            audioEl.volume = previousVolume;
+            this.setNodeVolume(nodeData, 0);
+          }),
+      );
+    });
+
+    await Promise.race([
+      Promise.all(attempts).then(() => undefined),
+      new Promise<void>(resolve => window.setTimeout(resolve, 1200)),
+    ]);
   }
 
   private setNodeVolume(nodeData: NodeData, volume: number) {
@@ -500,6 +537,7 @@ export class AudioService {
     nodeData.loop = loop;
     nodeData.destroyOnEnd = destroyOnEnd;
     nodeData.fadeIn = fadeIn;
+    audioEl.muted = false;
     this.setNodeVolume(nodeData, 0);
     audioEl.play().catch(e => {
       console.warn(`Zone audio play failed (${zoneId}):`, e);

@@ -734,15 +734,18 @@ export const Player: React.FC = () => {
 
   const startAudio = async () => {
     setShowAudioResume(false);
+    // Create and silently prime media elements inside the Begin gesture so the
+    // first real zone playback is less likely to be blocked or routed badly.
+    zones
+      .filter(z => z.type === 'audio' || z.type === 'discoverable')
+      .forEach(z => audioService.loadAudio(z.id, z.media_url));
+
     // Some browsers can leave AudioContext.resume() pending indefinitely.
     // Never block entry to the experience while the audio engine catches up.
     await Promise.race([
-      audioService.init(),
+      audioService.init().then(() => audioService.primeLoadedAudio()),
       new Promise<void>(resolve => window.setTimeout(resolve, 1500)),
     ]);
-    // Discoverables reuse the same audio pipeline for their hint chime;
-    // loadAudio() already no-ops for zones with an empty media_url.
-    zones.filter(z => z.type === 'audio' || z.type === 'discoverable').forEach(z => audioService.loadAudio(z.id, z.media_url));
     setAudioStarted(true);
     // Start analytics session — skip in preview mode so creator test-runs don't pollute data.
     if (!isPreview && tour?.id) {
