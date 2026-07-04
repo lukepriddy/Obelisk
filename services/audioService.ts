@@ -20,6 +20,8 @@ interface NodeData {
   playTimer: ReturnType<typeof setTimeout> | null;
   /** Active volume fade timer, or null when volume is stable. */
   fadeTimer: ReturnType<typeof setInterval> | null;
+  /** Short self-check after start, used to recover when play() resolves but time never advances. */
+  healthTimer: ReturnType<typeof setTimeout> | null;
   currentVolume: number;
   desiredVolume: number;
   isInside: boolean;
@@ -28,6 +30,7 @@ interface NodeData {
   loop: boolean;
   destroyOnEnd: boolean;
   fadeIn: number;
+  healthRecoveries: number;
 }
 
 // Audio waits this long after the player enters a zone before starting, so the
@@ -198,6 +201,7 @@ export class AudioService {
     this.nodes.forEach((oldNode, zoneId) => {
       if (oldNode.playTimer) clearTimeout(oldNode.playTimer);
       this.cancelFade(oldNode);
+      this.cancelHealthCheck(oldNode);
       this.setNodeVolume(oldNode, 0);
       oldNode.audioEl.pause();
       oldNode.sourceNode?.disconnect();
@@ -235,9 +239,11 @@ export class AudioService {
         gainNode,
         playTimer: null,
         fadeTimer: null,
+        healthTimer: null,
         currentVolume: 0,
         hasStarted: shouldRestart,
         played: shouldRestart ? false : oldNode.played,
+        healthRecoveries: 0,
       };
       this.setNodeVolume(rebuilt, 0);
       this.attachEndBehavior(rebuilt);
@@ -333,6 +339,7 @@ export class AudioService {
         destroyed: false,
         playTimer: null,
         fadeTimer: null,
+        healthTimer: null,
         currentVolume: 0,
         desiredVolume: 0,
         isInside: false,
@@ -341,6 +348,7 @@ export class AudioService {
         loop: false,
         destroyOnEnd: false,
         fadeIn: 0,
+        healthRecoveries: 0,
       });
       audioEl.load();
     } catch (e) {
@@ -397,6 +405,12 @@ export class AudioService {
     if (!nodeData.fadeTimer) return;
     clearInterval(nodeData.fadeTimer);
     nodeData.fadeTimer = null;
+  }
+
+  private cancelHealthCheck(nodeData: NodeData) {
+    if (!nodeData.healthTimer) return;
+    clearTimeout(nodeData.healthTimer);
+    nodeData.healthTimer = null;
   }
 
   private fadeTo(
@@ -475,6 +489,8 @@ export class AudioService {
         const justExited = nodeData.isInside;
         nodeData.isInside = false;
         nodeData.desiredVolume = 0;
+        nodeData.healthRecoveries = 0;
+        this.cancelHealthCheck(nodeData);
         // Cancel any pending entry delay — the player left before it fired.
         if (nodeData.playTimer) {
           clearTimeout(nodeData.playTimer);
@@ -540,6 +556,7 @@ export class AudioService {
     nodeData.fadeIn = Math.max(fadeIn, MIN_EDGE_FADE_SECONDS);
     audioEl.muted = false;
     this.setNodeVolume(nodeData, 0);
+    const startPosition = audioEl.currentTime || 0;
     audioEl.play().catch(e => {
       console.warn(`Zone audio play failed (${zoneId}):`, e);
       nodeData.hasStarted = false;
@@ -547,7 +564,40 @@ export class AudioService {
       this.setNodeVolume(nodeData, 0);
     });
     this.fadeTo(nodeData, nodeData.desiredVolume, nodeData.fadeIn);
+    this.schedulePlaybackHealthCheck(nodeData, zoneId, startPosition);
     this.attachEndBehavior(nodeData);
+  }
+
+  private schedulePlaybackHealthCheck(nodeData: NodeData, zoneId: string, startPosition: number) {
+    this.cancelHealthCheck(nodeData);
+    nodeData.healthTimer = setTimeout(() => {
+      nodeData.healthTimer = null;
+      if (
+        !nodeData.isInside ||
+        nodeData.destroyed ||
+        nodeData.played ||
+        !nodeData.hasStarted ||
+        nodeData.healthRecoveries >= 1
+      ) return;
+
+      const currentPosition = nodeData.audioEl.currentTime || 0;
+      const playbackAdvanced = !nodeData.audioEl.paused && currentPosition > startPosition + 0.08;
+      if (playbackAdvanced) return;
+
+      nodeData.healthRecoveries += 1;
+      console.warn(`Zone audio did not advance after start; retrying (${zoneId})`);
+      this.cancelFade(nodeData);
+      this.setNodeVolume(nodeData, 0);
+      nodeData.audioEl.pause();
+      try { nodeData.audioEl.currentTime = 0; } catch { /* not seekable yet */ }
+      this.beginPlayback(
+        nodeData,
+        zoneId,
+        nodeData.loop,
+        nodeData.destroyOnEnd,
+        Math.max(nodeData.fadeIn, MIN_EDGE_FADE_SECONDS),
+      );
+    }, 1200);
   }
 
   private attachEndBehavior(nodeData: NodeData) {
@@ -579,7 +629,9 @@ export class AudioService {
     const n = this.nodes.get(zoneId);
     if (!n || n.destroyed) return;
     if (n.playTimer) { clearTimeout(n.playTimer); n.playTimer = null; }
+    this.cancelHealthCheck(n);
     n.played = false;
+    n.healthRecoveries = 0;
     try { n.audioEl.currentTime = 0; } catch { /* not seekable yet */ }
     this.beginPlayback(n, zoneId, n.audioEl.loop, false);
   }
@@ -588,6 +640,7 @@ export class AudioService {
     this.nodes.forEach((data) => {
       if (data.playTimer) clearTimeout(data.playTimer);
       this.cancelFade(data);
+      this.cancelHealthCheck(data);
       data.audioEl.pause();
       data.audioEl.src = '';
       data.sourceNode?.disconnect();

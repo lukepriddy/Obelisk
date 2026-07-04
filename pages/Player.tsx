@@ -205,7 +205,7 @@ export const Player: React.FC = () => {
   };
 
   // HUD notification
-  const [hudNotification, setHudNotification] = useState<{ title: string; message: string } | null>(null);
+  const [hudNotification, setHudNotification] = useState<{ title: string; message: string; imageUrl?: string; featured?: boolean } | null>(null);
   const hudTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Passphrase challenge
@@ -281,10 +281,19 @@ export const Player: React.FC = () => {
     }
   }, [showChat, activeCharacterZone, persistedCharacterZone]);
 
-  const showHud = (title: string, message: string) => {
+  const showHud = (
+    title: string,
+    message: string,
+    options?: { durationMs?: number; imageUrl?: string; featured?: boolean },
+  ) => {
     if (hudTimerRef.current) clearTimeout(hudTimerRef.current);
-    setHudNotification({ title, message });
-    hudTimerRef.current = setTimeout(() => setHudNotification(null), 5000);
+    setHudNotification({
+      title,
+      message,
+      imageUrl: options?.imageUrl,
+      featured: options?.featured,
+    });
+    hudTimerRef.current = setTimeout(() => setHudNotification(null), options?.durationMs ?? 5000);
   };
 
   const appendGpsDebug = (message: string) => {
@@ -394,7 +403,14 @@ export const Player: React.FC = () => {
       zone.type !== 'character' ? zone.entry_message : '',
       rewardMessage(rewards),
     ].filter(Boolean);
-    if (messages.length > 0) showHud(zone.title, messages.join('\n'));
+    if (messages.length > 0) {
+      const isDiscoverable = zone.type === 'discoverable';
+      showHud(zone.title, messages.join('\n'), {
+        durationMs: isDiscoverable || rewards.length > 0 ? 8000 : 5000,
+        imageUrl: isDiscoverable ? zone.zone_image_url : undefined,
+        featured: isDiscoverable && !!zone.zone_image_url,
+      });
+    }
   };
 
   const handlePassphraseSubmit = () => {
@@ -1613,23 +1629,52 @@ export const Player: React.FC = () => {
           style={{ top: `calc(${TOP_BAR + 12}px + env(safe-area-inset-top, 0px))` }}
         >
           <div
-            className="backdrop-blur rounded-2xl shadow-2xl p-4 flex items-start gap-3"
+            className={`backdrop-blur rounded-2xl shadow-2xl ${hudNotification.featured ? 'p-4' : 'p-4 flex items-start gap-3'}`}
             style={{
               backgroundColor: th.hudBg,
               border: `1px solid ${accent}40`,
             }}
           >
-            <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5"
-              style={{ backgroundColor: `${accent}20`, border: `1px solid ${accent}40` }}>
-              <MapPin size={14} style={{ color: accent }} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-[10px] font-bold uppercase tracking-widest mb-0.5" style={{ color: accent }}>{hudNotification.title}</div>
-              <p className="text-sm leading-snug" style={{ color: th.hudText }}>{hudNotification.message}</p>
-            </div>
-            <button onClick={() => setHudNotification(null)} className="shrink-0 p-1 -mr-1 -mt-1 active:opacity-60" style={{ color: th.barMuted }}>
-              <X size={18} />
-            </button>
+            {hudNotification.featured ? (
+              <div className="flex flex-col gap-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    {hudNotification.imageUrl && (
+                      <img
+                        src={hudNotification.imageUrl}
+                        alt=""
+                        className="w-16 h-16 rounded-2xl object-cover shrink-0 shadow-lg"
+                      />
+                    )}
+                    <div className="min-w-0">
+                      <div className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: accent }}>Discovered</div>
+                      <div className="font-bold text-base leading-tight" style={{ color: th.hudText }}>{hudNotification.title}</div>
+                    </div>
+                  </div>
+                  <button onClick={() => setHudNotification(null)} className="shrink-0 p-1 -mr-1 -mt-1 active:opacity-60" style={{ color: th.barMuted }}>
+                    <X size={18} />
+                  </button>
+                </div>
+                <p className="text-sm leading-snug whitespace-pre-wrap" style={{ color: th.hudText }}>{hudNotification.message}</p>
+              </div>
+            ) : (
+              <>
+                <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5"
+                  style={{ backgroundColor: `${accent}20`, border: `1px solid ${accent}40` }}>
+                  {hudNotification.imageUrl
+                    ? <img src={hudNotification.imageUrl} alt="" className="w-full h-full rounded-full object-cover" />
+                    : <MapPin size={14} style={{ color: accent }} />
+                  }
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[10px] font-bold uppercase tracking-widest mb-0.5" style={{ color: accent }}>{hudNotification.title}</div>
+                  <p className="text-sm leading-snug whitespace-pre-wrap" style={{ color: th.hudText }}>{hudNotification.message}</p>
+                </div>
+                <button onClick={() => setHudNotification(null)} className="shrink-0 p-1 -mr-1 -mt-1 active:opacity-60" style={{ color: th.barMuted }}>
+                  <X size={18} />
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
