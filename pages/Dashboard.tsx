@@ -287,7 +287,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
     const origin = host.endsWith('.vercel.app')
       ? 'https://obelisk-main.vercel.app'
       : window.location.origin;
-    const url = `${origin}/player/${tourId}`;
+    const url = `${origin}/player/${tourId}?v=${Date.now().toString(36)}`;
     if (navigator.share) {
       navigator.share({ title: 'Join my Obelisk experience', url }).catch(() => {});
     } else {

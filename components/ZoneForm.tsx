@@ -373,7 +373,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
                  if (!discoverableAvailable) return;
                  // Reset to sensible discoverable defaults — small, hidden,
                  // and looping so the hint chime plays continuously on approach.
-                 onUpdate({ type: 'discoverable', radius: 15, is_visible: false, on_end: 'loop' });
+                 onUpdate({ type: 'discoverable', radius: 15, is_visible: false, use_attenuation: true, on_end: 'loop' });
                }}
                className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 text-[11px] font-bold rounded transition-colors whitespace-nowrap ${
                  zone.type === 'discoverable'
@@ -1420,10 +1420,6 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
           </div>
         )}
 
-        {/* Lock Type — omitted for discoverables: locking a hidden find behind a
-            passphrase the player would need to already know about undermines
-            the "surprise discovery" framing. */}
-        {zone.type !== 'discoverable' && (
         <div>
           <label className="block text-xs font-bold text-zinc-400 uppercase mb-2">Lock</label>
           <div className="flex bg-zinc-800 rounded p-1 mb-3">
@@ -1466,7 +1462,6 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
             </div>
           )}
         </div>
-        )}
       </div>
 
       {progressionEnabled && progressionResources.length > 0 && (

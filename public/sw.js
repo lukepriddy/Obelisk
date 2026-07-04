@@ -7,17 +7,25 @@
  * for previously visited assets.
  */
 
-const CACHE_NAME = 'obelisk-v1';
+const CACHE_NAME = 'obelisk-v2';
 
 // Immediately activate on first install — no waiting for old tabs to close.
 self.addEventListener('install', () => self.skipWaiting());
 
-// Claim all open clients so the SW is controlling from the first page load.
-self.addEventListener('activate', e => e.waitUntil(clients.claim()));
+// Claim all open clients and remove older app-shell caches.
+self.addEventListener('activate', e => e.waitUntil(
+  caches.keys()
+    .then(keys => Promise.all(keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))))
+    .then(() => clients.claim())
+));
 
 self.addEventListener('fetch', e => {
   // Only intercept GET requests.
   if (e.request.method !== 'GET') return;
+
+  // Never serve cached HTML navigations. Player links should always load the
+  // current deployed app shell, even when Safari/Chrome are being aggressive.
+  if (e.request.mode === 'navigate') return;
 
   // Don't intercept Supabase API / storage requests — always go to network.
   const url = e.request.url;

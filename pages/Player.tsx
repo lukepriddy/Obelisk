@@ -85,6 +85,7 @@ export const Player: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
+  const [requestingLocation, setRequestingLocation] = useState(false);
   const [audioStarted, setAudioStarted] = useState(false);
   const [showAudioResume, setShowAudioResume] = useState(false);
   const [resumingAudio, setResumingAudio] = useState(false);
@@ -390,7 +391,9 @@ export const Player: React.FC = () => {
     const correct = (zone.lock_passphrase || '').trim().toLowerCase();
     if (passphraseInput.trim().toLowerCase() === correct) {
       unlockedZoneIdsRef.current = new Set([...unlockedZoneIdsRef.current, zone.id]);
-      completeZoneEntry(zone);
+      if (zone.type !== 'discoverable') {
+        completeZoneEntry(zone);
+      }
       passphraseChallengeRef.current = null;
       setPassphraseChallenge(null);
       setPassphraseInput('');
@@ -704,6 +707,43 @@ export const Player: React.FC = () => {
     return () => navigator.geolocation.clearWatch(watchId);
   }, [simulationMode]);
 
+  const requestLocationFromUserGesture = () => new Promise<boolean>(resolve => {
+    if (isPreview || simulationMode) {
+      resolve(true);
+      return;
+    }
+    if (!navigator.geolocation) {
+      setGpsError('Location is not available in this browser.');
+      resolve(false);
+      return;
+    }
+
+    setRequestingLocation(true);
+    setGpsError(null);
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        applyGpsFix(pos);
+        setRequestingLocation(false);
+        resolve(true);
+      },
+      err => {
+        console.error(err);
+        if (err.code === err.PERMISSION_DENIED) {
+          setGpsError('Location access was denied. Enable location for this browser, then try again.');
+        } else if (err.code === err.POSITION_UNAVAILABLE) {
+          setGpsError('Your location could not be determined. Try stepping outside or checking your GPS signal.');
+        } else if (err.code === err.TIMEOUT) {
+          setGpsError('GPS is taking too long. Try stepping outside or checking your location settings.');
+        } else {
+          setGpsError('Could not get your location. Please check your device settings and try again.');
+        }
+        setRequestingLocation(false);
+        resolve(false);
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
+    );
+  });
+
   const loadTour = async (id: string) => {
     const t = await getTourById(id);
     if (!t) { setNotFound(true); setLoading(false); return; }
@@ -731,6 +771,11 @@ export const Player: React.FC = () => {
   };
 
   const startAudio = async () => {
+    if (!isPreview && !userPos) {
+      const locationReady = await requestLocationFromUserGesture();
+      if (!locationReady) return;
+    }
+
     setShowAudioResume(false);
     // Some browsers can leave AudioContext.resume() pending indefinitely.
     // Never block entry to the experience while the audio engine catches up.
@@ -1102,16 +1147,17 @@ export const Player: React.FC = () => {
                 {!isPreview && !userPos && !gpsError && (
                   <div className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 flex items-center justify-center gap-2 text-sm" style={{ color: textColor }}>
                     <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin opacity-60" />
-                    <span className="opacity-60">Waiting for GPS signal…</span>
+                    <span className="opacity-60">{requestingLocation ? 'Requesting location…' : 'Tap Begin to enable location.'}</span>
                   </div>
                 )}
                 <button
                   onClick={startAudio}
-                  disabled={!isPreview && !userPos}
+                  disabled={requestingLocation}
                   className="flex items-center justify-center gap-2 text-white w-full py-4 rounded-2xl text-lg font-bold shadow-xl active:scale-95 transition-transform disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
                   style={{ backgroundColor: accent }}
                 >
-                  <PlayCircle size={22} /> Begin
+                  {requestingLocation ? <RefreshCw size={22} className="animate-spin" /> : <PlayCircle size={22} />}
+                  {requestingLocation ? 'Checking location' : 'Begin'}
                 </button>
               </div>
             </div>

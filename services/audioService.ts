@@ -501,7 +501,12 @@ export class AudioService {
     nodeData.destroyOnEnd = destroyOnEnd;
     nodeData.fadeIn = fadeIn;
     this.setNodeVolume(nodeData, 0);
-    audioEl.play().catch(e => console.warn(`Zone audio play failed (${zoneId}):`, e));
+    audioEl.play().catch(e => {
+      console.warn(`Zone audio play failed (${zoneId}):`, e);
+      nodeData.hasStarted = false;
+      nodeData.playTimer = null;
+      this.setNodeVolume(nodeData, 0);
+    });
     this.fadeTo(nodeData, nodeData.desiredVolume, fadeIn);
     this.attachEndBehavior(nodeData);
   }
