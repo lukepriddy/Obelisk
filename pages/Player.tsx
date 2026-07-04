@@ -223,6 +223,10 @@ export const Player: React.FC = () => {
   // actual pickup, distinct from the outer radius used for the hint chime —
   // tracked separately so pickup fires once per crossing, not once per tick.
   const prevCollectZoneIdsRef = useRef<Set<string>>(new Set());
+  // Serialized copy of the last activeZones payload. The 200ms loop builds a
+  // fresh array every tick; without this comparison that meant a full Player
+  // re-render (map included) five times a second even while standing still.
+  const lastActiveZonesJsonRef = useRef('');
   const passphraseChallengeRef = useRef<Zone | null>(null);
 
   // Simulation ref to avoid state lag in drag handlers
@@ -437,6 +441,14 @@ export const Player: React.FC = () => {
 
     const interval = setInterval(() => {
       const currentPos = simPosRef.current || userPos;
+      // Zone events need a trustworthy position. The coarse network fix that
+      // unsticks Chrome's "Waiting for GPS signal" hang can be off by a
+      // kilometer — good enough to show the marker and unlock Begin, not good
+      // enough to fire zones, grant rewards, or record visits. Until accuracy
+      // tightens, treat the player as outside every zone (audio fades out via
+      // the normal exit path). Simulation coordinates are always exact.
+      const positionReliable =
+        simulationMode || (gpsFixRef.current?.accuracy ?? Infinity) <= 100;
       const audioUpdates: {
         id: string;
         volume: number;
@@ -461,7 +473,7 @@ export const Player: React.FC = () => {
           !playerProgressRef.current ||
           canMeetProgressionRequirements(zone, playerProgressRef.current);
 
-        if (insideZone && prereqMet && progressionMet) {
+        if (positionReliable && insideZone && prereqMet && progressionMet) {
           currentZoneIds.add(zone.id);
 
           // Zone entry event
@@ -529,7 +541,7 @@ export const Player: React.FC = () => {
 
         if (zone.type === 'audio' || zone.type === 'discoverable') {
           let volume = 0;
-          if (!discoverableCollected && insideZone && isZoneAccessible(zone)) {
+          if (positionReliable && !discoverableCollected && insideZone && isZoneAccessible(zone)) {
             const zoneVolume = Math.min(1, Math.max(0, Number(zone.volume ?? 1.0)));
             volume = zone.use_attenuation ? calculateAttenuation(dist, zone.radius) : 1.0;
             volume = volume * zoneVolume;
@@ -549,7 +561,7 @@ export const Player: React.FC = () => {
         // radius when unset), independent of the outer-radius "entry" event
         // above — a discoverable has two meaningful thresholds where every
         // other zone type has one.
-        if (zone.type === 'discoverable' && !discoverableCollected && isZoneAccessible(zone)) {
+        if (positionReliable && zone.type === 'discoverable' && !discoverableCollected && isZoneAccessible(zone)) {
           const collectRadius = zone.collect_radius ?? zone.radius;
           if (dist <= collectRadius) {
             currentCollectZoneIds.add(zone.id);
@@ -567,7 +579,13 @@ export const Player: React.FC = () => {
         [...dismissedMediaZoneIdsRef.current].filter(id => currentZoneIds.has(id))
       );
       audioService.updateVolumes(audioUpdates);
-      setActiveZones(activeState);
+      // Only push new state when the payload actually changed — volumes are
+      // rounded to whole percent, so this is stable while standing still.
+      const activeStateJson = JSON.stringify(activeState);
+      if (activeStateJson !== lastActiveZonesJsonRef.current) {
+        lastActiveZonesJsonRef.current = activeStateJson;
+        setActiveZones(activeState);
+      }
       setActiveMediaZone(foundMediaZone);
 
       if (foundCharZone?.id !== activeCharZoneRef.current?.id) {
@@ -623,7 +641,7 @@ export const Player: React.FC = () => {
     // activeCharacterZone intentionally excluded — we read it via activeCharZoneRef
     // so the interval doesn't restart on every zone entry/exit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [audioStarted, userPos, zones, tour]);
+  }, [audioStarted, userPos, zones, tour, simulationMode]);
 
   // Safari audio remains intentionally paused after backgrounding or locking.
   // When the player returns, wait for an explicit tap before rebuilding and
@@ -719,6 +737,27 @@ export const Player: React.FC = () => {
       }
     }, 8000);
 
+    // Tiered acquisition. Chrome on phones can stall indefinitely on a fresh
+    // high-accuracy request — maximumAge: 0 forbids returning the cached
+    // last-known position, and when the provider stalls the timeout clock
+    // never runs, so NEITHER callback fires and the player is stuck on
+    // "Waiting for GPS signal". This cache-friendly low-accuracy request
+    // nearly always answers within a couple of seconds and unsticks the UI;
+    // the high-accuracy watch below then refines it. applyGpsFix already
+    // prefers better-accuracy fixes, so a coarse fix never overwrites a good
+    // one — and zone triggers are separately gated on accuracy, so a
+    // kilometer-off network fix can't fire zones.
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        appendGpsDebug('coarse fix success');
+        applyGpsFix(pos);
+      },
+      err => {
+        appendGpsDebug(`coarse fix error code=${err.code}`);
+      },
+      { enableHighAccuracy: false, maximumAge: 120000, timeout: 8000 }
+    );
+
     navigator.geolocation.getCurrentPosition(
       pos => {
         appendGpsDebug('getCurrentPosition success');
@@ -748,7 +787,9 @@ export const Player: React.FC = () => {
           setGpsError('Could not get your location. Please check your device settings and try again.');
         }
       },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
+      // maximumAge 3000: a three-second-old fix is identical at walking speed,
+      // and allowing it avoids Chrome's pathological fresh-fix-only path.
+      { enableHighAccuracy: true, maximumAge: 3000, timeout: 20000 }
     );
     return () => {
       window.clearTimeout(retryTimer);
@@ -778,6 +819,23 @@ export const Player: React.FC = () => {
       appendGpsDebug('manual retry no callback after 15s');
       setGpsError('Chrome did not return a GPS response. Try Safari, or reset Chrome location permission and reload.');
     }, 15000);
+
+    // Cache-friendly coarse request in parallel — the same escape hatch the
+    // startup path uses, since the retry previously re-issued the exact
+    // fresh-high-accuracy request that was already hanging. First callback
+    // wins via the settled flag; a coarse failure stays silent so the
+    // high-accuracy request below drives any error message.
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        if (!finishRetry(false)) return;
+        appendGpsDebug('manual retry coarse success');
+        applyGpsFix(pos);
+      },
+      err => {
+        appendGpsDebug(`manual retry coarse error code=${err.code}`);
+      },
+      { enableHighAccuracy: false, maximumAge: 120000, timeout: 8000 }
+    );
 
     navigator.geolocation.getCurrentPosition(
       pos => {
