@@ -194,23 +194,21 @@ export const duplicateTour = async (tourId: string, ownerId: string): Promise<To
 
 // ── Analytics helpers ─────────────────────────────────────────────────────────
 
-/** Creates a player session when "Begin Experience" is tapped. Returns the new session ID. */
+/** Creates a player session when "Begin Experience" is tapped. Returns the new session ID.
+ *  Goes through an RPC: a direct INSERT ... RETURNING can't work for anonymous
+ *  players, because RETURNING requires the row to pass the owner-only SELECT
+ *  policy on player_sessions. */
 export const startSession = async (tourId: string): Promise<string | null> => {
-  const { data, error } = await supabase
-    .from('player_sessions')
-    .insert({ tour_id: tourId })
-    .select('id')
-    .single();
+  const { data, error } = await supabase.rpc('start_player_session', { p_tour_id: tourId });
   if (error) { console.error('startSession:', error); return null; }
-  return (data as any).id as string;
+  return (data as string | null);
 };
 
-/** Sets ended_at on the session. Best-effort — called on component unmount. */
+/** Sets ended_at on the session. Best-effort — called on component unmount.
+ *  Same RPC reasoning as startSession: a direct UPDATE ... eq('id') needs the
+ *  row to pass the SELECT policy, which anonymous players never do. */
 export const endSession = async (sessionId: string): Promise<void> => {
-  const { error } = await supabase
-    .from('player_sessions')
-    .update({ ended_at: new Date().toISOString() })
-    .eq('id', sessionId);
+  const { error } = await supabase.rpc('end_player_session', { p_session_id: sessionId });
   if (error) console.error('endSession:', error);
 };
 
