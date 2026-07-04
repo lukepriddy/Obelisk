@@ -745,12 +745,32 @@ export const Player: React.FC = () => {
     setRetryingGps(true);
     setGpsError(null);
     appendGpsDebug('manual retry tapped');
+
+    let settled = false;
+    let manualRetryTimeout: number;
+    const finishRetry = (keepRetryVisible: boolean) => {
+      if (settled) return false;
+      settled = true;
+      window.clearTimeout(manualRetryTimeout);
+      setRetryingGps(false);
+      setShowGpsRetry(keepRetryVisible);
+      return true;
+    };
+
+    manualRetryTimeout = window.setTimeout(() => {
+      if (!finishRetry(true)) return;
+      appendGpsDebug('manual retry no callback after 15s');
+      setGpsError('Chrome did not return a GPS response. Try Safari, or reset Chrome location permission and reload.');
+    }, 15000);
+
     navigator.geolocation.getCurrentPosition(
       pos => {
+        if (!finishRetry(false)) return;
         appendGpsDebug('manual retry success');
         applyGpsFix(pos);
       },
       err => {
+        if (!finishRetry(true)) return;
         appendGpsDebug(`manual retry error code=${err.code}`);
         if (err.code === err.PERMISSION_DENIED) {
           setGpsError('Location access was denied. Please enable location services and reload to play this experience.');
@@ -761,8 +781,6 @@ export const Player: React.FC = () => {
         } else {
           setGpsError('Could not get your location. Please check your device settings and try again.');
         }
-        setRetryingGps(false);
-        setShowGpsRetry(true);
       },
       { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 }
     );
