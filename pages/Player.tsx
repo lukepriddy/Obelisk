@@ -87,6 +87,8 @@ export const Player: React.FC = () => {
   const [notFound, setNotFound] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [gpsDebugLog, setGpsDebugLog] = useState<string[]>([]);
+  const [showGpsRetry, setShowGpsRetry] = useState(false);
+  const [retryingGps, setRetryingGps] = useState(false);
   const [audioStarted, setAudioStarted] = useState(false);
   const [showAudioResume, setShowAudioResume] = useState(false);
   const [resumingAudio, setResumingAudio] = useState(false);
@@ -338,6 +340,8 @@ export const Player: React.FC = () => {
     setGpsAccuracy(Number.isFinite(accuracy) ? accuracy : null);
     simPosRef.current = acceptedPos;
     setGpsError(null);
+    setShowGpsRetry(false);
+    setRetryingGps(false);
   };
 
   const isZoneAccessible = (zone: Zone): boolean => {
@@ -692,6 +696,12 @@ export const Player: React.FC = () => {
     }
 
     appendGpsDebug('starting geolocation');
+    const retryTimer = window.setTimeout(() => {
+      if (!gpsFixRef.current) {
+        appendGpsDebug('no gps callback after 8s');
+        setShowGpsRetry(true);
+      }
+    }, 8000);
 
     navigator.geolocation.getCurrentPosition(
       pos => {
@@ -724,8 +734,39 @@ export const Player: React.FC = () => {
       },
       { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
     );
-    return () => navigator.geolocation.clearWatch(watchId);
+    return () => {
+      window.clearTimeout(retryTimer);
+      navigator.geolocation.clearWatch(watchId);
+    };
   }, [simulationMode]);
+
+  const retryGpsFromTap = () => {
+    if (!navigator.geolocation || retryingGps) return;
+    setRetryingGps(true);
+    setGpsError(null);
+    appendGpsDebug('manual retry tapped');
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        appendGpsDebug('manual retry success');
+        applyGpsFix(pos);
+      },
+      err => {
+        appendGpsDebug(`manual retry error code=${err.code}`);
+        if (err.code === err.PERMISSION_DENIED) {
+          setGpsError('Location access was denied. Please enable location services and reload to play this experience.');
+        } else if (err.code === err.POSITION_UNAVAILABLE) {
+          setGpsError('Your location could not be determined. Please check your GPS signal and try again.');
+        } else if (err.code === err.TIMEOUT) {
+          setGpsError('GPS is taking too long. Try stepping outside or checking your location settings.');
+        } else {
+          setGpsError('Could not get your location. Please check your device settings and try again.');
+        }
+        setRetryingGps(false);
+        setShowGpsRetry(true);
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 }
+    );
+  };
 
   const loadTour = async (id: string) => {
     const t = await getTourById(id);
@@ -1130,6 +1171,17 @@ export const Player: React.FC = () => {
                     <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin opacity-60" />
                     <span className="opacity-60">Waiting for GPS signal…</span>
                   </div>
+                )}
+                {!isPreview && !userPos && showGpsRetry && (
+                  <button
+                    type="button"
+                    onClick={retryGpsFromTap}
+                    disabled={retryingGps}
+                    className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold transition-colors active:opacity-70 disabled:opacity-50"
+                    style={{ color: textColor }}
+                  >
+                    {retryingGps ? 'Checking GPS...' : 'Still waiting? Retry GPS'}
+                  </button>
                 )}
                 <button
                   onClick={startAudio}
