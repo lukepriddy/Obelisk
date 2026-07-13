@@ -178,6 +178,7 @@ export const Player: React.FC = () => {
     zones.forEach(zone => {
       try { sessionStorage.removeItem(`obelisk_chat_${zone.id}`); } catch {}
     });
+    try { if (tourId) localStorage.removeItem(`obelisk_zonestate_${tourId}`); } catch {}
 
     const emptySet = new Set<string>();
     visitedZoneIdsRef.current = emptySet;
@@ -368,11 +369,30 @@ export const Player: React.FC = () => {
     return true;
   };
 
+  // ── Zone-state persistence ─────────────────────────────────────────────────
+  // Mobile browsers reclaim background tabs aggressively; without this, a
+  // mid-tour refresh or tab kill re-locks every sequenced and passphrase zone
+  // and the player would have to re-walk the route. Progression (currency /
+  // items) already persists via progressionService — this covers the visited
+  // and unlocked sets. Skipped in preview so creator test runs start fresh.
+  const zoneStateStorageKey = (id: string) => `obelisk_zonestate_${id}`;
+
+  const persistZoneState = () => {
+    if (isPreview || !tourId) return;
+    try {
+      localStorage.setItem(zoneStateStorageKey(tourId), JSON.stringify({
+        visited: [...visitedZoneIdsRef.current],
+        unlocked: [...unlockedZoneIdsRef.current],
+      }));
+    } catch { /* storage unavailable — session still works, just not durable */ }
+  };
+
   const markZoneVisited = (zoneId: string) => {
     if (visitedZoneIdsRef.current.has(zoneId)) return;
     const next = new Set([...visitedZoneIdsRef.current, zoneId]);
     visitedZoneIdsRef.current = next;
     setVisitedZoneIds(next);
+    persistZoneState();
   };
 
   const applyProgressionForZone = (zone: Zone): ProgressionReward[] => {
@@ -423,6 +443,7 @@ export const Player: React.FC = () => {
     const correct = (zone.lock_passphrase || '').trim().toLowerCase();
     if (passphraseInput.trim().toLowerCase() === correct) {
       unlockedZoneIdsRef.current = new Set([...unlockedZoneIdsRef.current, zone.id]);
+      persistZoneState();
       if (zone.type !== 'discoverable') {
         completeZoneEntry(zone);
       }
@@ -579,6 +600,14 @@ export const Player: React.FC = () => {
         [...dismissedMediaZoneIdsRef.current].filter(id => currentZoneIds.has(id))
       );
       audioService.updateVolumes(audioUpdates);
+      // If an interruption latch is blocking audio a zone wants RIGHT NOW,
+      // surface the tap-to-resume banner — regardless of how the interruption
+      // happened (backgrounding between zones, Siri, alarm, declined call).
+      // Previously the banner only appeared if audio was mid-playback at
+      // background time, so the next zone could stay silent with no way out.
+      if (audioService.isInterruptionPaused() && audioUpdates.some(u => u.volume > 0)) {
+        setShowAudioResume(true);
+      }
       // Only push new state when the payload actually changed — volumes are
       // rounded to whole percent, so this is stable while standing still.
       const activeStateJson = JSON.stringify(activeState);
@@ -651,7 +680,16 @@ export const Player: React.FC = () => {
     let interruptedActiveAudio = false;
 
     const showRecoveryWhenVisible = () => {
-      if (document.visibilityState !== 'visible' || !interruptedActiveAudio) return;
+      if (document.visibilityState !== 'visible') return;
+      if (!interruptedActiveAudio) {
+        // Nothing audible was interrupted (phone pocketed between zones —
+        // the common case on a walking tour). Try a silent recovery so the
+        // NEXT zone can play without a tap; if the context refuses to resume
+        // without a gesture, the geofencing loop will surface the tap-to-
+        // resume banner the moment a zone actually needs it.
+        void audioService.clearInterruptionIfIdle();
+        return;
+      }
       interruptedActiveAudio = false;
       setShowAudioResume(true);
     };
@@ -682,6 +720,37 @@ export const Player: React.FC = () => {
     };
   }, [audioStarted]);
 
+  // Keep the screen awake during an active experience — screen sleep is the
+  // single biggest source of audio interruptions on a walking tour. The OS
+  // releases the lock automatically on backgrounding; re-acquire when visible.
+  // Unsupported browsers (or denied requests) fail silently and change nothing.
+  useEffect(() => {
+    if (!audioStarted) return;
+    let lock: { release?: () => Promise<void> } | null = null;
+    let cancelled = false;
+
+    const acquire = async () => {
+      try {
+        const wakeLock = (navigator as any).wakeLock;
+        if (!wakeLock?.request) return;
+        const acquired = await wakeLock.request('screen');
+        if (cancelled) { void acquired?.release?.(); return; }
+        lock = acquired;
+      } catch { /* low battery, unsupported, or denied — non-fatal */ }
+    };
+
+    void acquire();
+    const reacquireWhenVisible = () => {
+      if (document.visibilityState === 'visible') void acquire();
+    };
+    document.addEventListener('visibilitychange', reacquireWhenVisible);
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', reacquireWhenVisible);
+      try { void lock?.release?.(); } catch { /* already released */ }
+    };
+  }, [audioStarted]);
+
   useEffect(() => {
     if (!audioStarted || !bottomBarRef.current) return;
 
@@ -707,7 +776,11 @@ export const Player: React.FC = () => {
 
   useEffect(() => {
     if (!showAudioResume) return;
-    const timer = window.setTimeout(() => setShowAudioResume(false), 12000);
+    const timer = window.setTimeout(() => {
+      // Never auto-dismiss while the latch is still blocking wanted audio —
+      // the loop would re-show it anyway; avoid the 12s flicker.
+      if (!audioService.isInterruptionPaused()) setShowAudioResume(false);
+    }, 12000);
     return () => window.clearTimeout(timer);
   }, [showAudioResume]);
 
@@ -874,6 +947,23 @@ export const Player: React.FC = () => {
     }
     const z = await getZonesByTourId(id);
     setZones(z);
+
+    // Restore visited/unlocked state from a previous session on this device,
+    // pruned to zones that still exist (creator may have edited the tour).
+    if (!isPreview) {
+      try {
+        const raw = localStorage.getItem(zoneStateStorageKey(id));
+        if (raw) {
+          const saved = JSON.parse(raw) as { visited?: string[]; unlocked?: string[] };
+          const zoneIds = new Set(z.map(zone => zone.id));
+          const visited = new Set((saved.visited ?? []).filter(zid => zoneIds.has(zid)));
+          const unlocked = new Set((saved.unlocked ?? []).filter(zid => zoneIds.has(zid)));
+          visitedZoneIdsRef.current = visited;
+          unlockedZoneIdsRef.current = unlocked;
+          setVisitedZoneIds(visited);
+        }
+      } catch { /* corrupted saved state falls back to a fresh run */ }
+    }
 
     // In preview/sim mode seed position at the tour start point.
     // In GPS mode leave userPos null — the watchPosition callback will set it
@@ -1610,6 +1700,7 @@ export const Player: React.FC = () => {
           onClose={() => setShowChat(false)}
           onUnlock={(zoneId) => {
             unlockedZoneIdsRef.current = new Set([...unlockedZoneIdsRef.current, zoneId]);
+            persistZoneState();
             const unlockedZone = zones.find(z => z.id === zoneId);
             if (unlockedZone) showHud('Zone Unlocked', `${unlockedZone.title} is now accessible.`);
           }}

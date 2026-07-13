@@ -57,7 +57,41 @@ export class AudioService {
     const AudioContextClass = (window.AudioContext || (window as any).webkitAudioContext);
     if (AudioContextClass) {
       this.context = new AudioContextClass();
+      this.attachContextListeners(this.context);
     }
+  }
+
+  /**
+   * iOS flips the context to a non-standard 'interrupted' state on Siri,
+   * alarms, and declined calls — none of which fire visibilitychange, and
+   * media clocks can keep advancing while producing silence. Latch the
+   * interruption flag so the player-facing resume UI gets surfaced by the
+   * geofencing loop instead of the zone playing inaudibly.
+   */
+  private attachContextListeners(ctx: AudioContext) {
+    ctx.addEventListener?.('statechange', () => {
+      if ((ctx.state as string) === 'interrupted') {
+        this.interruptionPaused = true;
+      }
+    });
+  }
+
+  isInterruptionPaused() {
+    return this.interruptionPaused;
+  }
+
+  /**
+   * Foreground recovery when nothing audible was interrupted (the common
+   * "phone pocketed between zones" case). If the context resumes without a
+   * user gesture, clear the latch so the next zone entry can play normally;
+   * if it won't, the caller should fall back to the tap-to-resume UI.
+   */
+  async clearInterruptionIfIdle(): Promise<boolean> {
+    if (!this.isUnlocked || !this.interruptionPaused) return true;
+    if (this.hasActiveAudio()) return false;
+    const running = await this.resumeContext();
+    if (running) this.interruptionPaused = false;
+    return running;
   }
 
   private async resumeContext() {
@@ -190,6 +224,7 @@ export class AudioService {
     } catch (error) {
       console.warn('Could not create replacement audio context:', error);
     }
+    if (newContext) this.attachContextListeners(newContext);
     this.context = newContext;
 
     // Rebuild every media element and connection. iOS can leave the old graph
@@ -372,6 +407,10 @@ export class AudioService {
       attempts.push(
         audioEl.play()
           .then(() => {
+            // On slow networks this promise can resolve AFTER the zone's real
+            // playback legitimately started (player begins inside zone 1).
+            // Never pause/rewind a track that's now genuinely playing.
+            if (nodeData.hasStarted) return;
             audioEl.pause();
             try { audioEl.currentTime = 0; } catch { /* not seekable yet */ }
           })
@@ -380,6 +419,7 @@ export class AudioService {
           })
           .finally(() => {
             audioEl.muted = wasMuted;
+            if (nodeData.hasStarted) return;
             audioEl.volume = previousVolume;
             this.setNodeVolume(nodeData, 0);
           }),
