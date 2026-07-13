@@ -14,12 +14,14 @@ const AudioPreview: React.FC<{ url: string; volume?: number }> = ({ url, volume 
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [loadError, setLoadError] = useState(false);
 
   // Reset state whenever the source URL changes
   useEffect(() => {
     setPlaying(false);
     setProgress(0);
     setDuration(0);
+    setLoadError(false);
   }, [url]);
 
   useEffect(() => {
@@ -65,6 +67,17 @@ const AudioPreview: React.FC<{ url: string; volume?: number }> = ({ url, volume 
 
   const remaining = duration > 0 ? duration * (1 - progress) : null;
 
+  // A file that can't load means a silent zone for every player — say so
+  // here in the editor instead of failing invisibly in the field.
+  if (loadError) {
+    return (
+      <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 mt-2 text-xs text-red-300">
+        <AlertCircle size={13} className="shrink-0" />
+        This audio can't be loaded — check the link or re-upload. Players would hear nothing.
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-center gap-2.5 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 mt-2">
       <audio
@@ -81,6 +94,7 @@ const AudioPreview: React.FC<{ url: string; volume?: number }> = ({ url, volume 
           if (a && a.duration && !isDragging.current) setProgress(a.currentTime / a.duration);
         }}
         onEnded={() => { setPlaying(false); setProgress(0); }}
+        onError={() => setLoadError(true)}
       />
       <button
         onClick={toggle}
@@ -688,6 +702,11 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
               value={radiusToSlider(zone.radius)}
               onChange={(e) => onUpdate({ radius: sliderToRadius(Number(e.target.value)) })}
             />
+            {zone.radius < 15 && (
+                <p className="text-[10px] text-amber-400/90 mt-1">
+                  GPS is usually only accurate to 15–50 ft — a zone this small may not trigger reliably.
+                </p>
+              )}
           </div>
 
           <label className="flex items-center gap-3 cursor-pointer group">
@@ -941,12 +960,12 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
               </div>
               <input
                 type="range"
-                min="0"
+                min="0.05"
                 max="1"
                 step="0.05"
                 className="w-full accent-pink-500 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
                 value={zone.volume ?? 1}
-                onChange={(e) => onUpdate({ volume: parseFloat(e.target.value) })}
+                onChange={(e) => onUpdate({ volume: Math.max(0.05, parseFloat(e.target.value)) })}
               />
             </div>
           )}
@@ -975,6 +994,11 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
                 }}
               />
               <p className="text-[10px] text-zinc-500 mt-1">How far away the hint sound can be heard.</p>
+              {zone.radius < 15 && (
+                <p className="text-[10px] text-amber-400/90 mt-1">
+                  GPS is usually only accurate to 15–50 ft — a zone this small may not trigger reliably.
+                </p>
+              )}
             </div>
             <div>
               <div className="flex justify-between text-xs font-bold text-zinc-400 uppercase mb-1">
@@ -1288,12 +1312,12 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
                 </div>
                 <input
                   type="range"
-                  min="0"
+                  min="0.05"
                   max="1"
                   step="0.05"
                   className="w-full accent-emerald-500 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
                   value={zone.volume ?? 1}
-                  onChange={(e) => onUpdate({ volume: parseFloat(e.target.value) })}
+                  onChange={(e) => onUpdate({ volume: Math.max(0.05, parseFloat(e.target.value)) })}
                 />
               </div>
             )}
@@ -1312,6 +1336,11 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
                 value={radiusToSlider(zone.radius)}
                 onChange={(e) => onUpdate({ radius: sliderToRadius(Number(e.target.value)) })}
               />
+              {zone.radius < 15 && (
+                <p className="text-[10px] text-amber-400/90 mt-1">
+                  GPS is usually only accurate to 15–50 ft — a zone this small may not trigger reliably.
+                </p>
+              )}
             </div>
           </div>
 
