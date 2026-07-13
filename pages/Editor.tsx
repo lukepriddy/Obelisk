@@ -223,7 +223,7 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
       lastEditUndoRef.current = { key, timestamp: now };
       return;
     }
-    setUndoStack(prev => [...prev, { type: 'edit', tour, zones }].slice(-60));
+    setUndoStack(prev => [...prev, { type: 'edit' as const, tour, zones }].slice(-60));
     lastEditUndoRef.current = { key, timestamp: now };
   };
 

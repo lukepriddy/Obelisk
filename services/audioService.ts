@@ -105,7 +105,9 @@ export class AudioService {
     } catch (error) {
       console.warn('Audio context resume failed:', error);
     }
-    return this.context.state === 'running';
+    // Cast via string: iOS reports a non-standard 'interrupted' state that
+    // TypeScript's AudioContextState union doesn't know about.
+    return (this.context.state as string) === 'running';
   }
 
   async init() {
