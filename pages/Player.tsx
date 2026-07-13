@@ -487,7 +487,15 @@ export const Player: React.FC = () => {
 
       zones.forEach(zone => {
         const dist = getDistance(currentPos[0], currentPos[1], zone.lat, zone.lng);
-        const insideZone = dist < zone.radius;
+        // Hysteresis: easier in than out. GPS wobbles a few meters even while
+        // standing still, so a player parked on the boundary would otherwise
+        // flap in/out — restarting 'stop'-mode audio from the top each flap.
+        // Once inside, the player doesn't count as "out" until they're a
+        // margin BEYOND the edge (4–12 m, scaled to the zone's size).
+        const wasInside = prevZoneIdsRef.current.has(zone.id);
+        const exitMargin = Math.max(4, Math.min(12, zone.radius * 0.15));
+        const effectiveRadius = zone.radius + (wasInside ? exitMargin : 0);
+        const insideZone = dist < effectiveRadius;
         const prereqMet = !zone.requires_zone_id || visitedZoneIdsRef.current.has(zone.requires_zone_id);
         const progressionMet =
           !tour?.progression_enabled ||
@@ -537,7 +545,9 @@ export const Player: React.FC = () => {
               if (zone.media_url) {
                 const zoneVolume = Math.min(1, Math.max(0, Number(zone.volume ?? 1.0)));
                 let volume = zone.use_attenuation
-                  ? calculateAttenuation(dist, zone.radius)
+                  // effectiveRadius (not radius): inside the hysteresis band
+                  // attenuation must stay above the engine's exit threshold.
+                  ? calculateAttenuation(dist, effectiveRadius)
                   : 1.0;
                 volume = volume * zoneVolume;
                 activeState.push({
@@ -564,7 +574,7 @@ export const Player: React.FC = () => {
           let volume = 0;
           if (positionReliable && !discoverableCollected && insideZone && isZoneAccessible(zone)) {
             const zoneVolume = Math.min(1, Math.max(0, Number(zone.volume ?? 1.0)));
-            volume = zone.use_attenuation ? calculateAttenuation(dist, zone.radius) : 1.0;
+            volume = zone.use_attenuation ? calculateAttenuation(dist, effectiveRadius) : 1.0;
             volume = volume * zoneVolume;
           }
           audioUpdates.push({
@@ -842,31 +852,62 @@ export const Player: React.FC = () => {
       { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 }
     );
 
-    const watchId = navigator.geolocation.watchPosition(
-      pos => {
-        appendGpsDebug('watchPosition success');
-        applyGpsFix(pos);
-      },
-      (err) => {
-        console.error(err);
-        appendGpsDebug(`watchPosition error code=${err.code}`);
-        if (err.code === err.PERMISSION_DENIED) {
-          setGpsError('Location access was denied. Please enable location services and reload to play this experience.');
-        } else if (err.code === err.POSITION_UNAVAILABLE) {
-          setGpsError('Your location could not be determined. Please check your GPS signal and try again.');
-        } else if (err.code === err.TIMEOUT) {
-          setGpsError('GPS is taking too long. Try stepping outside or checking your location settings.');
-        } else {
-          setGpsError('Could not get your location. Please check your device settings and try again.');
-        }
-      },
-      // maximumAge 3000: a three-second-old fix is identical at walking speed,
-      // and allowing it avoids Chrome's pathological fresh-fix-only path.
-      { enableHighAccuracy: true, maximumAge: 3000, timeout: 20000 }
-    );
+    // The continuous watch is wrapped in a restartable helper because iOS
+    // Safari sometimes silently kills watchPosition after the page has been
+    // backgrounded — position freezes and zones stop triggering with no error.
+    // We re-arm it on every return to foreground, plus a watchdog restarts it
+    // if fixes go stale while the page is visible.
+    let watchId: number | null = null;
+    const startWatch = () => {
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+      watchId = navigator.geolocation.watchPosition(
+        pos => {
+          appendGpsDebug('watchPosition success');
+          applyGpsFix(pos);
+        },
+        (err) => {
+          console.error(err);
+          appendGpsDebug(`watchPosition error code=${err.code}`);
+          if (err.code === err.PERMISSION_DENIED) {
+            setGpsError('Location access was denied. Please enable location services and reload to play this experience.');
+          } else if (err.code === err.POSITION_UNAVAILABLE) {
+            setGpsError('Your location could not be determined. Please check your GPS signal and try again.');
+          } else if (err.code === err.TIMEOUT) {
+            setGpsError('GPS is taking too long. Try stepping outside or checking your location settings.');
+          } else {
+            setGpsError('Could not get your location. Please check your device settings and try again.');
+          }
+        },
+        // maximumAge 3000: a three-second-old fix is identical at walking speed,
+        // and allowing it avoids Chrome's pathological fresh-fix-only path.
+        { enableHighAccuracy: true, maximumAge: 3000, timeout: 20000 }
+      );
+    };
+    startWatch();
+
+    const rearmOnForeground = () => {
+      if (document.visibilityState !== 'visible') return;
+      appendGpsDebug('foreground — re-arming watch');
+      startWatch();
+    };
+    document.addEventListener('visibilitychange', rearmOnForeground);
+    window.addEventListener('pageshow', rearmOnForeground);
+
+    const staleWatchdog = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      const last = gpsFixRef.current;
+      if (last && Date.now() - last.timestamp > 30000) {
+        appendGpsDebug('fixes stale >30s while visible — restarting watch');
+        startWatch();
+      }
+    }, 15000);
+
     return () => {
       window.clearTimeout(retryTimer);
-      navigator.geolocation.clearWatch(watchId);
+      window.clearInterval(staleWatchdog);
+      document.removeEventListener('visibilitychange', rearmOnForeground);
+      window.removeEventListener('pageshow', rearmOnForeground);
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
     };
   }, [simulationMode]);
 
