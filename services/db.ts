@@ -3,6 +3,7 @@
  * Drop-in replacement for mockSupabase; same helper signatures.
  */
 import { supabase } from './supabaseClient';
+import { logClientEvent } from './telemetry';
 import { Tour, Zone, TourAnalytics } from '../types';
 
 const DEFAULT_ZONE_PROPS = {
@@ -52,14 +53,36 @@ export const getToursByUser = async (userId: string): Promise<Tour[]> => {
   return (data ?? []) as Tour[];
 };
 
-export const getTourById = async (tourId: string): Promise<Tour | null> => {
-  const { data, error } = await supabase
-    .from('tours')
-    .select('*')
-    .eq('id', tourId)
-    .single();
+/**
+ * Retries a Supabase read that failed transiently (flaky cellular, brief
+ * outage). PGRST116 ("no rows") is a real answer, not a failure — returned
+ * immediately. Player-critical loads use this so one dropped request doesn't
+ * become "Experience not found" or a silently zone-less tour.
+ */
+const withRetry = async <T>(
+  run: () => PromiseLike<{ data: T | null; error: { code?: string; message?: string } | null }>,
+): Promise<{ data: T | null; error: { code?: string; message?: string } | null }> => {
+  let last: { data: T | null; error: { code?: string; message?: string } | null } = { data: null, error: null };
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await new Promise(resolve => setTimeout(resolve, attempt === 1 ? 600 : 1800));
+    last = await run();
+    if (!last.error || last.error.code === 'PGRST116') return last;
+  }
+  return last;
+};
 
-  if (error) { console.error('getTourById:', error); return null; }
+export const getTourById = async (tourId: string): Promise<Tour | null> => {
+  const { data, error } = await withRetry<Tour>(() =>
+    supabase.from('tours').select('*').eq('id', tourId).single()
+  );
+
+  if (error) {
+    console.error('getTourById:', error);
+    if (error.code !== 'PGRST116') {
+      logClientEvent('tour_fetch_failed', error.message || 'unknown', { tourId });
+    }
+    return null;
+  }
   return data as Tour;
 };
 
@@ -92,13 +115,17 @@ export const deleteTour = async (tourId: string): Promise<boolean> => {
 // ── Zone helpers ──────────────────────────────────────────────────────────────
 
 export const getZonesByTourId = async (tourId: string): Promise<Zone[]> => {
-  const { data, error } = await supabase
-    .from('zones')
-    .select('*')
-    .eq('tour_id', tourId)
-    .order('created_at', { ascending: true });
+  const { data, error } = await withRetry<Zone[]>(() =>
+    supabase.from('zones').select('*').eq('tour_id', tourId).order('created_at', { ascending: true })
+  );
 
-  if (error) { console.error('getZonesByTourId:', error); return []; }
+  if (error) {
+    console.error('getZonesByTourId:', error);
+    // An empty array here means the player walks a silent route with no
+    // explanation — at least make the failure visible in telemetry.
+    logClientEvent('zones_fetch_failed', error.message || 'unknown', { tourId });
+    return [];
+  }
   return (data ?? []) as Zone[];
 };
 

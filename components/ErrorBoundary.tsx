@@ -1,4 +1,5 @@
 import React from 'react';
+import { logClientEvent } from '../services/telemetry';
 
 interface Props  { children: React.ReactNode; }
 interface State  { hasError: boolean; }
@@ -16,6 +17,9 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error('[Obelisk] Uncaught error:', error.message, info.componentStack);
+    logClientEvent('render_crash', error.message, {
+      stack: (info.componentStack || '').slice(0, 800),
+    });
   }
 
   render() {
