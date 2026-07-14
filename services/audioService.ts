@@ -31,6 +31,10 @@ interface NodeData {
   destroyOnEnd: boolean;
   fadeIn: number;
   healthRecoveries: number;
+  /** True once the full file is downloaded and playing from a local blob. */
+  prefetched: boolean;
+  /** Object URL of the fully-downloaded copy (revoked in stopAll). */
+  localUrl: string | null;
 }
 
 // Audio waits this long after the player enters a zone before starting, so the
@@ -247,7 +251,7 @@ export class AudioService {
       const audioEl = new Audio();
       const useGainNode = !!newContext && canUseWebAudioGain(oldNode.url);
       if (useGainNode) audioEl.crossOrigin = 'anonymous';
-      audioEl.src = oldNode.url;
+      audioEl.src = oldNode.localUrl || oldNode.url;
       audioEl.preload = 'auto';
       audioEl.loop = oldNode.loop;
 
@@ -386,10 +390,51 @@ export class AudioService {
         destroyOnEnd: false,
         fadeIn: 0,
         healthRecoveries: 0,
+        prefetched: false,
+        localUrl: null,
       });
       audioEl.load();
     } catch (e) {
       console.error(`Failed to set up audio for zone ${zoneId}:`, e);
+    }
+  }
+
+  /**
+   * Background prefetch: fully download each zone's audio (nearest first,
+   * one at a time to be gentle on cellular) and switch the element to the
+   * local copy, so zones reached later in the walk play even in cellular
+   * dead spots. Never blocks the walk and never touches a track that has
+   * started playing — those keep streaming as before.
+   */
+  async prefetchAll(zoneIds: string[], onProgress?: (done: number, total: number) => void): Promise<void> {
+    const targets = zoneIds
+      .map(id => this.nodes.get(id))
+      .filter((n): n is NodeData => !!n && !n.prefetched && !!n.url);
+    const total = targets.length;
+    let done = 0;
+    onProgress?.(0, total);
+
+    for (const nodeData of targets) {
+      try {
+        const res = await fetch(nodeData.url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const blob = await res.blob();
+        const localUrl = URL.createObjectURL(blob);
+        nodeData.prefetched = true;
+        nodeData.localUrl = localUrl;
+        // Swap only when safe — never yank a track that's playing or has begun.
+        const { audioEl } = nodeData;
+        if (!nodeData.hasStarted && audioEl.paused && !nodeData.playTimer) {
+          audioEl.src = localUrl;
+          audioEl.load();
+        }
+      } catch (error) {
+        // CORS-restricted external links or a dead spot mid-download: the zone
+        // simply keeps streaming from the network like before.
+        console.warn('Audio prefetch failed; zone will stream instead:', error);
+      }
+      done += 1;
+      onProgress?.(done, total);
     }
   }
 
@@ -687,6 +732,7 @@ export class AudioService {
       data.audioEl.src = '';
       data.sourceNode?.disconnect();
       data.gainNode?.disconnect();
+      if (data.localUrl) { try { URL.revokeObjectURL(data.localUrl); } catch { /* already gone */ } }
     });
     this.nodes.clear();
     this.isUnlocked = false;

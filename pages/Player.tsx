@@ -15,7 +15,7 @@ import {
 import { getDistance, calculateAttenuation } from '../utils/geo';
 import { PlayerProgress, ProgressionReward, Tour, Zone } from '../types';
 import { FONT_STYLES, MAP_STYLES } from '../constants';
-import { PlayCircle, Volume2, Mic, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu, Layers, Locate, RotateCcw, ZoomIn, ZoomOut, Backpack, Gem, Trash2, Info, RefreshCw, LogOut, Bug, Navigation, ChevronRight } from 'lucide-react';
+import { Loader2, PlayCircle, Volume2, Mic, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu, Layers, Locate, RotateCcw, ZoomIn, ZoomOut, Backpack, Gem, Trash2, Info, RefreshCw, LogOut, Bug, Navigation, ChevronRight } from 'lucide-react';
 import { ChatInterface } from '../components/ChatInterface';
 
 // Custom icons
@@ -92,6 +92,8 @@ export const Player: React.FC = () => {
   const [audioStarted, setAudioStarted] = useState(false);
   const [showAudioResume, setShowAudioResume] = useState(false);
   const [resumingAudio, setResumingAudio] = useState(false);
+  // Background audio prefetch progress — null when idle/complete.
+  const [prefetchStatus, setPrefetchStatus] = useState<{ done: number; total: number } | null>(null);
   const [bottomBarHeight, setBottomBarHeight] = useState(104);
   const bottomBarRef = useRef<HTMLDivElement | null>(null);
   const [simulationMode, setSimulationMode] = useState(isPreview);
@@ -1032,6 +1034,22 @@ export const Player: React.FC = () => {
       new Promise<void>(resolve => window.setTimeout(resolve, 1500)),
     ]);
     setAudioStarted(true);
+
+    // Middle-ground prefetch: begin fully downloading every zone's audio in
+    // the background, nearest to the start point first, WITHOUT blocking the
+    // walk. Zones reached before their download finishes stream as before;
+    // everything else becomes immune to cellular dead spots.
+    if (tour) {
+      const ordered = zones
+        .filter(z => (z.type === 'audio' || z.type === 'discoverable') && z.media_url)
+        .sort((a, b) =>
+          getDistance(tour.lat, tour.lng, a.lat, a.lng) - getDistance(tour.lat, tour.lng, b.lat, b.lng))
+        .map(z => z.id);
+      void audioService.prefetchAll(ordered, (done, total) => {
+        setPrefetchStatus(total > 0 && done < total ? { done, total } : null);
+      });
+    }
+
     // Start analytics session — skip in preview mode so creator test-runs don't pollute data.
     if (!isPreview && tour?.id) {
       startSession(tour.id).then(id => { sessionIdRef.current = id; });
@@ -1774,6 +1792,19 @@ export const Player: React.FC = () => {
       )}
 
       {/* ── HUD NOTIFICATION — drops below top bar ── */}
+      {/* ── Background prefetch pill — informational only, never blocks ── */}
+      {audioStarted && prefetchStatus && (
+        <div
+          className="absolute left-1/2 -translate-x-1/2 z-[1500] pointer-events-none"
+          style={{ top: `calc(${TOP_BAR + 64}px + env(safe-area-inset-top, 0px))` }}
+        >
+          <div className="flex items-center gap-1.5 rounded-full bg-zinc-950/80 border border-white/10 px-3 py-1 text-[10px] text-zinc-300 backdrop-blur">
+            <Loader2 size={10} className="animate-spin" />
+            Preparing audio {prefetchStatus.done}/{prefetchStatus.total}
+          </div>
+        </div>
+      )}
+
       {showAudioResume && audioStarted && (
         <div
           className="absolute left-4 right-4 z-[1700] animate-in slide-in-from-top-4 duration-300"
