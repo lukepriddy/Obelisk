@@ -95,7 +95,18 @@ export const SkyLab: React.FC = () => {
   const [testElev, setTestElev] = useState(45);
 
   // Hot data lives in refs — rAF reads it, React never re-renders for it.
-  const orient = useRef({ alpha: 0, beta: 0, gamma: 0, heading: null as number | null, source: '—', count: 0 });
+  const orient = useRef({
+    alpha: 0, beta: 0, gamma: 0,
+    heading: null as number | null, source: '—', count: 0,
+    // Circular EMA accumulators for alpha (sin/cos so 359°→0° doesn't wrap-spike).
+    aSin: 0, aCos: 1, primed: false,
+    // Raw heading samples over the last second — the jitter measurement.
+    samples: [] as { t: number; deg: number }[],
+    jitter: 0,
+  });
+  const [smoothing, setSmoothing] = useState(true);
+  const smoothingRef = useRef(true);
+  useEffect(() => { smoothingRef.current = smoothing; }, [smoothing]);
   const posRef = useRef<{ lat: number; lng: number; acc: number } | null>(null);
   const anchorRef = useRef<Anchor | null>(null);
   const lastBearing = useRef<number | null>(null);
@@ -110,6 +121,7 @@ export const SkyLab: React.FC = () => {
   const [hud, setHud] = useState({
     heading: '—', source: '—', evts: 0, acc: '—',
     dist: '—', objB: '—', objE: '—', state: 'waiting',
+    jitter: 0,
   });
 
   const [anchor, setAnchor] = useState<Anchor | null>(() => {
@@ -159,18 +171,60 @@ export const SkyLab: React.FC = () => {
       const w = e as DeviceOrientationEvent & { webkitCompassHeading?: number };
       const o = orient.current;
       o.count += 1;
-      if (typeof e.beta === 'number') o.beta = e.beta;
-      if (typeof e.gamma === 'number') o.gamma = e.gamma;
+
+      // Tilt angles come from accel+gyro fusion and are already stable — only
+      // the magnetometer-derived azimuth needs help. Light EMA anyway.
+      const kTilt = smoothingRef.current ? 0.35 : 1;
+      if (typeof e.beta === 'number') o.beta += (e.beta - o.beta) * kTilt;
+      if (typeof e.gamma === 'number') o.gamma += (e.gamma - o.gamma) * kTilt;
+
+      let rawAlpha: number | null = null;
+      let rawHeading: number | null = null;
       if (typeof w.webkitCompassHeading === 'number') {
-        // iOS: tilt-compensated, true-north, clockwise. The orientation matrix
-        // wants alpha (counter-clockwise from north), hence 360 - heading.
-        o.heading = w.webkitCompassHeading;
-        o.alpha = (360 - w.webkitCompassHeading) % 360;
+        // iOS: tilt-compensated, true-north, clockwise. The ZXY matrix wants
+        // alpha (counter-clockwise from north). NB this identity is exact only
+        // while the device is near-flat and drifts as it tilts — a known
+        // approximation, and a suspect if placement is biased when pointing up.
+        rawHeading = w.webkitCompassHeading;
+        rawAlpha = (360 - w.webkitCompassHeading) % 360;
         o.source = 'webkit';
       } else if (typeof e.alpha === 'number') {
-        o.alpha = e.alpha;
-        o.heading = (360 - e.alpha) % 360;
+        rawAlpha = e.alpha;
+        rawHeading = (360 - e.alpha) % 360;
         o.source = e.absolute ? 'absolute' : 'relative(!)';
+      }
+
+      if (rawAlpha !== null && rawHeading !== null) {
+        // Circular EMA: average the unit vector, not the number, so the 359°→0°
+        // seam doesn't produce a 359° "jump" through the whole circle.
+        const r = toRad(rawAlpha);
+        const k = smoothingRef.current ? 0.12 : 1; // ~150ms time constant @60Hz
+        if (!o.primed) {
+          o.aSin = Math.sin(r); o.aCos = Math.cos(r); o.primed = true;
+        } else {
+          o.aSin += (Math.sin(r) - o.aSin) * k;
+          o.aCos += (Math.cos(r) - o.aCos) * k;
+        }
+        o.alpha = (toDeg(Math.atan2(o.aSin, o.aCos)) + 360) % 360;
+        o.heading = rawHeading;
+
+        // Jitter = angular spread of RAW heading over the last second. This is
+        // the actual measurement of whether the compass is usable here.
+        const now = performance.now();
+        o.samples.push({ t: now, deg: rawHeading });
+        while (o.samples.length && now - o.samples[0].t > 1000) o.samples.shift();
+        if (o.samples.length > 2) {
+          let sx = 0, sy = 0;
+          for (const s of o.samples) { sx += Math.cos(toRad(s.deg)); sy += Math.sin(toRad(s.deg)); }
+          const meanDeg = (toDeg(Math.atan2(sy, sx)) + 360) % 360;
+          let maxDev = 0;
+          for (const s of o.samples) {
+            let d = Math.abs(s.deg - meanDeg) % 360;
+            if (d > 180) d = 360 - d;
+            if (d > maxDev) maxDev = d;
+          }
+          o.jitter = maxDev;
+        }
       }
     };
     window.addEventListener('deviceorientationabsolute', onOrient as EventListener);
@@ -286,6 +340,7 @@ export const SkyLab: React.FC = () => {
           objB: bearing === null ? '—' : `${bearing.toFixed(0)}°`,
           objE: elevation === null ? '—' : `${elevation.toFixed(0)}°`,
           state,
+          jitter: o.jitter,
         });
       }
     };
@@ -340,6 +395,12 @@ export const SkyLab: React.FC = () => {
               <span className="text-right">{hud.heading} <span className="text-emerald-400/60">{hud.source}</span></span>
               <span>orient evts</span>
               <span className={`text-right ${hud.evts === 0 ? 'text-red-400' : ''}`}>{hud.evts}</span>
+              <span>compass jitter</span>
+              <span className={`text-right font-bold ${
+                hud.jitter > 15 ? 'text-red-400' : hud.jitter > 6 ? 'text-amber-300' : 'text-emerald-300'
+              }`}>
+                ±{hud.jitter.toFixed(0)}° {hud.jitter > 15 ? 'BAD' : hud.jitter > 6 ? 'meh' : 'good'}
+              </span>
               <span>gps acc</span><span className="text-right">{hud.acc}</span>
               <span>distance</span><span className="text-right">{hud.dist}</span>
               <span>obj bearing</span><span className="text-right">{hud.objB}</span>
@@ -361,6 +422,14 @@ export const SkyLab: React.FC = () => {
                   {m}
                 </button>
               ))}
+              <button
+                onClick={() => setSmoothing(s => !s)}
+                className={`px-3 py-2 rounded-xl text-xs font-bold ${
+                  smoothing ? 'bg-sky-600 text-white' : 'bg-black/70 text-zinc-400'
+                }`}
+              >
+                smooth {smoothing ? 'on' : 'off'}
+              </button>
             </div>
 
             {mode === 'celestial' ? (
