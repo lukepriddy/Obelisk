@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { Dashboard } from './pages/Dashboard';
 import { Editor } from './pages/Editor';
 import { Player } from './pages/Player';
+import { SkyLab } from './pages/SkyLab';
 import { Auth } from './pages/Auth';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { supabase } from './services/db';
@@ -13,11 +14,12 @@ import { MapPin, LogOut } from 'lucide-react';
 const AppShell: React.FC<{ user: User | null; onLogout: () => void }> = ({ user, onLogout }) => {
   const location = useLocation();
   const isPlayer    = location.pathname.startsWith('/player/');
+  const isSkyLab    = location.pathname.startsWith('/ar-lab');
   const isEditor    = location.pathname.startsWith('/editor');
   const isDashboard = location.pathname === '/';
 
   // Dashboard owns its own sidebar chrome — don't render the top header there.
-  const showHeader = !isPlayer && !isDashboard;
+  const showHeader = !isPlayer && !isDashboard && !isSkyLab;
 
   return (
     <div className={`flex flex-col h-screen overflow-hidden ${isEditor ? 'bg-zinc-950' : 'bg-zinc-950'}`}>
@@ -56,6 +58,7 @@ const AppShell: React.FC<{ user: User | null; onLogout: () => void }> = ({ user,
           <Route path="/" element={user ? <Dashboard user={user} onLogout={onLogout} /> : <Navigate to="/auth" />} />
           <Route path="/editor/:tourId?" element={user ? <Editor user={user} /> : <Navigate to="/auth" />} />
           <Route path="/player/:tourId" element={<ErrorBoundary><Player /></ErrorBoundary>} />
+          <Route path="/ar-lab" element={<ErrorBoundary><SkyLab /></ErrorBoundary>} />
         </Routes>
       </main>
     </div>
