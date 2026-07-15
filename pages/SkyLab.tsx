@@ -63,6 +63,10 @@ export const SkyLab: React.FC = () => {
   const [pos, setPos] = useState<{ lat: number; lng: number; acc: number } | null>(null);
   const [heading, setHeading] = useState<number | null>(null);
   const [beta, setBeta] = useState<number | null>(null);
+  // Distinguishes "permission granted but no events arriving" (a real quirk)
+  // from "permission refused" — otherwise both look like a frozen object.
+  const [orientEvents, setOrientEvents] = useState(0);
+  const [headingSource, setHeadingSource] = useState<string>('—');
 
   const [anchor, setAnchor] = useState<Anchor | null>(() => {
     try {
@@ -72,46 +76,64 @@ export const SkyLab: React.FC = () => {
   });
   const [altitude, setAltitude] = useState(anchor?.alt ?? 60);
 
-  // ── Start: camera + orientation permission must happen in a user gesture ──
+  // ── Start ─────────────────────────────────────────────────────────────────
+  // Both permission calls MUST be initiated synchronously inside the tap.
+  // iOS only honours DeviceOrientationEvent.requestPermission() while a user
+  // activation is live, and awaiting anything first (e.g. the camera prompt)
+  // consumes it — the call then rejects and motion silently never works.
   const start = async () => {
     setError(null);
+
+    const DOE = window.DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> };
+    const motionPromise: Promise<string> =
+      typeof DOE?.requestPermission === 'function'
+        ? DOE.requestPermission().catch((e: any) => `threw: ${e?.name || ''} ${e?.message || e}`)
+        : Promise.resolve('granted'); // Android/desktop: no gate
+
+    // Same tick — keeps the activation for the camera too.
+    const cameraPromise = navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' } },
+      audio: false,
+    });
+
+    const motion = await motionPromise;
+    if (motion !== 'granted') {
+      cameraPromise.then(s => s.getTracks().forEach(t => t.stop())).catch(() => {});
+      setError(
+        motion.startsWith('threw:')
+          ? `Motion request rejected (${motion.slice(7).trim()}). On iPhone: Settings → Apps → Safari → Advanced → Motion & Orientation Access must be ON, then reload.`
+          : 'Motion & Orientation denied — the compass drives everything here. Reload and tap Allow.',
+      );
+      return;
+    }
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' } },
-        audio: false,
-      });
+      const stream = await cameraPromise;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play().catch(() => {});
       }
-    } catch (e) {
+    } catch {
       setError('Camera access failed. Allow camera for this site and reload.');
       return;
     }
 
-    // iOS 13+ gates motion/orientation behind an explicit permission call.
-    const DOE = window.DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> };
-    if (typeof DOE?.requestPermission === 'function') {
-      try {
-        const res = await DOE.requestPermission();
-        if (res !== 'granted') {
-          setError('Motion & Orientation access denied — the compass drives everything here.');
-          return;
-        }
-      } catch {
-        setError('Could not request motion access.');
-        return;
-      }
-    }
-
     const onOrient = (e: DeviceOrientationEvent) => {
+      setOrientEvents(n => n + 1);
       const withWebkit = e as DeviceOrientationEvent & { webkitCompassHeading?: number };
       if (typeof withWebkit.webkitCompassHeading === 'number') {
         // iOS: already true-north referenced and clockwise.
         setHeading(withWebkit.webkitCompassHeading);
+        setHeadingSource('webkit');
       } else if (e.absolute && typeof e.alpha === 'number') {
         // Android absolute: alpha counts counter-clockwise from north.
         setHeading((360 - e.alpha) % 360);
+        setHeadingSource('absolute');
+      } else if (typeof e.alpha === 'number') {
+        // Last resort: relative alpha. Not north-referenced, so bearings will
+        // be offset by an arbitrary amount — flagged in the HUD as untrusted.
+        setHeading((360 - e.alpha) % 360);
+        setHeadingSource('relative(!)');
       }
       if (typeof e.beta === 'number') setBeta(e.beta);
     };
@@ -225,7 +247,12 @@ export const SkyLab: React.FC = () => {
           {/* Debug HUD — this is the actual product of the experiment. */}
           <div className="absolute left-3 right-3 top-3 rounded-xl bg-black/70 backdrop-blur px-3 py-2 text-[11px] text-emerald-200 font-mono leading-relaxed">
             <div className="grid grid-cols-2 gap-x-3">
-              <span>heading</span><span className="text-right">{heading?.toFixed(0) ?? '—'}°</span>
+              <span>heading</span>
+              <span className="text-right">
+                {heading?.toFixed(0) ?? '—'}° <span className="text-emerald-400/60">{headingSource}</span>
+              </span>
+              <span>orient evts</span>
+              <span className={`text-right ${orientEvents === 0 ? 'text-red-400' : ''}`}>{orientEvents}</span>
               <span>cam elev</span><span className="text-right">{beta !== null ? (90 - beta).toFixed(0) : '—'}°</span>
               <span>gps acc</span><span className="text-right">{pos ? `${pos.acc.toFixed(0)}m` : '—'}</span>
               {view ? (
