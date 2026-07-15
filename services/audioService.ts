@@ -41,6 +41,9 @@ interface NodeData {
 // sound feels like an intentional arrival rather than an abrupt jump-cut.
 const ENTRY_DELAY_MS = 2000;
 const MIN_EDGE_FADE_SECONDS = 0.12;
+// Time constant for gain glides. Long enough to remove the click of a step
+// change, short enough that attenuation still tracks movement responsively.
+const VOLUME_GLIDE_SECONDS = 0.012;
 
 function canUseWebAudioGain(url: string) {
   try {
@@ -479,12 +482,39 @@ export class AudioService {
     ]);
   }
 
-  private setNodeVolume(nodeData: NodeData, volume: number) {
+  /**
+   * Sets a node's loudness without clicking.
+   *
+   * Assigning gain.value directly applies a step change at the next audio
+   * frame — if the waveform is mid-swing (it usually is), that discontinuity
+   * IS a pop. Gliding to the target over a few milliseconds is inaudible as a
+   * transition but removes the discontinuity entirely. This also de-zippers
+   * the interval-driven fades, whose 50ms steps were each a separate click.
+   *
+   * Only one stage applies gain: element.volume is upstream of the graph tap,
+   * so setting both it and the gain node multiplied the two (0.8 played at
+   * ~0.64). Gain-node zones keep the element at 1 and attenuate in the graph;
+   * zones without a gain node (cross-origin links) use element volume.
+   */
+  private setNodeVolume(nodeData: NodeData, volume: number, options?: { instant?: boolean }) {
     const clamped = Math.min(1, Math.max(0, Number.isFinite(volume) ? volume : 0));
-    nodeData.audioEl.volume = clamped;
-    if (nodeData.gainNode) {
-      nodeData.gainNode.gain.value = clamped;
+
+    if (nodeData.gainNode && this.context) {
+      const gain = nodeData.gainNode.gain;
+      const now = this.context.currentTime;
+      gain.cancelScheduledValues(now);
+      if (options?.instant) {
+        gain.setValueAtTime(clamped, now);
+      } else {
+        // Anchor at the true current value so an in-flight ramp can't jump.
+        gain.setValueAtTime(gain.value, now);
+        gain.setTargetAtTime(clamped, now, VOLUME_GLIDE_SECONDS);
+      }
+      if (nodeData.audioEl.volume !== 1) nodeData.audioEl.volume = 1;
+    } else {
+      nodeData.audioEl.volume = clamped;
     }
+
     nodeData.currentVolume = clamped;
   }
 
