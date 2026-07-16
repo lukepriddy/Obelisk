@@ -30,10 +30,17 @@ function rasterTiles(url: string): string[] {
 
 function rasterStyle(key: string): maplibregl.StyleSpecification {
   const s = MAP_STYLES[key] || MAP_STYLES.satellite;
+  // Esri World Imagery (and OSM streets) only have real tiles to ~z19. Cap the
+  // source maxzoom there so MapLibre upscales its z19 tiles past that instead of
+  // requesting tiles Esri doesn't have — which come back as gray "Map data not
+  // yet available" placeholders. This mirrors Leaflet's maxNativeZoom={19}.
   return {
     version: 8,
     sources: {
-      base: { type: 'raster', tiles: rasterTiles(s.url), tileSize: 256, attribution: s.attribution },
+      base: {
+        type: 'raster', tiles: rasterTiles(s.url), tileSize: 256,
+        maxzoom: 19, attribution: s.attribution,
+      },
     },
     layers: [{ id: 'base', type: 'raster', source: 'base' }],
   };
