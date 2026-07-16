@@ -6,7 +6,7 @@ import { getTourById, getZonesByTourId, createZone as dbCreateZone, updateZone a
 import { ZoneForm } from '../components/ZoneForm';
 import { TourInfoPanel } from '../components/TourInfoPanel';
 import { Tour, Zone, User } from '../types';
-import { Save, Loader2, MousePointer2, PlusCircle, Home, Search, Info, MapPin, Undo2, Copy } from 'lucide-react';
+import { Save, Loader2, MousePointer2, PlusCircle, Home, Search, Info, MapPin, Undo2, Copy, X } from 'lucide-react';
 import { MAP_DEFAULT_CENTER, MAP_DEFAULT_ZOOM, MAP_STYLES } from '../constants';
 
 // Leaflet Icon Fix
@@ -527,7 +527,7 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
     <div className="flex h-screen w-full overflow-hidden bg-zinc-950">
 
       {/* 1. LEFT TOOLBAR */}
-      <div className="w-16 flex flex-col items-center py-4 gap-3 bg-zinc-950 border-r border-zinc-800 z-30 shrink-0">
+      <div className="hidden md:flex w-16 flex-col items-center py-4 gap-3 bg-zinc-950 border-r border-zinc-800 z-30 shrink-0">
         <button
           onClick={() => {
             if (hasUnsavedChanges && !window.confirm('You have unsaved changes. Leave without saving?')) return;
@@ -595,34 +595,44 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
       {/* 2. CENTER MAP */}
       <div className="flex-1 min-w-0 relative h-full">
          {/* Map Header Overlay */}
-         <div className="absolute top-4 left-4 right-4 z-[400] pointer-events-none flex justify-between items-start gap-2">
-             <div className="bg-zinc-900/95 backdrop-blur border border-zinc-700 p-2 rounded-lg pointer-events-auto flex gap-4 items-center">
-                 <div>
+         <div className="absolute top-2 left-2 right-2 md:top-4 md:left-4 md:right-4 z-[400] pointer-events-none flex justify-between items-start gap-2">
+             <div className="bg-zinc-900/95 backdrop-blur border border-zinc-700 p-2 rounded-lg pointer-events-auto flex gap-2 md:gap-4 items-center min-w-0 flex-1 md:flex-initial">
+                 <button
+                   onClick={() => {
+                     if (hasUnsavedChanges && !window.confirm('You have unsaved changes. Leave without saving?')) return;
+                     navigate('/');
+                   }}
+                   className="md:hidden p-1.5 shrink-0 text-zinc-400 hover:text-white rounded"
+                   title="Back to Dashboard"
+                 >
+                   <Home size={18} />
+                 </button>
+                 <div className="min-w-0 flex-1">
                    <input
-                    className="bg-transparent text-white font-bold outline-none placeholder-zinc-500"
+                    className="bg-transparent text-white font-bold outline-none placeholder-zinc-500 w-full min-w-0 text-sm md:text-base"
                     value={tour.title}
                     onChange={(e) => updateTourFields({ title: e.target.value })}
                   />
-                  <div className="text-xs text-zinc-400">
+                  <div className="hidden sm:block text-xs text-zinc-400">
                     {zones.length} Zones • {activeTool.toUpperCase()} MODE
                   </div>
                  </div>
                  <button
                    onClick={() => { setRightPanel('tour'); setSelectedZoneId(null); }}
-                   className={`p-2 rounded text-white transition-colors ${rightPanel === 'tour' && !selectedZoneId ? 'bg-zinc-700' : 'hover:bg-zinc-700 text-zinc-400'}`}
+                   className={`p-2 shrink-0 rounded text-white transition-colors ${rightPanel === 'tour' && !selectedZoneId ? 'bg-zinc-700' : 'hover:bg-zinc-700 text-zinc-400'}`}
                    title="Tour Settings"
                  >
                    <Info size={18} />
                  </button>
-                 <div className="flex items-center gap-2">
+                 <div className="flex items-center gap-2 shrink-0">
                    {saveError && (
-                     <span className="text-xs text-red-400 font-medium max-w-[160px] truncate" title={saveError}>{saveError}</span>
+                     <span className="hidden sm:inline text-xs text-red-400 font-medium max-w-[160px] truncate" title={saveError}>{saveError}</span>
                    )}
                    {hasUnsavedChanges && !saving && !saveError && (
-                     <span className="text-xs text-amber-400 font-medium animate-pulse">Unsaved changes</span>
+                     <span className="hidden sm:inline text-xs text-amber-400 font-medium animate-pulse">Unsaved changes</span>
                    )}
                    {savedOk && !hasUnsavedChanges && !saveError && (
-                     <span className="text-xs text-emerald-400 font-medium">Saved ✓</span>
+                     <span className="hidden sm:inline text-xs text-emerald-400 font-medium">Saved ✓</span>
                    )}
                    <button
                      onClick={saveTour}
@@ -635,7 +645,9 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
                    </button>
                  </div>
              </div>
-             <LocationSearch mapRef={mapRef} />
+             <div className="hidden md:block pointer-events-auto">
+               <LocationSearch mapRef={mapRef} />
+             </div>
          </div>
 
          <MapContainer
@@ -748,9 +760,66 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
         </div>
       )}
 
+      {/* MOBILE TOOLBAR — the left rail is desktop-only, so mirror its actions
+          here within thumb reach. Hidden while the sheet is up (sheet owns the
+          bottom of the screen). */}
+      {!(selectedZoneId || rightPanel === 'tour') && (
+        <div
+          className="md:hidden fixed inset-x-2 bottom-2 z-[450] flex items-center justify-around gap-1 rounded-2xl bg-zinc-900/95 backdrop-blur border border-zinc-700 px-1 py-1.5 shadow-2xl"
+          style={{ marginBottom: 'env(safe-area-inset-bottom, 0px)' }}
+        >
+          <button
+            onClick={() => setActiveTool('select')}
+            className={`flex-1 flex flex-col items-center gap-0.5 py-2 rounded-xl text-[10px] font-bold transition-all ${activeTool === 'select' ? 'bg-emerald-500 text-white' : 'text-zinc-400'}`}
+          >
+            <MousePointer2 size={19} /> Select
+          </button>
+          <button
+            onClick={() => setActiveTool('draw')}
+            className={`flex-1 flex flex-col items-center gap-0.5 py-2 rounded-xl text-[10px] font-bold transition-all ${activeTool === 'draw' ? 'bg-emerald-500 text-white' : 'text-zinc-400'}`}
+          >
+            <PlusCircle size={19} /> Add
+          </button>
+          <button
+            onClick={() => setActiveTool('place-start')}
+            className={`flex-1 flex flex-col items-center gap-0.5 py-2 rounded-xl text-[10px] font-bold transition-all ${activeTool === 'place-start' ? 'bg-amber-500 text-white' : 'text-zinc-400'}`}
+          >
+            <MapPin size={19} /> Start
+          </button>
+          <button
+            onClick={duplicateSelectedZone}
+            disabled={!selectedZone || selectedZone.id.startsWith('temp_')}
+            className="flex-1 flex flex-col items-center gap-0.5 py-2 rounded-xl text-[10px] font-bold text-zinc-400 disabled:opacity-25"
+          >
+            <Copy size={19} /> Copy
+          </button>
+          <button
+            onClick={handleUndo}
+            disabled={undoStack.length === 0}
+            className="flex-1 flex flex-col items-center gap-0.5 py-2 rounded-xl text-[10px] font-bold text-zinc-400 disabled:opacity-25"
+          >
+            <Undo2 size={19} /> Undo
+          </button>
+        </div>
+      )}
+
       {/* 3. RIGHT PROPERTIES PANEL */}
       {(selectedZoneId || rightPanel === 'tour') && (
-        <div className="w-80 max-w-[88vw] bg-zinc-900 border-l border-zinc-800 p-4 shadow-2xl z-20 h-full overflow-y-auto overflow-x-hidden shrink-0 animate-in slide-in-from-right-10 custom-scrollbar">
+        <div className="fixed inset-x-0 bottom-0 top-auto h-[65vh] rounded-t-2xl border-t z-[600] animate-in slide-in-from-bottom-10
+                        md:static md:h-full md:w-80 md:max-w-[88vw] md:rounded-none md:border-t-0 md:border-l md:z-20 md:shrink-0 md:animate-in md:slide-in-from-right-10
+                        bg-zinc-900 border-zinc-800 p-4 shadow-2xl overflow-y-auto overflow-x-hidden custom-scrollbar"
+             style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
+          {/* Sheet handle + close — mobile only; desktop dismisses via the map */}
+          <div className="md:hidden sticky -top-4 -mx-4 -mt-4 mb-3 px-4 pt-2 pb-2 bg-zinc-900/95 backdrop-blur flex items-center justify-between border-b border-zinc-800">
+            <div className="w-10 h-1 rounded-full bg-zinc-700" />
+            <button
+              onClick={() => { setSelectedZoneId(null); setRightPanel('zone'); }}
+              className="p-1.5 -mr-1.5 text-zinc-400 hover:text-white"
+              aria-label="Close panel"
+            >
+              <X size={18} />
+            </button>
+          </div>
           {selectedZoneId && selectedZone ? (
             selectedZone.id.startsWith('temp_') ? (
               <div className="flex flex-col items-center justify-center gap-3 py-20 text-zinc-500">
