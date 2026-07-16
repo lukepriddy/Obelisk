@@ -1470,9 +1470,14 @@ export const Player: React.FC = () => {
       )}
 
       {/* ── TOUR INFO SHEET — smooth CSS transition ── */}
+      {/* absolute (not fixed) so the dimming scrim shares the map's exact box.
+          The map is `absolute inset-0` in this same player root; a `fixed`
+          scrim resolves to the viewport instead, and on iOS those two boxes
+          disagree by a pixel or two — the map used to peek past the scrim's
+          right edge. Sharing the root's coordinate system removes the gap. */}
       {tourInfoMounted && tour && (
         <div
-          className="fixed inset-0 z-[2000] flex items-end justify-center"
+          className="absolute inset-0 z-[2000] flex items-end justify-center"
           style={{
             backgroundColor: 'rgba(0,0,0,0.55)',
             opacity: tourInfoVisible ? 1 : 0,
