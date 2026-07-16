@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { Gem, ImageIcon, KeyRound, Loader2, Plus, Trash2, Upload } from 'lucide-react';
 import { ProgressionResource, Tour } from '../types';
 import { uploadImage } from '../services/storageService';
+import { safeUUID } from '../utils/uuid';
 
 interface ProgressionSettingsProps {
   tour: Tour;
@@ -27,7 +28,7 @@ export const ProgressionSettings: React.FC<ProgressionSettingsProps> = ({ tour, 
 
   const addResource = () => {
     const resource: ProgressionResource = {
-      id: crypto.randomUUID(),
+      id: safeUUID(),
       name: resources.length === 0 ? 'Points' : `Resource ${resources.length + 1}`,
       type: 'currency',
       color: tour.accent_color || '#10b981',
