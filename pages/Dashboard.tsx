@@ -17,6 +17,7 @@ import {
   MapPin, LogOut, BarChart2, Globe, Lock, Copy, Search,
   ChevronDown, Layers, Clock, SortAsc, TrendingUp, Users, Timer,
   ChevronRight, Sparkles, Settings, KeyRound, Eye, EyeOff, Loader2,
+  Tag as TagIcon,
 } from 'lucide-react';
 import { GenerateExperienceModal } from '../components/GenerateExperienceModal';
 
@@ -179,6 +180,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
   const [search, setSearch]           = useState('');
   const [sort, setSort]               = useState<SortKey>('newest');
   const [filter, setFilter]           = useState<FilterKey>('all');
+  const [tagFilter, setTagFilter]     = useState<string>('all');
   const [loadingTours, setLoadingTours] = useState(true);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   // Settings — which provider keys exist in the DB
@@ -241,15 +243,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
   // ── Derived stats ────────────────────────────────────────────────────────
   const totalZones  = Object.values(zoneCounts).reduce((s, c) => s + c, 0);
   const publicCount = tours.filter(t => t.is_public).length;
+  const allTags = React.useMemo(
+    () => Array.from(new Set(tours.flatMap(t => t.tags || []))).sort((a, b) => a.localeCompare(b)),
+    [tours],
+  );
 
   // ── Filtered + sorted tour list ──────────────────────────────────────────
   const visibleTours = useMemo(() => {
     let list = [...tours];
     if (filter === 'public')  list = list.filter(t => t.is_public);
     if (filter === 'private') list = list.filter(t => !t.is_public);
+    if (tagFilter !== 'all') list = list.filter(t => (t.tags || []).includes(tagFilter));
     if (search.trim()) {
       const q = search.toLowerCase();
-      list = list.filter(t => t.title.toLowerCase().includes(q) || (t.description || '').toLowerCase().includes(q));
+      list = list.filter(t =>
+        t.title.toLowerCase().includes(q) ||
+        (t.description || '').toLowerCase().includes(q) ||
+        (t.tags || []).some(tag => tag.toLowerCase().includes(q))
+      );
     }
     list.sort((a, b) => {
       if (sort === 'newest') return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
@@ -259,7 +270,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
       return 0;
     });
     return list;
-  }, [tours, filter, search, sort]);
+  }, [tours, filter, tagFilter, search, sort]);
 
   // ── Actions ──────────────────────────────────────────────────────────────
   const createTour = async () => {
@@ -520,6 +531,26 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
                     </select>
                     <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
                   </div>
+
+                  {/* Tag filter — the closest thing to folders */}
+                  {allTags.length > 0 && (
+                    <div className="relative">
+                      <TagIcon size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+                      <select
+                        value={tagFilter}
+                        onChange={e => setTagFilter(e.target.value)}
+                        className={`bg-zinc-900 border text-xs rounded-xl pl-8 pr-7 py-2 appearance-none focus:outline-none cursor-pointer ${
+                          tagFilter === 'all'
+                            ? 'border-zinc-800 text-zinc-300 focus:border-zinc-600'
+                            : 'border-emerald-600/60 text-emerald-300'
+                        }`}
+                      >
+                        <option value="all">All tags</option>
+                        {allTags.map(tag => <option key={tag} value={tag}>{tag}</option>)}
+                      </select>
+                      <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -556,7 +587,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
 
               {/* Tour grid */}
               {visibleTours.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {visibleTours.map(tour => (
                     <div
                       key={tour.id}
@@ -601,12 +632,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
 
                       {/* Content */}
                       <div className="p-4">
-                        <h3 className="font-bold text-white text-base leading-tight mb-1 truncate">{tour.title}</h3>
-                        <p className="text-sm text-zinc-500 line-clamp-2 mb-3 leading-snug">{tour.description}</p>
+                        <h3 className="font-bold text-white text-base leading-tight mb-1.5 truncate">{tour.title}</h3>
                         <div className="flex items-center gap-1 text-zinc-600 text-xs mb-3">
                           <Clock size={11} />
                           <span>{formatDate(tour.created_at)}</span>
                         </div>
+                        {(tour.tags || []).length > 0 && (
+                          <div className="flex flex-wrap gap-1 mb-3">
+                            {(tour.tags || []).map(tag => (
+                              <button
+                                key={tag}
+                                onClick={() => setTagFilter(tag)}
+                                className="px-2 py-0.5 rounded-md bg-zinc-800 hover:bg-emerald-600/25 text-[10px] font-medium text-zinc-400 hover:text-emerald-300 transition-colors"
+                              >
+                                {tag}
+                              </button>
+                            ))}
+                          </div>
+                        )}
 
                         {/* Delete confirmation */}
                         {confirmDeleteId === tour.id ? (
