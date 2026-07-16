@@ -936,6 +936,7 @@ export const Player: React.FC = () => {
   };
 
   const loadTour = async (id: string) => {
+   try {
     const t = await getTourById(id);
     if (!t) { setNotFound(true); setLoading(false); return; }
     setTour(t);
@@ -976,6 +977,13 @@ export const Player: React.FC = () => {
     }
 
     setLoading(false);
+   } catch (e) {
+    // Any unexpected load failure resolves into the "not found" state instead of
+    // hanging forever on "Loading Experience…".
+    console.error('loadTour failed:', e);
+    setNotFound(true);
+    setLoading(false);
+   }
   };
 
   const startAudio = async () => {
