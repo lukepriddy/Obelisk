@@ -366,10 +366,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="flex h-screen bg-zinc-950 overflow-hidden">
+    <div className="flex h-dvh bg-zinc-950 overflow-hidden">
 
       {/* ── SIDEBAR ──────────────────────────────────────────────────────── */}
-      <aside className="w-56 shrink-0 flex flex-col bg-zinc-950 border-r border-zinc-800/70 h-full">
+      <aside className="hidden md:flex w-56 shrink-0 flex-col bg-zinc-950 border-r border-zinc-800/70 h-full">
 
         {/* Brand */}
         <div className="flex items-center gap-2.5 px-4 pt-5 pb-6">
@@ -426,18 +426,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
 
       {/* ── MAIN CONTENT ─────────────────────────────────────────────────── */}
       <main className="flex-1 overflow-y-auto bg-zinc-950">
-        <div className="max-w-5xl mx-auto px-8 py-8">
+        <div className="max-w-5xl mx-auto px-4 py-5 pb-24 md:px-8 md:py-8 md:pb-8">
 
           {/* ── TOURS VIEW ── */}
           {activeNav === 'tours' && (
             <>
               {/* Page header */}
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h1 className="text-2xl font-bold text-white tracking-tight">Your Experiences</h1>
-                  <p className="text-sm text-zinc-500 mt-0.5">Build and manage location-based narratives</p>
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-6">
+                <div className="min-w-0">
+                  <h1 className="text-xl md:text-2xl font-bold text-white tracking-tight">Your Experiences</h1>
+                  <p className="hidden sm:block text-sm text-zinc-500 mt-0.5">Build and manage location-based narratives</p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                   <button
                     onClick={() => setShowGenerateModal(true)}
                     className="flex items-center gap-2 bg-transparent border border-indigo-500/50 hover:border-indigo-400 hover:bg-indigo-500/10 text-indigo-300 hover:text-indigo-200 font-semibold px-4 py-2.5 rounded-xl transition-colors text-sm"
@@ -910,6 +910,37 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
 
         </div>
       </main>
+
+      {/* ── MOBILE TAB BAR — the sidebar is desktop-only, so its nav lives here.
+             Also carries sign-out, which was otherwise stranded in the sidebar. */}
+      <nav
+        className="md:hidden fixed inset-x-0 bottom-0 z-50 flex items-stretch border-t border-zinc-800 bg-zinc-950/95 backdrop-blur"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      >
+        {([
+          { key: 'tours', label: 'Experiences', icon: <Layers size={18} /> },
+          { key: 'analytics', label: 'Analytics', icon: <BarChart2 size={18} /> },
+          { key: 'settings', label: 'Settings', icon: <Settings size={18} /> },
+        ] as const).map(item => (
+          <button
+            key={item.key}
+            onClick={() => setActiveNav(item.key)}
+            className={`flex-1 flex flex-col items-center gap-1 py-2.5 text-[10px] font-bold transition-colors ${
+              activeNav === item.key ? 'text-emerald-400' : 'text-zinc-500'
+            }`}
+          >
+            {item.icon}
+            {item.label}
+          </button>
+        ))}
+        <button
+          onClick={onLogout}
+          className="flex-1 flex flex-col items-center gap-1 py-2.5 text-[10px] font-bold text-zinc-500"
+        >
+          <LogOut size={18} />
+          Sign out
+        </button>
+      </nav>
 
       {/* ── GENERATE EXPERIENCE MODAL ───────────────────────────────────────── */}
       {showGenerateModal && (

@@ -20,7 +20,7 @@ const AppShell: React.FC<{ user: User | null; onLogout: () => void }> = ({ user,
   const showHeader = !isPlayer && !isDashboard;
 
   return (
-    <div className={`flex flex-col h-screen overflow-hidden ${isEditor ? 'bg-zinc-950' : 'bg-zinc-950'}`}>
+    <div className={`flex flex-col h-dvh overflow-hidden ${isEditor ? 'bg-zinc-950' : 'bg-zinc-950'}`}>
       {showHeader && (
         <header className={`px-5 py-3.5 z-10 flex justify-between items-center shrink-0 ${
           isEditor

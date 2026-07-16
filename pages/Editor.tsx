@@ -524,7 +524,7 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
   const selectedZone = zones.find(z => z.id === selectedZoneId);
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-zinc-950">
+    <div className="flex h-dvh w-full overflow-hidden bg-zinc-950">
 
       {/* 1. LEFT TOOLBAR */}
       <div className="hidden md:flex w-16 flex-col items-center py-4 gap-3 bg-zinc-950 border-r border-zinc-800 z-30 shrink-0">
