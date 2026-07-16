@@ -1,7 +1,27 @@
 export const MAP_DEFAULT_CENTER: [number, number] = [40.7484, -73.9856]; // Empire State Building
 export const MAP_DEFAULT_ZOOM = 15;
 
+// Order here is the order shown in the style selectors. Satellite HD (Esri
+// Clarity) is the product default; standard Satellite is the fallback for the
+// occasional area where Clarity's imagery is older. Vector styles (dark/light/
+// voyager) render via MapLibre + CARTO GL styles; the `url` raster templates are
+// kept for reference/attribution. See services/mapStyle.ts for the render layer.
 export const MAP_STYLES: Record<string, { label: string; url: string; attribution: string }> = {
+  'satellite-hd': {
+    label: 'Satellite HD',
+    url: 'https://clarity.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    attribution: '&copy; Esri',
+  },
+  satellite: {
+    label: 'Satellite',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    attribution: '&copy; Esri',
+  },
+  voyager: {
+    label: 'Voyager',
+    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+    attribution: '&copy; OpenStreetMap &copy; CARTO',
+  },
   dark: {
     label: 'Dark',
     url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
@@ -12,22 +32,15 @@ export const MAP_STYLES: Record<string, { label: string; url: string; attributio
     url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
     attribution: '&copy; OpenStreetMap &copy; CARTO',
   },
-  voyager: {
-    label: 'Voyager',
-    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; OpenStreetMap &copy; CARTO',
-  },
-  satellite: {
-    label: 'Satellite',
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    attribution: '&copy; Esri',
-  },
   streets: {
     label: 'Streets',
     url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
     attribution: '&copy; OpenStreetMap',
   },
 };
+
+// Product-wide default when a tour hasn't chosen a style.
+export const DEFAULT_MAP_STYLE = 'satellite-hd';
 
 export const FONT_STYLES: Record<string, { label: string; fontFamily: string }> = {
   sans:  { label: 'Sans-serif',  fontFamily: "system-ui, -apple-system, sans-serif" },

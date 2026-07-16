@@ -10,9 +10,8 @@
  * drag is the only thing that moves a pin. Map clicks do nothing.
  */
 
-import React, { useState, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Circle, useMap } from 'react-leaflet';
-import L from 'leaflet';
+import React, { useState, useRef, useEffect } from 'react';
+import { GeneratePickerMap, GeneratePreviewMap, PickerHandle } from './GenerateMaps';
 import {
   X, Search, MapPin, FileText, Sparkles, ChevronDown, ChevronUp,
   Volume2, Mic, Lock, ArrowLeft, Loader2, RefreshCw, Wand2,
@@ -20,7 +19,6 @@ import {
 } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
 import { createTour, createZone } from '../services/db';
-import { MAP_STYLES } from '../constants';
 
 // ── Draft types ───────────────────────────────────────────────────────────────
 
@@ -59,41 +57,6 @@ interface Props {
 }
 
 type Phase = 'input' | 'generating' | 'review';
-
-// ── Leaflet icons ─────────────────────────────────────────────────────────────
-
-const makePin = (label: string, color: string) => L.divIcon({
-  html: `<div style="background:${color};width:28px;height:28px;border-radius:50%;border:3px solid white;
-    box-shadow:0 2px 10px rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;cursor:grab;">
-    <span style="color:white;font-size:11px;font-weight:900;line-height:1">${label}</span></div>`,
-  className: '', iconSize: [28, 28], iconAnchor: [14, 14],
-});
-
-const startIcon = makePin('S', '#10b981');
-const endIcon   = makePin('E', '#6366f1');
-
-const zoneMarkerIcon = (num: number, type: 'audio' | 'character', locked: boolean) => L.divIcon({
-  html: `<div style="background:${locked ? '#f59e0b' : type === 'character' ? '#6366f1' : '#10b981'};
-    width:26px;height:26px;border-radius:50%;border:2px solid white;
-    box-shadow:0 2px 6px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;">
-    <span style="color:white;font-size:11px;font-weight:900;line-height:1">${num}</span></div>`,
-  className: '', iconSize: [26, 26], iconAnchor: [13, 13],
-});
-
-// ── Map helpers ───────────────────────────────────────────────────────────────
-
-const FlyTo: React.FC<{ lat: number; lng: number; zoom?: number }> = ({ lat, lng, zoom = 16 }) => {
-  const map = useMap();
-  React.useEffect(() => { map.flyTo([lat, lng], zoom, { duration: 1.1 }); }, [lat, lng]); // eslint-disable-line
-  return null;
-};
-
-// Captures the Leaflet map instance so the form can read the current center
-const MapRefCapture: React.FC<{ mapRef: React.MutableRefObject<L.Map | null> }> = ({ mapRef }) => {
-  const map = useMap();
-  React.useEffect(() => { mapRef.current = map; }, [map, mapRef]);
-  return null;
-};
 
 // ── Generating steps ──────────────────────────────────────────────────────────
 
@@ -147,7 +110,12 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
   const [pdfFile, setPdfFile]       = useState<File | null>(null);
   const [radiusMeters, setRadiusMeters] = useState(500);
   const pdfInputRef                 = useRef<HTMLInputElement>(null);
-  const mapRef                      = useRef<L.Map | null>(null);
+  const mapRef                      = useRef<PickerHandle | null>(null);
+
+  // Fly the picker to a freshly searched location.
+  useEffect(() => {
+    if (flyTarget) mapRef.current?.flyTo(flyTarget[0], flyTarget[1], 16);
+  }, [flyTarget]);
 
   // ── Start search ─────────────────────────────────────────────────────────
   const [query, setQuery]           = useState('');
@@ -213,10 +181,9 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
 
   // ── End pin: dropped at current map center, then dragged ─────────────────
   const addEndPin = () => {
-    const m = mapRef.current;
-    if (m) {
-      const c = m.getCenter();
-      setEndPin([c.lat, c.lng]);
+    const c = mapRef.current?.getCenter();
+    if (c) {
+      setEndPin([c[0], c[1]]);
     } else if (startPin) {
       setEndPin([startPin[0] + 0.0012, startPin[1] + 0.0012]);
     }
@@ -353,8 +320,6 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
     onBuilt(tour.id);
   };
 
-  const mapTile = MAP_STYLES.satellite;
-
   // ────────────────────────────────────────────────────────────────────────
   // RENDER
   // ────────────────────────────────────────────────────────────────────────
@@ -465,50 +430,14 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
               {/* ── Map: pan, zoom, drag pins. Clicks do nothing. ── */}
               <div className="px-5">
                 <div className="rounded-xl overflow-hidden border border-zinc-800 relative" style={{ height: 340 }}>
-                  <MapContainer
-                    center={startPin ?? [40.748, -73.986]}
-                    zoom={startPin ? 16 : 3}
-                    style={{ height: '100%', width: '100%' }}
-                  >
-                    <TileLayer url={mapTile.url} attribution={mapTile.attribution} maxNativeZoom={19} maxZoom={22} />
-                    <MapRefCapture mapRef={mapRef} />
-                    {flyTarget && <FlyTo lat={flyTarget[0]} lng={flyTarget[1]} zoom={16} />}
-
-                    {startPin && (
-                      <>
-                        <Marker
-                          position={startPin}
-                          icon={startIcon}
-                          draggable
-                          eventHandlers={{
-                            dragend: (e: any) => {
-                              const ll = e.target.getLatLng();
-                              setStartPin([ll.lat, ll.lng]);
-                            },
-                          }}
-                        />
-                        <Circle
-                          center={startPin}
-                          radius={radiusMeters}
-                          pathOptions={{ color: '#10b981', fillColor: '#10b981', fillOpacity: 0.07, weight: 1.5, dashArray: '6 4' }}
-                        />
-                      </>
-                    )}
-
-                    {endPin && (
-                      <Marker
-                        position={endPin}
-                        icon={endIcon}
-                        draggable
-                        eventHandlers={{
-                          dragend: (e: any) => {
-                            const ll = e.target.getLatLng();
-                            setEndPin([ll.lat, ll.lng]);
-                          },
-                        }}
-                      />
-                    )}
-                  </MapContainer>
+                  <GeneratePickerMap
+                    ref={mapRef}
+                    startPin={startPin}
+                    endPin={endPin}
+                    radiusMeters={radiusMeters}
+                    onStartMove={setStartPin}
+                    onEndMove={setEndPin}
+                  />
 
                   {/* Pre-search empty state */}
                   {!startPin && (
@@ -710,33 +639,8 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
               {/* Mini-map */}
               {draft.zones.length > 0 && (
                 <div className="px-5 pb-3">
-                  <div className="rounded-xl overflow-hidden border border-zinc-800" style={{ height: 200 }}>
-                    <MapContainer
-                      center={[draft.zones[0].lat, draft.zones[0].lng]}
-                      zoom={15}
-                      style={{ height: '100%', width: '100%' }}
-                      zoomControl={false}
-                      scrollWheelZoom={false}
-                      dragging={false}
-                      attributionControl={false}
-                    >
-                      <TileLayer url={mapTile.url} maxNativeZoom={19} maxZoom={22} />
-                      {startPin && <Marker position={startPin} icon={startIcon} />}
-                      {endPin   && <Marker position={endPin}   icon={endIcon}   />}
-                      {draft.zones.map(z => (
-                        <React.Fragment key={z.order}>
-                          <Marker position={[z.lat, z.lng]} icon={zoneMarkerIcon(z.order, z.type, z.locked)} />
-                          <Circle
-                            center={[z.lat, z.lng]}
-                            radius={z.radius}
-                            pathOptions={{
-                              color: z.locked ? '#f59e0b' : z.type === 'character' ? '#6366f1' : '#10b981',
-                              fillOpacity: 0.12, weight: 1,
-                            }}
-                          />
-                        </React.Fragment>
-                      ))}
-                    </MapContainer>
+                  <div className="rounded-xl overflow-hidden border border-zinc-800 relative" style={{ height: 200 }}>
+                    <GeneratePreviewMap zones={draft.zones} startPin={startPin} endPin={endPin} />
                   </div>
                 </div>
               )}

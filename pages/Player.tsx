@@ -1,7 +1,7 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { MapContainer, TileLayer, Marker, Circle, useMap, useMapEvents } from 'react-leaflet';
-import L from 'leaflet';
+import { PlayerMap } from '../components/PlayerMap';
+import { WelcomePreviewMap, WelcomePreviewHandle } from '../components/WelcomePreviewMap';
 import { getTourById, getZonesByTourId, startSession, endSession, recordZoneVisit } from '../services/db';
 import { audioService } from '../services/audioService';
 import {
@@ -14,63 +14,12 @@ import {
 } from '../services/progressionService';
 import { getDistance, calculateAttenuation } from '../utils/geo';
 import { PlayerProgress, ProgressionReward, Tour, Zone } from '../types';
-import { FONT_STYLES, MAP_STYLES } from '../constants';
+import { FONT_STYLES, MAP_STYLES, DEFAULT_MAP_STYLE } from '../constants';
 import { Loader2, PlayCircle, Volume2, Mic, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu, Layers, Locate, RotateCcw, ZoomIn, ZoomOut, Backpack, Gem, Trash2, Info, RefreshCw, LogOut, Bug, Navigation, ChevronRight } from 'lucide-react';
 import { ChatInterface } from '../components/ChatInterface';
 
-// Custom icons
-const UserIcon = L.divIcon({
-  html: `<div style="background-color: #ef4444; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
-  className: 'custom-user-icon',
-  iconSize: [16, 16],
-  iconAnchor: [8, 8]
-});
-
-const PLAYER_MAP_STYLE_ORDER = ['satellite', 'voyager', 'dark', 'light'] as const;
-
-// Map controller — only re-centers when `enabled` (user hasn't manually panned away).
-const MapRecenter = ({ lat, lng, enabled }: { lat: number; lng: number; enabled: boolean }) => {
-  const map = useMap();
-  useEffect(() => {
-    if (enabled) map.setView([lat, lng], map.getZoom());
-  }, [lat, lng, map, enabled]);
-  return null;
-};
-
-// Detects a user-initiated drag so we can pause auto-follow.
-const DragDetector = ({ onDrag }: { onDrag: () => void }) => {
-  useMapEvents({ dragstart: onDrag });
-  return null;
-};
-
-// Forces Leaflet to re-measure container after CSS aspect-ratio resolves
-const InvalidateSize = () => {
-  const map = useMap();
-  useEffect(() => {
-    const t = setTimeout(() => map.invalidateSize(), 50);
-    return () => clearTimeout(t);
-  }, [map]);
-  return null;
-};
-
-// Leaflet reads interaction options only when the map is created. Toggle the
-// handlers directly so the welcome preview can become interactive after a tap.
-const WelcomeMapInteraction = ({ enabled }: { enabled: boolean }) => {
-  const map = useMap();
-  useEffect(() => {
-    const handlers = [
-      map.dragging,
-      map.touchZoom,
-      map.doubleClickZoom,
-      map.boxZoom,
-      map.keyboard,
-    ];
-    handlers.forEach(handler => enabled ? handler.enable() : handler.disable());
-    map.getContainer().style.touchAction = enabled ? 'none' : 'pan-y';
-    map.invalidateSize();
-  }, [enabled, map]);
-  return null;
-};
+// Player map style options, in selector order (Satellite HD default first).
+const PLAYER_MAP_STYLE_ORDER = ['satellite-hd', 'satellite', 'voyager', 'dark', 'light', 'streets'] as const;
 
 export const Player: React.FC = () => {
   const { tourId } = useParams<{ tourId: string }>();
@@ -103,7 +52,7 @@ export const Player: React.FC = () => {
   // Map style — starts at the tour's chosen style, user can override in-session
   const [mapStyleOverride, setMapStyleOverride] = useState<string | null>(null);
   const [welcomeMapInteractive, setWelcomeMapInteractive] = useState(false);
-  const welcomeMapRef = useRef<L.Map | null>(null);
+  const welcomeMapRef = useRef<WelcomePreviewHandle | null>(null);
   const [showPlayerMenu, setShowPlayerMenu] = useState(false);
   const [playerMenuView, setPlayerMenuView] = useState<'main' | 'about' | 'progress'>('main');
   const [showDebug, setShowDebug] = useState(false);
@@ -115,6 +64,16 @@ export const Player: React.FC = () => {
 
   // Character Interaction
   const [activeCharacterZone, setActiveCharacterZone] = useState<Zone | null>(null);
+
+  // Set of zone ids currently "active" (playing / open) — drives the blue map
+  // highlight. Memoised so PlayerMap only rebuilds when it actually changes.
+  const activeZoneIds = useMemo(
+    () => new Set<string>([
+      ...activeZones.map(z => z.id),
+      ...(activeCharacterZone ? [activeCharacterZone.id] : []),
+    ]),
+    [activeZones, activeCharacterZone],
+  );
   // persistedCharacterZone keeps the last character zone so the chat
   // session (and history) survives briefly leaving the zone radius.
   const [persistedCharacterZone, setPersistedCharacterZone] = useState<Zone | null>(null);
@@ -977,6 +936,7 @@ export const Player: React.FC = () => {
   };
 
   const loadTour = async (id: string) => {
+   try {
     const t = await getTourById(id);
     if (!t) { setNotFound(true); setLoading(false); return; }
     setTour(t);
@@ -1017,6 +977,13 @@ export const Player: React.FC = () => {
     }
 
     setLoading(false);
+   } catch (e) {
+    // Any unexpected load failure resolves into the "not found" state instead of
+    // hanging forever on "Loading Experience…".
+    console.error('loadTour failed:', e);
+    setNotFound(true);
+    setLoading(false);
+   }
   };
 
   const startAudio = async () => {
@@ -1124,139 +1091,29 @@ export const Player: React.FC = () => {
   return (
     <div className="h-full relative bg-zinc-950 overflow-hidden">
 
-      {/* ── FULL-SCREEN MAP ── */}
-      {/* touch-action:none tells the browser to hand ALL touch events to Leaflet,
-          preventing the vertical-scroll ghost that appears during pinch-to-zoom */}
-      {/* Stays mounted while the welcome screen is up so Leaflet can size itself and
-          pre-fetch start-area tiles, but is hidden: the welcome overlay is `fixed`
-          (visual viewport) while this is `absolute` inside an h-dvh shell, and on iOS
-          those two boxes don't agree — the map used to bleed a few px at the edges.
-          visibility:hidden keeps the layout box, so tiles still load and invalidateSize
-          still measures correctly. */}
+      {/* ── FULL-SCREEN MAP (MapLibre) ── */}
+      {/* Kept mounted but hidden until Begin so the map can size itself and pre-warm
+          tiles. The welcome overlay is `fixed` (visual viewport) while this is
+          `absolute` inside an h-dvh shell; on iOS those boxes disagree, so a visible
+          map bled a few px at the edges — visibility:hidden keeps the layout box. */}
       <div
         className="absolute inset-0"
-        style={{ touchAction: 'none', visibility: audioStarted ? 'visible' : 'hidden' }}
+        style={{ visibility: audioStarted ? 'visible' : 'hidden' }}
       >
-        <MapContainer
-          center={[tour.lat, tour.lng]}
-          zoom={tour.start_zoom ?? 18}
-          maxZoom={22}
-          style={{ height: '100%', width: '100%' }}
-          zoomControl={false}
-        >
-          {(() => {
-            const styleKey = mapStyleOverride || tour?.map_style || 'dark';
-            const styleObj = MAP_STYLES[styleKey] || MAP_STYLES.dark;
-            return (
-              <TileLayer
-                key={styleKey}
-                url={styleObj.url}
-                attribution={styleObj.attribution}
-                maxNativeZoom={19}
-                maxZoom={22}
-              />
-            );
-          })()}
-          
-          <InvalidateSize />
-          {!simulationMode && userPos && (
-            <MapRecenter lat={userPos[0]} lng={userPos[1]} enabled={followUser} />
-          )}
-          {/* Pause auto-follow whenever the user manually pans the map */}
-          {!simulationMode && <DragDetector onDrag={() => setFollowUser(false)} />}
-
-          {/* Zones */}
-          {zones.map(zone => {
-             const isActive = activeZones.find(az => az.id === zone.id) || (activeCharacterZone?.id === zone.id);
-             if (!zone.is_visible) return null;
-             if (zone.requires_zone_id && !visitedZoneIds.has(zone.requires_zone_id)) return null;
-             if (
-               tour.progression_enabled &&
-               playerProgress &&
-               !canMeetProgressionRequirements(zone, playerProgress)
-             ) return null;
-             // A found discoverable disappears cleanly rather than lingering
-             // as a dead spot — no circle, no icon, no hint audio (silenced
-             // separately in the geofencing loop).
-             const isDiscoverable = zone.type === 'discoverable';
-             if (isDiscoverable && playerProgress?.granted_zone_ids.includes(zone.id)) return null;
-
-             const isChar = zone.type === 'character';
-             const isLocked = zone.lock_type === 'passphrase';
-
-             // Universal colour language for the player:
-             //   active (any type) → blue · inactive audio → green
-             //   inactive character → purple · inactive discoverable → pink
-             //   inactive locked → yellow
-             // (Invisible zones are never drawn — handled above.)
-             const ACTIVE = '#3b82f6'; // blue-500
-             const color = isActive
-               ? ACTIVE
-               : isLocked      ? '#f59e0b'   // amber/yellow
-               : isChar        ? '#8b5cf6'   // violet/purple
-               : isDiscoverable ? '#ec4899'  // pink
-               :                 '#10b981';  // emerald/green
-
-             const DiscoverableIcon = isDiscoverable ? L.divIcon({
-               html: zone.is_mystery || !zone.zone_image_url
-                 ? `<div style="width:22px;height:22px;border-radius:50%;background:#ec4899;border:2px solid white;box-shadow:0 1px 5px rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;color:white;font-size:12px;font-weight:800">?</div>`
-                 : `<div style="width:26px;height:26px;border-radius:50%;background-image:url('${zone.zone_image_url}');background-size:cover;background-position:center;border:2px solid white;box-shadow:0 1px 5px rgba(0,0,0,0.5)"></div>`,
-               className: '',
-               iconSize: zone.is_mystery || !zone.zone_image_url ? [22, 22] : [26, 26],
-               iconAnchor: zone.is_mystery || !zone.zone_image_url ? [11, 11] : [13, 13],
-             }) : null;
-
-             return (
-              <React.Fragment key={zone.id}>
-                <Circle
-                  center={[zone.lat, zone.lng]}
-                  radius={zone.radius}
-                  pathOptions={{
-                    color,
-                    fillColor: color,
-                    fillOpacity: isActive ? 0.35 : 0.18,
-                    weight: isActive ? 3 : 2,
-                    dashArray: isLocked && !isActive ? '6 4' : undefined
-                  }}
-                />
-                {DiscoverableIcon && (
-                  <Marker position={[zone.lat, zone.lng]} icon={DiscoverableIcon} />
-                )}
-              </React.Fragment>
-             );
-          })}
-
-          {/* User Marker — only render when we have an actual position */}
-          {userPos && gpsAccuracy && gpsAccuracy > 0 && (
-            <Circle
-              center={userPos}
-              radius={Math.min(gpsAccuracy, 120)}
-              pathOptions={{
-                color: '#ef4444',
-                fillColor: '#ef4444',
-                fillOpacity: 0.08,
-                weight: 1,
-                dashArray: '4 4',
-              }}
-            />
-          )}
-          {userPos && (
-            <Marker
-              position={userPos}
-              icon={UserIcon}
-              draggable={simulationMode}
-              eventHandlers={{
-                drag: (e) => {
-                  const marker = e.target;
-                  const pos = marker.getLatLng();
-                  const newPos: [number, number] = [pos.lat, pos.lng];
-                  setUserPos(newPos);
-                  simPosRef.current = newPos;
-                }
-              }}
-            />
-          )}
-        </MapContainer>
+        <PlayerMap
+          tour={tour}
+          zones={zones}
+          activeZoneIds={activeZoneIds}
+          visitedZoneIds={visitedZoneIds}
+          playerProgress={playerProgress}
+          userPos={userPos}
+          gpsAccuracy={gpsAccuracy}
+          styleKey={mapStyleOverride || tour.map_style || DEFAULT_MAP_STYLE}
+          simulationMode={simulationMode}
+          followUser={followUser}
+          onDragAway={() => setFollowUser(false)}
+          onSimMove={(pos) => { setUserPos(pos); simPosRef.current = pos; }}
+        />
       </div>
 
       {/* ── WELCOME SCREEN (z-2000, covers map + bars) ── */}
@@ -1265,23 +1122,12 @@ export const Player: React.FC = () => {
         const accent     = tour.accent_color || '#10b981';
         const textColor  = tour.text_color   || '#ffffff';
         const fontFamily = FONT_STYLES[tour.font_style || 'sans']?.fontFamily;
-        const mapStyle   = MAP_STYLES[tour.map_style || 'dark'] || MAP_STYLES.dark;
 
         const copyCoords = () => {
           navigator.clipboard.writeText(`${tour.lat.toFixed(6)}, ${tour.lng.toFixed(6)}`);
           setCoordsCopied(true);
           setTimeout(() => setCoordsCopied(false), 2000);
         };
-
-        const StartMarkerIcon = L.divIcon({
-          html: `<div style="display:flex;flex-direction:column;align-items:center;gap:2px">
-            <div style="background:#10b981;width:18px;height:18px;border-radius:50%;border:3px solid white;box-shadow:0 0 0 2px #10b981,0 2px 8px rgba(16,185,129,0.5)"></div>
-            <div style="background:#10b981;color:white;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;white-space:nowrap;letter-spacing:0.05em">START</div>
-          </div>`,
-          className: '',
-          iconSize: [60, 38],
-          iconAnchor: [30, 11],
-        });
 
         return (
           <div
@@ -1321,25 +1167,14 @@ export const Player: React.FC = () => {
                 )}
 
                 <div className="relative w-full aspect-[4/3] max-h-[240px] rounded-xl overflow-hidden border border-white/10 shadow-lg">
-                  <MapContainer
+                  <WelcomePreviewMap
                     ref={welcomeMapRef}
-                    center={[tour.lat, tour.lng]}
+                    lat={tour.lat}
+                    lng={tour.lng}
                     zoom={tour.start_zoom ?? 18}
-                    style={{ width: '100%', height: '100%' }}
-                    zoomControl={false}
-                    scrollWheelZoom={false}
-                    dragging={welcomeMapInteractive}
-                    touchZoom={welcomeMapInteractive}
-                    doubleClickZoom={welcomeMapInteractive}
-                    boxZoom={false}
-                    keyboard={false}
-                    attributionControl={false}
-                  >
-                    <TileLayer url={mapStyle.url} />
-                    <Marker position={[tour.lat, tour.lng]} icon={StartMarkerIcon} />
-                    <InvalidateSize />
-                    <WelcomeMapInteraction enabled={welcomeMapInteractive} />
-                  </MapContainer>
+                    styleKey={tour.map_style || DEFAULT_MAP_STYLE}
+                    interactive={welcomeMapInteractive}
+                  />
                   {!welcomeMapInteractive ? (
                     <button
                       type="button"
