@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { Dashboard } from './pages/Dashboard';
 import { Editor } from './pages/Editor';
 import { Player } from './pages/Player';
+import { MapLibreLab } from './pages/MapLibreLab';
 import { Auth } from './pages/Auth';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { supabase } from './services/db';
@@ -56,6 +57,7 @@ const AppShell: React.FC<{ user: User | null; onLogout: () => void }> = ({ user,
           <Route path="/" element={user ? <Dashboard user={user} onLogout={onLogout} /> : <Navigate to="/auth" />} />
           <Route path="/editor/:tourId?" element={user ? <Editor user={user} /> : <Navigate to="/auth" />} />
           <Route path="/player/:tourId" element={<ErrorBoundary><Player /></ErrorBoundary>} />
+          <Route path="/maplibre/:tourId?" element={<MapLibreLab />} />
         </Routes>
       </main>
     </div>
