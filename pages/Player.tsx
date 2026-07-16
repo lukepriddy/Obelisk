@@ -1,8 +1,7 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
-import L from 'leaflet';
 import { PlayerMap } from '../components/PlayerMap';
+import { WelcomePreviewMap, WelcomePreviewHandle } from '../components/WelcomePreviewMap';
 import { getTourById, getZonesByTourId, startSession, endSession, recordZoneVisit } from '../services/db';
 import { audioService } from '../services/audioService';
 import {
@@ -21,35 +20,6 @@ import { ChatInterface } from '../components/ChatInterface';
 
 // Player map style options, in selector order (Satellite HD default first).
 const PLAYER_MAP_STYLE_ORDER = ['satellite-hd', 'satellite', 'voyager', 'dark', 'light', 'streets'] as const;
-
-// Forces Leaflet to re-measure container after CSS aspect-ratio resolves
-const InvalidateSize = () => {
-  const map = useMap();
-  useEffect(() => {
-    const t = setTimeout(() => map.invalidateSize(), 50);
-    return () => clearTimeout(t);
-  }, [map]);
-  return null;
-};
-
-// Leaflet reads interaction options only when the map is created. Toggle the
-// handlers directly so the welcome preview can become interactive after a tap.
-const WelcomeMapInteraction = ({ enabled }: { enabled: boolean }) => {
-  const map = useMap();
-  useEffect(() => {
-    const handlers = [
-      map.dragging,
-      map.touchZoom,
-      map.doubleClickZoom,
-      map.boxZoom,
-      map.keyboard,
-    ];
-    handlers.forEach(handler => enabled ? handler.enable() : handler.disable());
-    map.getContainer().style.touchAction = enabled ? 'none' : 'pan-y';
-    map.invalidateSize();
-  }, [enabled, map]);
-  return null;
-};
 
 export const Player: React.FC = () => {
   const { tourId } = useParams<{ tourId: string }>();
@@ -82,7 +52,7 @@ export const Player: React.FC = () => {
   // Map style — starts at the tour's chosen style, user can override in-session
   const [mapStyleOverride, setMapStyleOverride] = useState<string | null>(null);
   const [welcomeMapInteractive, setWelcomeMapInteractive] = useState(false);
-  const welcomeMapRef = useRef<L.Map | null>(null);
+  const welcomeMapRef = useRef<WelcomePreviewHandle | null>(null);
   const [showPlayerMenu, setShowPlayerMenu] = useState(false);
   const [playerMenuView, setPlayerMenuView] = useState<'main' | 'about' | 'progress'>('main');
   const [showDebug, setShowDebug] = useState(false);
@@ -1144,23 +1114,12 @@ export const Player: React.FC = () => {
         const accent     = tour.accent_color || '#10b981';
         const textColor  = tour.text_color   || '#ffffff';
         const fontFamily = FONT_STYLES[tour.font_style || 'sans']?.fontFamily;
-        const mapStyle   = MAP_STYLES[tour.map_style || 'dark'] || MAP_STYLES.dark;
 
         const copyCoords = () => {
           navigator.clipboard.writeText(`${tour.lat.toFixed(6)}, ${tour.lng.toFixed(6)}`);
           setCoordsCopied(true);
           setTimeout(() => setCoordsCopied(false), 2000);
         };
-
-        const StartMarkerIcon = L.divIcon({
-          html: `<div style="display:flex;flex-direction:column;align-items:center;gap:2px">
-            <div style="background:#10b981;width:18px;height:18px;border-radius:50%;border:3px solid white;box-shadow:0 0 0 2px #10b981,0 2px 8px rgba(16,185,129,0.5)"></div>
-            <div style="background:#10b981;color:white;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;white-space:nowrap;letter-spacing:0.05em">START</div>
-          </div>`,
-          className: '',
-          iconSize: [60, 38],
-          iconAnchor: [30, 11],
-        });
 
         return (
           <div
@@ -1200,25 +1159,14 @@ export const Player: React.FC = () => {
                 )}
 
                 <div className="relative w-full aspect-[4/3] max-h-[240px] rounded-xl overflow-hidden border border-white/10 shadow-lg">
-                  <MapContainer
+                  <WelcomePreviewMap
                     ref={welcomeMapRef}
-                    center={[tour.lat, tour.lng]}
+                    lat={tour.lat}
+                    lng={tour.lng}
                     zoom={tour.start_zoom ?? 18}
-                    style={{ width: '100%', height: '100%' }}
-                    zoomControl={false}
-                    scrollWheelZoom={false}
-                    dragging={welcomeMapInteractive}
-                    touchZoom={welcomeMapInteractive}
-                    doubleClickZoom={welcomeMapInteractive}
-                    boxZoom={false}
-                    keyboard={false}
-                    attributionControl={false}
-                  >
-                    <TileLayer url={mapStyle.url} />
-                    <Marker position={[tour.lat, tour.lng]} icon={StartMarkerIcon} />
-                    <InvalidateSize />
-                    <WelcomeMapInteraction enabled={welcomeMapInteractive} />
-                  </MapContainer>
+                    styleKey={tour.map_style || DEFAULT_MAP_STYLE}
+                    interactive={welcomeMapInteractive}
+                  />
                   {!welcomeMapInteractive ? (
                     <button
                       type="button"
