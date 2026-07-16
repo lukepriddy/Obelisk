@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Tour } from '../types';
 import { MAP_STYLES, FONT_STYLES } from '../constants';
 import { uploadImage } from '../services/storageService';
-import { Image, Type, Palette, AlignLeft, AlignCenter, Upload, MapPin, Eye, Settings, Globe, Lock, Loader2, Sun, Moon } from 'lucide-react';
+import { Image, Type, Palette, AlignLeft, AlignCenter, Upload, MapPin, Eye, Settings, Globe, Lock, Loader2, Sun, Moon, X, Tag as TagIcon } from 'lucide-react';
 import { ProgressionSettings } from './ProgressionSettings';
 
 interface TourInfoPanelProps {
@@ -32,6 +32,7 @@ function validateImageFile(file: File): string | null {
 }
 
 export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({ tour, onUpdate }) => {
+  const [tagDraft, setTagDraft] = useState('');
   const [tab, setTab] = useState<'edit' | 'preview'>('edit');
   const [imageUploading, setImageUploading] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
@@ -125,6 +126,49 @@ export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({ tour, onUpdate }) 
               value={tour.title}
               onChange={(e) => onUpdate({ title: e.target.value })}
             />
+          </div>
+
+          {/* Tags — creator-side only; group experiences like folders */}
+          <div>
+            <label className="block text-xs font-bold text-zinc-400 uppercase mb-1 flex items-center gap-2">
+              <TagIcon size={13} /> Tags
+            </label>
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {(tour.tags || []).map(tag => (
+                <span key={tag} className="flex items-center gap-1 pl-2 pr-1 py-1 rounded-md bg-zinc-800 border border-zinc-700 text-xs text-zinc-200">
+                  {tag}
+                  <button
+                    type="button"
+                    onClick={() => onUpdate({ tags: (tour.tags || []).filter(t => t !== tag) })}
+                    className="w-4 h-4 flex items-center justify-center rounded text-zinc-500 hover:text-red-400"
+                    aria-label={`Remove tag ${tag}`}
+                  >
+                    <X size={11} />
+                  </button>
+                </span>
+              ))}
+              {(tour.tags || []).length === 0 && (
+                <span className="text-[11px] text-zinc-600">No tags yet.</span>
+              )}
+            </div>
+            <input
+              type="text"
+              className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none"
+              placeholder="Type a tag, press Enter…"
+              value={tagDraft}
+              onChange={(e) => setTagDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter') return;
+                e.preventDefault();
+                // Normalised so "Halloween" and "halloween" don't become two folders.
+                const tag = tagDraft.trim().toLowerCase().slice(0, 32);
+                if (!tag) return;
+                const existing = tour.tags || [];
+                if (!existing.includes(tag)) onUpdate({ tags: [...existing, tag] });
+                setTagDraft('');
+              }}
+            />
+            <p className="text-[10px] text-zinc-500 mt-1">Used to group and filter on your dashboard. Players never see these.</p>
           </div>
 
           {/* Subtitle */}
