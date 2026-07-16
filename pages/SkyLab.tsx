@@ -103,6 +103,7 @@ export const SkyLab: React.FC = () => {
     // with beta/gamma or the gimbal compensation breaks.
     aSin: 0, aCos: 1, primed: false,
     offset: 0, offsetLocked: false, wellConditioned: false,
+    calibSamples: 0, flatPose: false,
     // Raw heading samples over the last second — the jitter measurement.
     samples: [] as { t: number; deg: number }[],
     jitter: 0,
@@ -125,7 +126,7 @@ export const SkyLab: React.FC = () => {
   const [hud, setHud] = useState({
     heading: '—', source: '—', evts: 0, acc: '—',
     dist: '—', objB: '—', objE: '—', state: 'waiting',
-    jitter: 0, offset: '—', cond: false,
+    jitter: 0, offset: '—', cond: false, flat: false, locked: false,
   });
 
   const [anchor, setAnchor] = useState<Anchor | null>(() => {
@@ -280,36 +281,38 @@ export const SkyLab: React.FC = () => {
       } else {
         const m = deviceToEarth(o.alpha, o.beta, o.gamma);
 
-        // ── True-north alignment, kept OUT of the matrix ────────────────────
+        // ── True-north alignment: measure ONCE, then lock ───────────────────
         // The matrix maps device -> an earth frame whose azimuth origin is
-        // arbitrary (iOS alpha isn't north-referenced). Rather than corrupt the
-        // triple by injecting the compass into alpha, estimate the constant
-        // azimuth offset between that frame and true north, and rotate the
-        // OBJECT's bearing by it instead.
+        // arbitrary, so we need the constant rotation between it and true
+        // north. v4 re-derived that continuously from the compass vs the
+        // device's +Y axis — but iOS's heading convention isn't dependable in
+        // every pose (notably screen-down, looking up), so the estimate kept
+        // inverting by ~180° and the object teleported. The offset is a
+        // CONSTANT; re-deriving it live was the whole mistake.
         //
-        // Offset is only observable when the device's +Y (top) axis has a solid
-        // horizontal projection. That's degenerate exactly when the phone is
-        // upright (top at the zenith) — the same pose as gimbal lock — so we
-        // only refresh the estimate when well-conditioned and hold it otherwise.
-        // Conveniently, "tilted back looking at the sky" is well-conditioned.
-        const yEast = m[1];
-        const yNorth = m[4];
-        const horiz = Math.hypot(yEast, yNorth);
-        if (o.heading !== null && horiz > 0.35) {
-          const azInFrame = (toDeg(Math.atan2(yEast, yNorth)) + 360) % 360;
-          const measured = toRad(((o.heading - azInFrame) % 360 + 360) % 360);
-          const k = smoothingRef.current ? 0.05 : 1; // offset is ~constant: smooth hard
+        // Now it's sampled only in the flat, screen-up "compass app" pose,
+        // where iOS's convention is unambiguous, +Y is well-conditioned
+        // horizontally, and beta~0 is far from the ZXY singularity. Once a run
+        // of samples agrees, it's locked and never auto-updated again.
+        const flatPose = Math.abs(o.beta) < 20 && Math.abs(o.gamma) < 20;
+        if (!o.offsetLocked && flatPose && o.heading !== null && o.jitter < 8) {
+          const azInFrame = (toDeg(Math.atan2(m[1], m[4])) + 360) % 360;
+          const measured = ((o.heading - azInFrame) % 360 + 360) % 360;
+          const r = toRad(measured);
           if (!o.primed) {
-            o.aSin = Math.sin(measured); o.aCos = Math.cos(measured); o.primed = true;
+            o.aSin = Math.sin(r); o.aCos = Math.cos(r); o.primed = true; o.calibSamples = 1;
           } else {
-            o.aSin += (Math.sin(measured) - o.aSin) * k;
-            o.aCos += (Math.cos(measured) - o.aCos) * k;
+            o.aSin += (Math.sin(r) - o.aSin) * 0.08;
+            o.aCos += (Math.cos(r) - o.aCos) * 0.08;
+            o.calibSamples += 1;
           }
-          o.offsetLocked = true;
+          // Agreeing for ~1.5s of flat holding is enough for a constant.
+          if (o.calibSamples > 90) o.offsetLocked = true;
         }
         const northOffset = o.primed ? (toDeg(Math.atan2(o.aSin, o.aCos)) + 360) % 360 : 0;
         o.offset = northOffset;
-        o.wellConditioned = horiz > 0.35;
+        o.wellConditioned = o.offsetLocked;
+        o.flatPose = flatPose;
 
         const bearingInFrame = ((bearing - northOffset) % 360 + 360) % 360;
         const v = earthToDevice(m, skyVector(bearingInFrame, elevation));
@@ -377,6 +380,8 @@ export const SkyLab: React.FC = () => {
           jitter: o.jitter,
           offset: o.primed ? `${o.offset.toFixed(0)}°` : 'not set',
           cond: o.wellConditioned,
+          flat: o.flatPose,
+          locked: o.offsetLocked,
         });
       }
     };
@@ -438,8 +443,8 @@ export const SkyLab: React.FC = () => {
                 ±{hud.jitter.toFixed(0)}° {hud.jitter > 15 ? 'BAD' : hud.jitter > 6 ? 'meh' : 'good'}
               </span>
               <span>north offset</span>
-              <span className={`text-right ${hud.cond ? 'text-emerald-300' : 'text-zinc-500'}`}>
-                {hud.offset} {hud.cond ? 'live' : 'held'}
+              <span className={`text-right ${hud.locked ? 'text-emerald-300' : 'text-amber-300'}`}>
+                {hud.offset} {hud.locked ? 'LOCKED' : hud.flat ? 'calibrating…' : 'need flat'}
               </span>
               <span>gps acc</span><span className="text-right">{hud.acc}</span>
               <span>distance</span><span className="text-right">{hud.dist}</span>
@@ -448,6 +453,16 @@ export const SkyLab: React.FC = () => {
               <span>state</span><span className="text-right text-amber-300">{hud.state}</span>
             </div>
           </div>
+
+          {!hud.locked && (
+            <div className="absolute inset-x-6 top-1/2 -translate-y-1/2 z-10 rounded-2xl bg-black/85 backdrop-blur px-4 py-4 text-center pointer-events-none">
+              <p className="text-white text-sm font-bold mb-1">Hold the phone flat, screen up</p>
+              <p className="text-zinc-400 text-xs leading-relaxed">
+                Like a compass. This measures true north once, then locks it.
+                {hud.flat ? ' Calibrating — keep it steady…' : ' Waiting for a flat pose…'}
+              </p>
+            </div>
+          )}
 
           <div className="absolute left-3 right-3 bottom-3 flex flex-col gap-2">
             <div className="flex gap-2">
@@ -469,6 +484,15 @@ export const SkyLab: React.FC = () => {
                 }`}
               >
                 smooth {smoothing ? 'on' : 'off'}
+              </button>
+              <button
+                onClick={() => {
+                  const o = orient.current;
+                  o.offsetLocked = false; o.primed = false; o.calibSamples = 0;
+                }}
+                className="px-3 py-2 rounded-xl text-xs font-bold bg-black/70 text-zinc-300"
+              >
+                recal
               </button>
             </div>
 
