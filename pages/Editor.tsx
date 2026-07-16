@@ -1,53 +1,13 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { MapContainer, TileLayer, Marker, Circle, useMap, useMapEvents } from 'react-leaflet';
-import L from 'leaflet';
 import { getTourById, getZonesByTourId, createZone as dbCreateZone, updateZone as dbUpdateZone, deleteZone as dbDeleteZone, updateTour as dbUpdateTour } from '../services/db';
 import { ZoneForm } from '../components/ZoneForm';
 import { TourInfoPanel } from '../components/TourInfoPanel';
+import { EditorMap, EditorMapHandle } from '../components/EditorMap';
 import { Tour, Zone, User } from '../types';
 import { Save, Loader2, MousePointer2, PlusCircle, Home, Search, Info, MapPin, Undo2, Copy, X } from 'lucide-react';
-import { MAP_DEFAULT_CENTER, MAP_DEFAULT_ZOOM, MAP_STYLES } from '../constants';
-
-// Leaflet Icon Fix
-const DefaultIcon = L.icon({
-  iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41]
-});
-L.Marker.prototype.options.icon = DefaultIcon;
-
-const StartPinIcon = L.divIcon({
-  html: `<div style="display:flex;flex-direction:column;align-items:center;gap:2px">
-    <div style="background:#10b981;width:22px;height:22px;border-radius:50%;border:3px solid white;box-shadow:0 0 0 2px #10b981,0 2px 8px rgba(16,185,129,0.5)"></div>
-    <div style="background:#10b981;color:white;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;white-space:nowrap;letter-spacing:0.05em">START</div>
-  </div>`,
-  className: '',
-  iconSize: [60, 38],
-  iconAnchor: [30, 11],
-});
-
-// Zone colour language — matches the player exactly:
-//   selected/clicked → blue · locked → yellow · character → purple · discoverable → pink · audio → green
-const zoneColor = (type: string, locked: boolean, selected: boolean): string =>
-  selected ? '#3b82f6'
-  : locked  ? '#f59e0b'
-  : type === 'character' ? '#8b5cf6'
-  : type === 'discoverable' ? '#ec4899'
-  :          '#10b981';
-
-// A small dot centered on the zone's coordinate (so it sits dead-center in the
-// circle, unlike the default teardrop pin which anchors at its bottom tip).
-const zoneMarkerIcon = (color: string, selected: boolean) => {
-  const d = selected ? 16 : 13;
-  return L.divIcon({
-    html: `<div style="width:${d}px;height:${d}px;border-radius:50%;background:${color};border:2px solid white;box-shadow:0 1px 5px rgba(0,0,0,0.5)"></div>`,
-    className: '',
-    iconSize: [d, d],
-    iconAnchor: [d / 2, d / 2],
-  });
-};
+import { MAP_DEFAULT_ZOOM, DEFAULT_MAP_STYLE } from '../constants';
+import { isSatelliteKey } from '../services/mapStyle';
 
 interface EditorProps {
   user: User;
@@ -85,8 +45,8 @@ const cloneZoneForInsert = (zone: Zone): Partial<Zone> => {
   };
 };
 
-// Geocoding search — uses a map ref instead of useMap() so it can live outside MapContainer
-const LocationSearch: React.FC<{ mapRef: React.RefObject<L.Map | null> }> = ({ mapRef }) => {
+// Geocoding search — drives the map via the EditorMap imperative handle.
+const LocationSearch: React.FC<{ mapRef: React.RefObject<EditorMapHandle | null> }> = ({ mapRef }) => {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -99,7 +59,7 @@ const LocationSearch: React.FC<{ mapRef: React.RefObject<L.Map | null> }> = ({ m
       );
       const data = await res.json();
       if (data[0]) {
-        mapRef.current.flyTo([parseFloat(data[0].lat), parseFloat(data[0].lon)], 15, { duration: 1.2 });
+        mapRef.current.flyTo(parseFloat(data[0].lat), parseFloat(data[0].lon), 15);
       }
     } catch (e) {
       console.error('Geocoding failed', e);
@@ -123,66 +83,6 @@ const LocationSearch: React.FC<{ mapRef: React.RefObject<L.Map | null> }> = ({ m
   );
 };
 
-// Forces Leaflet to remeasure its container — fixes grey tile gaps after layout shifts
-const InvalidateSize: React.FC<{ trigger: any }> = ({ trigger }) => {
-  const map = useMap();
-  useEffect(() => {
-    // Small delay lets the CSS transition finish before measuring
-    const t = setTimeout(() => map.invalidateSize(), 50);
-    return () => clearTimeout(t);
-  }, [map, trigger]);
-  return null;
-};
-
-// Ensures scroll wheel zoom (= trackpad zoom) stays enabled after every render
-const EnsureWheelZoom: React.FC = () => {
-  const map = useMap();
-  useEffect(() => {
-    if (!map.scrollWheelZoom.enabled()) {
-      console.warn('[EnsureWheelZoom] scrollWheelZoom was disabled — re-enabling');
-      map.scrollWheelZoom.enable();
-    }
-  });
-  return null;
-};
-
-// Tracks the map's current zoom level into a ref so it can be saved with the tour
-const ZoomWatcher: React.FC<{ zoomRef: React.MutableRefObject<number> }> = ({ zoomRef }) => {
-  const map = useMap();
-  useEffect(() => {
-    zoomRef.current = map.getZoom();
-    const onZoom = () => { zoomRef.current = map.getZoom(); };
-    map.on('zoomend', onZoom);
-    return () => { map.off('zoomend', onZoom); };
-  }, [map, zoomRef]);
-  return null;
-};
-
-// Component to handle map interactions based on active tool
-const MapInteraction = ({
-  tool,
-  onMapClick
-}: {
-  tool: Tool,
-  onMapClick: (e: L.LeafletMouseEvent) => void
-}) => {
-  const map = useMap();
-
-  useEffect(() => {
-    if (tool === 'draw' || tool === 'place-start') {
-      map.getContainer().style.cursor = 'crosshair';
-    } else {
-      map.getContainer().style.cursor = 'grab';
-    }
-  }, [tool, map]);
-
-  useMapEvents({
-    click(e) {
-      if (tool === 'draw' || tool === 'place-start') onMapClick(e);
-    },
-  });
-  return null;
-};
 
 export const Editor: React.FC<EditorProps> = ({ user }) => {
   const { tourId } = useParams<{ tourId: string }>();
@@ -193,14 +93,14 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
   const [activeTool, setActiveTool] = useState<Tool>('select');
   const [rightPanel, setRightPanel] = useState<RightPanel>('zone');
-  const mapRef = useRef<L.Map | null>(null);
+  const mapRef = useRef<EditorMapHandle | null>(null);
   
   // Editor map mirrors the tour's chosen map style (set in Tour Settings), so
   // what the creator places on is what the player will see. Defaults to satellite.
-  const editorMapStyle = tour?.map_style || 'satellite';
+  const editorMapStyle = tour?.map_style || DEFAULT_MAP_STYLE;
   // Satellite imagery has no street/place labels — stack a labels overlay so
   // creators can still read where they're placing zones.
-  const showSatelliteLabels = editorMapStyle === 'satellite';
+  const showSatelliteLabels = isSatelliteKey(editorMapStyle);
   // Tracks the current zoom level; saved with the tour so the player starts here.
   const editorMapZoomRef = useRef<number>(tour?.start_zoom ?? MAP_DEFAULT_ZOOM);
 
@@ -295,23 +195,23 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
     setLoading(false);
   };
 
-  const handleMapClick = async (e: L.LeafletMouseEvent) => {
+  const handleMapClick = async (lat: number, lng: number) => {
     if (!tour) return;
 
     if (activeTool === 'place-start') {
       pushEditUndo('tour:start-location');
-      const updated = { ...tour, lat: e.latlng.lat, lng: e.latlng.lng };
+      const updated = { ...tour, lat, lng };
       setTour(updated);
       setActiveTool('select');
-      await dbUpdateTour(tour.id, { lat: e.latlng.lat, lng: e.latlng.lng });
+      await dbUpdateTour(tour.id, { lat, lng });
       return;
     }
 
     if (activeTool === 'draw') {
       const newZone: Partial<Zone> = {
         tour_id: tour.id,
-        lat: e.latlng.lat,
-        lng: e.latlng.lng,
+        lat,
+        lng,
         radius: 40,
         title: `Step ${zones.length + 1}`,
         media_url: '',
@@ -650,96 +550,24 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
              </div>
          </div>
 
-         <MapContainer
+         <EditorMap
             ref={mapRef}
-            center={tour.lat === 0 && tour.lng === 0 ? MAP_DEFAULT_CENTER : [tour.lat, tour.lng]}
-            zoom={tour.start_zoom ?? MAP_DEFAULT_ZOOM}
-            maxZoom={22}
-            style={{ height: '100%', width: '100%', background: '#09090b' }}
-            zoomControl={false}
-            scrollWheelZoom={true}
-          >
-            <TileLayer
-              key={editorMapStyle}
-              url={(MAP_STYLES[editorMapStyle] || MAP_STYLES.satellite).url}
-              attribution={(MAP_STYLES[editorMapStyle] || MAP_STYLES.satellite).attribution}
-              maxNativeZoom={19}
-              maxZoom={22}
-            />
-            {/* Place + street labels on top of satellite imagery */}
-            {showSatelliteLabels && (
-              <TileLayer
-                key="sat-labels"
-                url="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
-                maxNativeZoom={19}
-                maxZoom={22}
-              />
-            )}
-            <EnsureWheelZoom />
-            <ZoomWatcher zoomRef={editorMapZoomRef} />
-            <MapInteraction tool={activeTool} onMapClick={handleMapClick} />
-            <InvalidateSize trigger={`${selectedZoneId}-${rightPanel}`} />
-            
-            {zones.map(zone => {
-              const isSelected = selectedZoneId === zone.id;
-              const isLocked = zone.lock_type === 'passphrase';
-              const color = zoneColor(zone.type, isLocked, isSelected);
-              return (
-              <React.Fragment key={zone.id}>
-                {/* Visual Circle */}
-                <Circle
-                  center={[zone.lat, zone.lng]}
-                  radius={zone.radius}
-                  pathOptions={{
-                    color,
-                    fillColor: color,
-                    fillOpacity: isSelected ? 0.3 : 0.18,
-                    weight: isSelected ? 3 : 2,
-                    // Invisible-to-players zones are dashed so the creator can tell
-                    dashArray: zone.is_visible ? undefined : '5, 8',
-                  }}
-                  eventHandlers={{
-                    click: () => handleZoneClick(zone.id)
-                  }}
-                />
-
-                {/* Draggable center dot — sits dead-center in the circle */}
-                <Marker
-                  position={[zone.lat, zone.lng]}
-                  icon={zoneMarkerIcon(color, isSelected)}
-                  draggable={activeTool === 'select'}
-                  opacity={activeTool === 'draw' ? 0.5 : 1}
-                  eventHandlers={{
-                    click: () => handleZoneClick(zone.id),
-                    dragend: (e) => {
-                      if (activeTool !== 'select') return;
-                      const marker = e.target;
-                      const position = marker.getLatLng();
-                      updateZone(zone.id, { lat: position.lat, lng: position.lng });
-                    }
-                  }}
-                />
-              </React.Fragment>
-              );
-            })}
-            {/* Start Location Pin — only shown once placed */}
-            {(tour.lat !== 0 || tour.lng !== 0) && (
-              <Marker
-                position={[tour.lat, tour.lng]}
-                icon={StartPinIcon}
-                draggable={true}
-                eventHandlers={{
-                  dragend: (e) => {
-                    const pos = e.target.getLatLng();
-                    pushEditUndo('tour:start-location');
-                    const updated = { ...tour, lat: pos.lat, lng: pos.lng };
-                    setTour(updated);
-                    dbUpdateTour(tour.id, { lat: pos.lat, lng: pos.lng });
-                  }
-                }}
-              />
-            )}
-          </MapContainer>
+            tour={tour}
+            zones={zones}
+            styleKey={editorMapStyle}
+            activeTool={activeTool}
+            selectedZoneId={selectedZoneId}
+            showSatelliteLabels={showSatelliteLabels}
+            zoomRef={editorMapZoomRef}
+            onMapClick={handleMapClick}
+            onZoneClick={handleZoneClick}
+            onZoneDragEnd={(id, lat, lng) => updateZone(id, { lat, lng })}
+            onStartDragEnd={(lat, lng) => {
+              pushEditUndo('tour:start-location');
+              setTour({ ...tour, lat, lng });
+              dbUpdateTour(tour.id, { lat, lng });
+            }}
+          />
       </div>
 
       {/* Place-start hint overlay */}

@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Tour } from '../types';
-import { MAP_STYLES, FONT_STYLES } from '../constants';
+import { MAP_STYLES, FONT_STYLES, DEFAULT_MAP_STYLE } from '../constants';
 import { uploadImage } from '../services/storageService';
 import { Image, Type, Palette, AlignLeft, AlignCenter, Upload, MapPin, Eye, Settings, Globe, Lock, Loader2, Sun, Moon, X, Tag as TagIcon } from 'lucide-react';
 import { ProgressionSettings } from './ProgressionSettings';
@@ -268,7 +268,7 @@ export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({ tour, onUpdate }) 
                   key={key}
                   onClick={() => onUpdate({ map_style: key })}
                   className={`py-2 px-3 rounded text-xs font-medium transition-colors border ${
-                    (tour.map_style || 'dark') === key
+                    (tour.map_style || DEFAULT_MAP_STYLE) === key
                       ? 'bg-emerald-600 border-emerald-500 text-white'
                       : 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700'
                   }`}
