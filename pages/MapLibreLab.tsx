@@ -19,6 +19,15 @@ const VECTOR_STYLES: Record<string, string> = {
   voyager: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
 };
 
+// Keyless raster sources. "Satellite HD" is Esri's separate Clarity endpoint,
+// which often carries fresher/higher-res imagery than standard World Imagery —
+// worth an eyeball comparison since byte size alone can't judge visual quality.
+const RASTER_SOURCES: Record<string, { label: string; url: string; attribution: string; satellite?: boolean }> = {
+  satellite:      { label: 'Satellite',    url: MAP_STYLES.satellite.url, attribution: '© Esri', satellite: true },
+  'satellite-hd': { label: 'Satellite HD', url: 'https://clarity.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attribution: '© Esri Clarity', satellite: true },
+  streets:        { label: 'Streets',      url: MAP_STYLES.streets.url, attribution: '© OpenStreetMap' },
+};
+
 // Leaflet tile templates use {s} (subdomain) and {r} (retina) tokens MapLibre
 // doesn't understand. Expand {s} into an explicit subdomain list and drop {r}.
 function rasterTiles(url: string): string[] {
@@ -28,26 +37,47 @@ function rasterTiles(url: string): string[] {
     : [base];
 }
 
-function rasterStyle(key: string): maplibregl.StyleSpecification {
-  const s = MAP_STYLES[key] || MAP_STYLES.satellite;
-  // Esri World Imagery (and OSM streets) only have real tiles to ~z19. Cap the
-  // source maxzoom there so MapLibre upscales its z19 tiles past that instead of
-  // requesting tiles Esri doesn't have — which come back as gray "Map data not
-  // yet available" placeholders. This mirrors Leaflet's maxNativeZoom={19}.
+function lngLatToTile(lng: number, lat: number, z: number): [number, number] {
+  const n = 2 ** z;
+  const x = Math.floor(((lng + 180) / 360) * n);
+  const latR = (lat * Math.PI) / 180;
+  const y = Math.floor(((1 - Math.asinh(Math.tan(latR)) / Math.PI) / 2) * n);
+  return [x, y];
+}
+
+// Probe how deep THIS location's imagery actually goes. Real tiles are sizeable
+// JPEGs; Esri's "Map data not yet available" placeholder is ~2.5KB. Walk up from
+// the floor until a placeholder (or a failed fetch) appears, then cap there — so
+// every experience gets the sharpest imagery its own spot supports, with no gray
+// tiles and no billing. Cheap: a few tiny HEAD-ish GETs on load.
+async function detectMaxNativeZoom(urlTemplate: string, lng: number, lat: number, floor = 17, ceil = 21): Promise<number> {
+  let best = floor;
+  for (let z = floor; z <= ceil; z++) {
+    const [x, y] = lngLatToTile(lng, lat, z);
+    const url = urlTemplate.replace('{z}', String(z)).replace('{x}', String(x)).replace('{y}', String(y));
+    try {
+      const r = await fetch(url, { cache: 'no-store' });
+      if (!r.ok) break;
+      const b = await r.blob();
+      if (b.size > 5000) best = z; else break;
+    } catch { break; }
+  }
+  return best;
+}
+
+function rasterStyle(key: string, maxzoom: number): maplibregl.StyleSpecification {
+  const s = RASTER_SOURCES[key] || RASTER_SOURCES.satellite;
   return {
     version: 8,
     sources: {
-      base: {
-        type: 'raster', tiles: rasterTiles(s.url), tileSize: 256,
-        maxzoom: 19, attribution: s.attribution,
-      },
+      base: { type: 'raster', tiles: rasterTiles(s.url), tileSize: 256, maxzoom, attribution: s.attribution },
     },
     layers: [{ id: 'base', type: 'raster', source: 'base' }],
   };
 }
 
-function styleFor(key: string): string | maplibregl.StyleSpecification {
-  return VECTOR_STYLES[key] ?? rasterStyle(key);
+function styleFor(key: string, maxzoom = 19): string | maplibregl.StyleSpecification {
+  return VECTOR_STYLES[key] ?? rasterStyle(key, maxzoom);
 }
 
 // ── Zone geometry ────────────────────────────────────────────────────────────
@@ -102,12 +132,15 @@ export const MapLibreLab: React.FC = () => {
   const userMarkerRef = useRef<maplibregl.Marker | null>(null);
   const zonesRef = useRef<Zone[]>([]);
 
+  const rasterZoomCache = useRef<Record<string, number>>({});
+
   const [tour, setTour] = useState<Tour | null>(null);
   const [zones, setZones] = useState<Zone[]>([]);
   const [styleKey, setStyleKey] = useState('dark');
   const [renderer, setRenderer] = useState<'vector' | 'raster'>('vector');
   const [hud, setHud] = useState({ zoom: 0, pitch: 0, bearing: 0 });
   const [userPos, setUserPos] = useState<[number, number] | null>(null);
+  const [nativeMax, setNativeMax] = useState<number | null>(null);
 
   // Load a real tour so we're drawing real zones, not toy data.
   useEffect(() => {
@@ -201,13 +234,30 @@ export const MapLibreLab: React.FC = () => {
     }
   }, [zones]);
 
-  const switchStyle = (key: string) => {
+  const switchStyle = async (key: string) => {
     setStyleKey(key);
     setRenderer(VECTOR_STYLES[key] ? 'vector' : 'raster');
+
+    // For raster satellite, discover this location's true deepest imagery zoom
+    // (cached per source) so we cap exactly there — sharpest detail, no gray.
+    let maxzoom = 19;
+    const src = RASTER_SOURCES[key];
+    if (src && tour) {
+      if (rasterZoomCache.current[key] == null) {
+        rasterZoomCache.current[key] = src.satellite
+          ? await detectMaxNativeZoom(src.url, tour.lng, tour.lat)
+          : 19;
+      }
+      maxzoom = rasterZoomCache.current[key];
+      setNativeMax(src.satellite ? maxzoom : null);
+    } else {
+      setNativeMax(null); // vector styles have no native-zoom concept
+    }
+
     // transformStyle merges our zone source + layers INTO the incoming style, so
     // the switch never wipes them — no fragile re-add-after-load timing (which
     // breaks here anyway because the hung sprite keeps isStyleLoaded() false).
-    mapRef.current?.setStyle(styleFor(key), {
+    mapRef.current?.setStyle(styleFor(key, maxzoom), {
       transformStyle: (_prev, next) => ({
         ...next,
         sources: { ...next.sources, zones: { type: 'geojson', data: zonesToGeoJSON(zonesRef.current) } },
@@ -229,7 +279,10 @@ export const MapLibreLab: React.FC = () => {
       {/* Controls */}
       <div className="absolute top-3 left-3 z-10 flex flex-col gap-2">
         <div className="flex flex-wrap gap-1 bg-zinc-900/90 backdrop-blur rounded-lg p-1 border border-white/10">
-          {['dark', 'light', 'voyager', 'satellite', 'streets'].map(k => (
+          {([
+            ['dark', 'Dark'], ['light', 'Light'], ['voyager', 'Voyager'],
+            ['satellite', 'Satellite'], ['satellite-hd', 'Satellite HD'], ['streets', 'Streets'],
+          ] as [string, string][]).map(([k, label]) => (
             <button
               key={k}
               onClick={() => switchStyle(k)}
@@ -237,7 +290,7 @@ export const MapLibreLab: React.FC = () => {
                 styleKey === k ? 'bg-emerald-500 text-white' : 'text-zinc-300 hover:bg-white/10'
               }`}
             >
-              {MAP_STYLES[k]?.label || k}
+              {label}
             </button>
           ))}
         </div>
@@ -258,6 +311,9 @@ export const MapLibreLab: React.FC = () => {
           </span>
           {' · '}zoom {hud.zoom} · pitch {hud.pitch}° · bearing {hud.bearing}°
         </div>
+        {nativeMax != null && (
+          <div className="mt-0.5 text-sky-400">native imagery to z{nativeMax} (auto-detected)</div>
+        )}
         {userPos && (
           <div className="mt-0.5 text-zinc-400">dot {userPos[0].toFixed(5)}, {userPos[1].toFixed(5)}</div>
         )}
