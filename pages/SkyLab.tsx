@@ -98,8 +98,11 @@ export const SkyLab: React.FC = () => {
   const orient = useRef({
     alpha: 0, beta: 0, gamma: 0,
     heading: null as number | null, source: '—', count: 0,
-    // Circular EMA accumulators for alpha (sin/cos so 359°→0° doesn't wrap-spike).
+    // Circular EMA accumulators for the NORTH OFFSET (sin/cos so the 359°→0°
+    // seam doesn't spike). Not for alpha — alpha must stay raw and consistent
+    // with beta/gamma or the gimbal compensation breaks.
     aSin: 0, aCos: 1, primed: false,
+    offset: 0, offsetLocked: false, wellConditioned: false,
     // Raw heading samples over the last second — the jitter measurement.
     samples: [] as { t: number; deg: number }[],
     jitter: 0,
@@ -110,6 +113,7 @@ export const SkyLab: React.FC = () => {
   const posRef = useRef<{ lat: number; lng: number; acc: number } | null>(null);
   const anchorRef = useRef<Anchor | null>(null);
   const lastBearing = useRef<number | null>(null);
+  const smoothPos = useRef<{ x: number; y: number } | null>(null);
   const modeRef = useRef(mode);
   const altRef = useRef(altitude);
   const testRef = useRef({ b: testBearing, e: testElev });
@@ -121,7 +125,7 @@ export const SkyLab: React.FC = () => {
   const [hud, setHud] = useState({
     heading: '—', source: '—', evts: 0, acc: '—',
     dist: '—', objB: '—', objE: '—', state: 'waiting',
-    jitter: 0,
+    jitter: 0, offset: '—', cond: false,
   });
 
   const [anchor, setAnchor] = useState<Anchor | null>(() => {
@@ -172,46 +176,29 @@ export const SkyLab: React.FC = () => {
       const o = orient.current;
       o.count += 1;
 
-      // Tilt angles come from accel+gyro fusion and are already stable — only
-      // the magnetometer-derived azimuth needs help. Light EMA anyway.
-      const kTilt = smoothingRef.current ? 0.35 : 1;
-      if (typeof e.beta === 'number') o.beta += (e.beta - o.beta) * kTilt;
-      if (typeof e.gamma === 'number') o.gamma += (e.gamma - o.gamma) * kTilt;
+      // Store the device's OWN triple, unmodified and unsmoothed. These three
+      // are only meaningful together: near beta=+/-90 (phone upright, camera at
+      // the horizon) the ZXY decomposition is singular and alpha/gamma swing
+      // hard against each other while describing the same real orientation.
+      // Substituting alpha from the compass — or smoothing the angles
+      // individually — breaks that compensation and the object goes wild.
+      // v3 did both. Hence: stable looking up (beta~0), chaotic at the horizon.
+      if (typeof e.alpha === 'number') o.alpha = e.alpha;
+      if (typeof e.beta === 'number') o.beta = e.beta;
+      if (typeof e.gamma === 'number') o.gamma = e.gamma;
 
-      let rawAlpha: number | null = null;
-      let rawHeading: number | null = null;
       if (typeof w.webkitCompassHeading === 'number') {
-        // iOS: tilt-compensated, true-north, clockwise. The ZXY matrix wants
-        // alpha (counter-clockwise from north). NB this identity is exact only
-        // while the device is near-flat and drifts as it tilts — a known
-        // approximation, and a suspect if placement is biased when pointing up.
-        rawHeading = w.webkitCompassHeading;
-        rawAlpha = (360 - w.webkitCompassHeading) % 360;
+        o.heading = w.webkitCompassHeading;
         o.source = 'webkit';
       } else if (typeof e.alpha === 'number') {
-        rawAlpha = e.alpha;
-        rawHeading = (360 - e.alpha) % 360;
+        o.heading = (360 - e.alpha) % 360;
         o.source = e.absolute ? 'absolute' : 'relative(!)';
       }
 
-      if (rawAlpha !== null && rawHeading !== null) {
-        // Circular EMA: average the unit vector, not the number, so the 359°→0°
-        // seam doesn't produce a 359° "jump" through the whole circle.
-        const r = toRad(rawAlpha);
-        const k = smoothingRef.current ? 0.12 : 1; // ~150ms time constant @60Hz
-        if (!o.primed) {
-          o.aSin = Math.sin(r); o.aCos = Math.cos(r); o.primed = true;
-        } else {
-          o.aSin += (Math.sin(r) - o.aSin) * k;
-          o.aCos += (Math.cos(r) - o.aCos) * k;
-        }
-        o.alpha = (toDeg(Math.atan2(o.aSin, o.aCos)) + 360) % 360;
-        o.heading = rawHeading;
-
-        // Jitter = angular spread of RAW heading over the last second. This is
-        // the actual measurement of whether the compass is usable here.
+      if (o.heading !== null) {
+        // Jitter = angular spread of RAW heading over the last second.
         const now = performance.now();
-        o.samples.push({ t: now, deg: rawHeading });
+        o.samples.push({ t: now, deg: o.heading });
         while (o.samples.length && now - o.samples[0].t > 1000) o.samples.shift();
         if (o.samples.length > 2) {
           let sx = 0, sy = 0;
@@ -292,7 +279,40 @@ export const SkyLab: React.FC = () => {
         el.style.display = 'none';
       } else {
         const m = deviceToEarth(o.alpha, o.beta, o.gamma);
-        const v = earthToDevice(m, skyVector(bearing, elevation));
+
+        // ── True-north alignment, kept OUT of the matrix ────────────────────
+        // The matrix maps device -> an earth frame whose azimuth origin is
+        // arbitrary (iOS alpha isn't north-referenced). Rather than corrupt the
+        // triple by injecting the compass into alpha, estimate the constant
+        // azimuth offset between that frame and true north, and rotate the
+        // OBJECT's bearing by it instead.
+        //
+        // Offset is only observable when the device's +Y (top) axis has a solid
+        // horizontal projection. That's degenerate exactly when the phone is
+        // upright (top at the zenith) — the same pose as gimbal lock — so we
+        // only refresh the estimate when well-conditioned and hold it otherwise.
+        // Conveniently, "tilted back looking at the sky" is well-conditioned.
+        const yEast = m[1];
+        const yNorth = m[4];
+        const horiz = Math.hypot(yEast, yNorth);
+        if (o.heading !== null && horiz > 0.35) {
+          const azInFrame = (toDeg(Math.atan2(yEast, yNorth)) + 360) % 360;
+          const measured = toRad(((o.heading - azInFrame) % 360 + 360) % 360);
+          const k = smoothingRef.current ? 0.05 : 1; // offset is ~constant: smooth hard
+          if (!o.primed) {
+            o.aSin = Math.sin(measured); o.aCos = Math.cos(measured); o.primed = true;
+          } else {
+            o.aSin += (Math.sin(measured) - o.aSin) * k;
+            o.aCos += (Math.cos(measured) - o.aCos) * k;
+          }
+          o.offsetLocked = true;
+        }
+        const northOffset = o.primed ? (toDeg(Math.atan2(o.aSin, o.aCos)) + 360) % 360 : 0;
+        o.offset = northOffset;
+        o.wellConditioned = horiz > 0.35;
+
+        const bearingInFrame = ((bearing - northOffset) % 360 + 360) % 360;
+        const v = earthToDevice(m, skyVector(bearingInFrame, elevation));
         // Rear camera looks along -Z in device space.
         const depth = -v[2];
         if (depth <= 0.02) {
@@ -318,12 +338,26 @@ export const SkyLab: React.FC = () => {
 
           if (opacity < 0.01) {
             el.style.display = 'none';
+            smoothPos.current = null;
           } else {
+            // Smooth the PROJECTED POSITION, not the Euler angles. This is
+            // downstream of the matrix so it can't desync the triple, and it
+            // takes the edge off residual magnetometer noise. Snap rather than
+            // glide on big jumps so it doesn't visibly slide across the screen.
+            let px = x, py = y;
+            if (smoothingRef.current) {
+              const prev = smoothPos.current;
+              if (prev && Math.hypot(x - prev.x, y - prev.y) < window.innerWidth * 0.4) {
+                px = prev.x + (x - prev.x) * 0.18;
+                py = prev.y + (y - prev.y) * 0.18;
+              }
+              smoothPos.current = { x: px, y: py };
+            }
             el.style.display = 'block';
             el.style.width = `${size}px`;
             el.style.height = `${size}px`;
             el.style.opacity = `${opacity}`;
-            el.style.transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -50%)`;
+            el.style.transform = `translate3d(${px}px, ${py}px, 0) translate(-50%, -50%)`;
           }
         }
       }
@@ -341,6 +375,8 @@ export const SkyLab: React.FC = () => {
           objE: elevation === null ? '—' : `${elevation.toFixed(0)}°`,
           state,
           jitter: o.jitter,
+          offset: o.primed ? `${o.offset.toFixed(0)}°` : 'not set',
+          cond: o.wellConditioned,
         });
       }
     };
@@ -400,6 +436,10 @@ export const SkyLab: React.FC = () => {
                 hud.jitter > 15 ? 'text-red-400' : hud.jitter > 6 ? 'text-amber-300' : 'text-emerald-300'
               }`}>
                 ±{hud.jitter.toFixed(0)}° {hud.jitter > 15 ? 'BAD' : hud.jitter > 6 ? 'meh' : 'good'}
+              </span>
+              <span>north offset</span>
+              <span className={`text-right ${hud.cond ? 'text-emerald-300' : 'text-zinc-500'}`}>
+                {hud.offset} {hud.cond ? 'live' : 'held'}
               </span>
               <span>gps acc</span><span className="text-right">{hud.acc}</span>
               <span>distance</span><span className="text-right">{hud.dist}</span>
