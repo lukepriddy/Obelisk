@@ -1027,12 +1027,15 @@ export const Player: React.FC = () => {
       .filter(z => z.type === 'audio' || z.type === 'discoverable')
       .forEach(z => audioService.loadAudio(z.id, z.media_url));
 
-    // Some browsers can leave AudioContext.resume() pending indefinitely.
-    // Never block entry to the experience while the audio engine catches up.
-    await Promise.race([
+    // Kick the audio engine off inside the Begin gesture, but DON'T await it
+    // before showing the experience — that wait (up to 1.5s) is what made the
+    // button feel like it hung. The engine warms up behind the map; the 2s
+    // zone entry delay covers the rest, and updateVolumes no-ops until unlocked.
+    void Promise.race([
       audioService.init().then(() => audioService.primeLoadedAudio()),
       new Promise<void>(resolve => window.setTimeout(resolve, 1500)),
-    ]);
+    ]).catch(() => { /* non-fatal — tap-to-resume covers a failed unlock */ });
+
     setAudioStarted(true);
 
     // Middle-ground prefetch: begin fully downloading every zone's audio in
@@ -1427,7 +1430,7 @@ export const Player: React.FC = () => {
                 <button
                   onClick={startAudio}
                   disabled={!isPreview && !userPos}
-                  className="flex items-center justify-center gap-2 text-white w-full py-4 rounded-2xl text-lg font-bold shadow-xl active:scale-95 transition-transform disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
+                  className="flex items-center justify-center gap-2 text-white w-full py-4 rounded-2xl text-lg font-bold shadow-xl disabled:opacity-40 disabled:cursor-not-allowed"
                   style={{ backgroundColor: accent }}
                 >
                   <PlayCircle size={22} /> Begin
@@ -1488,22 +1491,32 @@ export const Player: React.FC = () => {
             </div>
 
             <div className="px-6 pt-3 pb-6 flex flex-col gap-4">
-              {/* Header */}
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3 flex-1 min-w-0">
-                  {tour.welcome_image_url && (
-                    <img src={tour.welcome_image_url} alt="" className="w-14 h-14 object-cover rounded-xl shrink-0 shadow-lg" />
-                  )}
-                  <div className="min-w-0">
-                    <h2 className="font-bold text-xl leading-tight" style={{ color: th.sheetText }}>{tour.title}</h2>
-                    {tour.welcome_subtitle && (
-                      <p className="text-sm mt-0.5" style={{ color: accent }}>{tour.welcome_subtitle}</p>
-                    )}
-                  </div>
-                </div>
-                <button onClick={closeTourInfo} className="p-1.5 rounded-full shrink-0 mt-0.5" style={{ color: th.sheetMuted }}>
+              {/* Header — mirrors the welcome screen's centred stack. It used to
+                  be a left-aligned avatar+title row sitting above a centred
+                  description, which read as the title being skewed left. The
+                  close button is absolute so it can't offset the centring. */}
+              <div className="relative flex flex-col items-center text-center gap-3">
+                <button
+                  onClick={closeTourInfo}
+                  className="absolute -top-1 -right-2 p-1.5 rounded-full"
+                  style={{ color: th.sheetMuted }}
+                  aria-label="Close details"
+                >
                   <X size={18} />
                 </button>
+                {tour.welcome_image_url && (
+                  <img
+                    src={tour.welcome_image_url}
+                    alt=""
+                    className="w-20 h-20 object-cover rounded-2xl shadow-lg"
+                  />
+                )}
+                <div className="min-w-0 w-full px-6">
+                  <h2 className="font-bold text-xl leading-tight break-words" style={{ color: th.sheetText }}>{tour.title}</h2>
+                  {tour.welcome_subtitle && (
+                    <p className="text-sm mt-1" style={{ color: accent }}>{tour.welcome_subtitle}</p>
+                  )}
+                </div>
               </div>
 
               {/* Description */}
