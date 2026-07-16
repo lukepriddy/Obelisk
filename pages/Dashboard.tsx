@@ -464,7 +464,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
 
               {/* Stats row */}
               {tours.length > 0 && (
-                <div className="grid grid-cols-3 gap-4 mb-7">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-7">
                   <StatCard
                     label="Experiences"
                     value={tours.length}
@@ -755,7 +755,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
                 </div>
 
                 {/* Global stats */}
-                <div className="grid grid-cols-3 gap-4 mb-7">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-7">
                   <StatCard label="Total plays" value={totalPlays} icon={<TrendingUp size={18} className="text-indigo-400" />} color="bg-indigo-500/10" />
                   <StatCard label="Zone visits" value={totalVisits} icon={<MapPin size={18} className="text-emerald-400" />} color="bg-emerald-500/10" />
                   <StatCard label="Last activity" value={latestPlay ? formatRelative(latestPlay) : '—'} icon={<Timer size={18} className="text-amber-400" />} color="bg-amber-500/10" />

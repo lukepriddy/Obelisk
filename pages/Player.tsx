@@ -1127,7 +1127,16 @@ export const Player: React.FC = () => {
       {/* ── FULL-SCREEN MAP ── */}
       {/* touch-action:none tells the browser to hand ALL touch events to Leaflet,
           preventing the vertical-scroll ghost that appears during pinch-to-zoom */}
-      <div className="absolute inset-0" style={{ touchAction: 'none' }}>
+      {/* Stays mounted while the welcome screen is up so Leaflet can size itself and
+          pre-fetch start-area tiles, but is hidden: the welcome overlay is `fixed`
+          (visual viewport) while this is `absolute` inside an h-dvh shell, and on iOS
+          those two boxes don't agree — the map used to bleed a few px at the edges.
+          visibility:hidden keeps the layout box, so tiles still load and invalidateSize
+          still measures correctly. */}
+      <div
+        className="absolute inset-0"
+        style={{ touchAction: 'none', visibility: audioStarted ? 'visible' : 'hidden' }}
+      >
         <MapContainer
           center={[tour.lat, tour.lng]}
           zoom={tour.start_zoom ?? 18}
