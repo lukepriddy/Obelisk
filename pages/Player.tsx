@@ -2214,10 +2214,10 @@ export const Player: React.FC = () => {
       {/* ── PASSPHRASE MODAL ── */}
       {/* Minimized locked-zone pill — reopens the passphrase modal without needing
           to leave and re-enter the zone. */}
-      {minimizedLock && !passphraseChallenge && (
+      {audioStarted && minimizedLock && !passphraseChallenge && (
         <button
           onClick={() => { setMinimizedLock(null); setPassphraseChallenge(minimizedLock); setPassphraseInput(''); setPassphraseError(false); }}
-          className="absolute z-[2400] left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2.5 rounded-full bg-zinc-900/95 backdrop-blur border border-amber-500/50 shadow-xl active:opacity-80 animate-in slide-in-from-bottom-2"
+          className="absolute z-[1600] left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2.5 rounded-full bg-zinc-900/95 backdrop-blur border border-amber-500/50 shadow-xl active:opacity-80 animate-in slide-in-from-bottom-2"
           style={{ bottom: `calc(${bottomBarHeight}px + env(safe-area-inset-bottom, 0px) + 16px)` }}
         >
           <Lock size={15} className="text-amber-400" />
