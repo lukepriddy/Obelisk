@@ -1076,7 +1076,7 @@ export const Player: React.FC = () => {
   const accent  = tour.accent_color || '#10b981';
   const th = {
     // Top / bottom bars
-    barBg:       isDark ? 'rgba(9,9,11,0.96)'   : 'rgba(255,255,255,0.96)',
+    barBg:       isDark ? '#09090b'              : '#ffffff',
     barBorder:   isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
     barText:     isDark ? '#ffffff'              : '#09090b',
     barMuted:    isDark ? '#71717a'              : '#52525b',
