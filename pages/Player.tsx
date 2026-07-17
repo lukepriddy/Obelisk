@@ -174,6 +174,11 @@ export const Player: React.FC = () => {
   const [passphraseChallenge, setPassphraseChallenge] = useState<Zone | null>(null);
   const [passphraseInput, setPassphraseInput] = useState('');
   const [passphraseError, setPassphraseError] = useState(false);
+  // A locked zone whose modal was dismissed while the player is still inside —
+  // shown as a small tappable pill so they can reopen it without leaving.
+  const [minimizedLock, setMinimizedLock] = useState<Zone | null>(null);
+  const minimizedLockRef = useRef<Zone | null>(null);
+  useEffect(() => { minimizedLockRef.current = minimizedLock; }, [minimizedLock]);
 
   // Zone state tracking. The ref feeds the audio loop while state redraws the
   // map immediately when a prerequisite zone becomes available.
@@ -410,6 +415,7 @@ export const Player: React.FC = () => {
       }
       passphraseChallengeRef.current = null;
       setPassphraseChallenge(null);
+      setMinimizedLock(null);
       setPassphraseInput('');
       setPassphraseError(false);
     } else {
@@ -565,6 +571,15 @@ export const Player: React.FC = () => {
       });
 
       prevCollectZoneIdsRef.current = currentCollectZoneIds;
+
+      // Left a locked zone (modal open or minimized pill) → clear it so the ref
+      // resets and re-entry prompts again cleanly.
+      const lockedZone = passphraseChallengeRef.current || minimizedLockRef.current;
+      if (lockedZone && !currentZoneIds.has(lockedZone.id)) {
+        passphraseChallengeRef.current = null;
+        setPassphraseChallenge(null);
+        setMinimizedLock(null);
+      }
 
       prevZoneIdsRef.current = currentZoneIds;
       dismissedMediaZoneIdsRef.current = new Set(
@@ -2197,6 +2212,20 @@ export const Player: React.FC = () => {
       )}
 
       {/* ── PASSPHRASE MODAL ── */}
+      {/* Minimized locked-zone pill — reopens the passphrase modal without needing
+          to leave and re-enter the zone. */}
+      {minimizedLock && !passphraseChallenge && (
+        <button
+          onClick={() => { setMinimizedLock(null); setPassphraseChallenge(minimizedLock); setPassphraseInput(''); setPassphraseError(false); }}
+          className="absolute z-[2400] left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2.5 rounded-full bg-zinc-900/95 backdrop-blur border border-amber-500/50 shadow-xl active:opacity-80 animate-in slide-in-from-bottom-2"
+          style={{ bottom: `calc(${bottomBarHeight}px + env(safe-area-inset-bottom, 0px) + 16px)` }}
+        >
+          <Lock size={15} className="text-amber-400" />
+          <span className="text-white text-sm font-semibold max-w-[160px] truncate">{minimizedLock.title}</span>
+          <span className="text-amber-400/70 text-xs shrink-0">Unlock</span>
+        </button>
+      )}
+
       {passphraseChallenge && (
         <div
           className="absolute inset-0 z-[2500] bg-black/70 backdrop-blur-sm flex items-end justify-center animate-in fade-in overflow-y-auto"
@@ -2236,7 +2265,14 @@ export const Player: React.FC = () => {
             {passphraseError && <p className="text-red-400 text-xs mb-3">Incorrect passphrase. Try again.</p>}
             <div className="flex gap-3 mt-4 sticky bottom-0 bg-zinc-900 pt-3 pb-1">
               <button
-                onClick={() => { setPassphraseChallenge(null); passphraseChallengeRef.current = null; setPassphraseInput(''); setPassphraseError(false); }}
+                onClick={() => {
+                  // Minimize to a pill instead of fully dismissing — keep the ref
+                  // set so the entry event doesn't auto-reopen it while inside.
+                  setMinimizedLock(passphraseChallenge);
+                  setPassphraseChallenge(null);
+                  setPassphraseInput('');
+                  setPassphraseError(false);
+                }}
                 className="flex-1 py-3.5 rounded-xl bg-zinc-800 text-zinc-400 text-sm font-medium active:bg-zinc-700"
               >
                 Cancel
