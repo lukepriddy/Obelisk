@@ -45,6 +45,8 @@ export const Player: React.FC = () => {
   const [prefetchStatus, setPrefetchStatus] = useState<{ done: number; total: number } | null>(null);
   const [bottomBarHeight, setBottomBarHeight] = useState(104);
   const bottomBarRef = useRef<HTMLDivElement | null>(null);
+  const [topBarHeight, setTopBarHeight] = useState(56);
+  const topBarRef = useRef<HTMLDivElement | null>(null);
   const [simulationMode, setSimulationMode] = useState(isPreview);
   const [activeZones, setActiveZones] = useState<{id: string, title: string, volume: number, replayable: boolean}[]>([]);
   const [activeMediaZone, setActiveMediaZone] = useState<Zone | null>(null);
@@ -756,6 +758,19 @@ export const Player: React.FC = () => {
     };
   }, [audioStarted]);
 
+  // Measure the top bar (its height varies with the safe-area inset) so the map
+  // can be inset to sit exactly below it — see the map wrapper.
+  useEffect(() => {
+    if (!topBarRef.current) return;
+    const topBar = topBarRef.current;
+    const update = () => setTopBarHeight(Math.ceil(topBar.getBoundingClientRect().height));
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(topBar);
+    window.addEventListener('resize', update);
+    return () => { observer.disconnect(); window.removeEventListener('resize', update); };
+  }, [audioStarted]);
+
   useEffect(() => {
     if (showAudioResume && activeZones.length === 0) setShowAudioResume(false);
   }, [showAudioResume, activeZones.length]);
@@ -1106,14 +1121,20 @@ export const Player: React.FC = () => {
   return (
     <div className="h-full relative bg-zinc-950 overflow-hidden">
 
-      {/* ── FULL-SCREEN MAP (MapLibre) ── */}
-      {/* Kept mounted but hidden until Begin so the map can size itself and pre-warm
-          tiles. The welcome overlay is `fixed` (visual viewport) while this is
-          `absolute` inside an h-dvh shell; on iOS those boxes disagree, so a visible
-          map bled a few px at the edges — visibility:hidden keeps the layout box. */}
+      {/* ── MAP (MapLibre) ── */}
+      {/* Inset to sit exactly BETWEEN the top and bottom bars rather than edge to
+          edge. The bars are opaque, so the area under them showed nothing anyway —
+          but keeping the WebGL canvas out from under them is what eliminates the
+          Safari-only bright hairline at the bars' edges (no overlap = nothing for
+          Safari's compositor to leak). Kept mounted but hidden until Begin so it
+          can pre-warm tiles. */}
       <div
-        className="absolute inset-0"
-        style={{ visibility: audioStarted ? 'visible' : 'hidden' }}
+        className="absolute left-0 right-0"
+        style={{
+          top: `${topBarHeight}px`,
+          bottom: `${bottomBarHeight}px`,
+          visibility: audioStarted ? 'visible' : 'hidden',
+        }}
       >
         <PlayerMap
           tour={tour}
@@ -2287,36 +2308,20 @@ export const Player: React.FC = () => {
       )}
 
       {/* ── TOP BAR ── */}
-      {/* No backdrop-blur here, deliberately. barBg is 96% opaque, so the blur was
-          only ever filtering the 4% you can see through — visually near-nothing —
-          but Safari fails to paint a backdrop-filtered element's background along
-          its very edge, exposing the raw (100% bright) map as a hairline down the
-          right side. Chrome rasterizes it exactly, which is why it was Safari-only.
-          Dropping the filter removes the artifact at no visual cost. The 2px side
-          overhang stays as cheap insurance against sub-pixel rounding. */}
+      {/* Opaque, plain fixed bar. It doesn't need to hide any map underneath —
+          the map is inset to start BELOW this bar (see the map wrapper), so no
+          canvas ever sits under it. That's what finally killed the Safari-only
+          bright hairline: with no overlap, there's nothing for Safari's compositor
+          to leak at the edge. */}
       <div
-        className="fixed top-0 z-[1000]"
+        ref={topBarRef}
+        className="fixed top-0 left-0 right-0 z-[1000]"
         style={{
-          left: '-2px',
-          right: '-2px',
-          // Force the bar onto its own GPU compositing layer. Without this,
-          // Safari composites the WebGL map canvas (which is GPU-promoted) ABOVE
-          // the bar at the sub-pixel right edge, leaking a bright map hairline.
-          // The bottom bar avoids this only incidentally — its backdrop-filter
-          // already promotes it. translateZ(0) promotes this one the same way.
-          transform: 'translateZ(0)',
-          willChange: 'transform',
-          isolation: 'isolate',
+          backgroundColor: th.barBg,
+          borderBottom: `1px solid ${th.barBorder}`,
+          paddingTop: 'env(safe-area-inset-top, 0px)',
         }}
       >
-        <div
-          className="w-full"
-          style={{
-            backgroundColor: th.barBg,
-            borderBottom: `1px solid ${th.barBorder}`,
-            paddingTop: 'env(safe-area-inset-top, 0px)',
-          }}
-        >
         <div className="flex items-center h-14 px-3 gap-2">
 
           {audioStarted ? (
@@ -2380,7 +2385,6 @@ export const Player: React.FC = () => {
             </button>
           </div>
 
-        </div>
         </div>
       </div>
 
