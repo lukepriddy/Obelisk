@@ -2287,8 +2287,12 @@ export const Player: React.FC = () => {
       )}
 
       {/* ── TOP BAR ── */}
+      {/* absolute (not fixed) so it shares the map's containing block. A `fixed`
+          bar resolves against the viewport, and Safari rounds that box slightly
+          differently from the `absolute` map — leaving a hairline of bright map
+          down the right edge. Chrome rounds both the same, hence Safari-only. */}
       <div
-        className="fixed top-0 left-0 right-0 z-[1000] backdrop-blur-md"
+        className="absolute top-0 left-0 right-0 z-[1000] backdrop-blur-md"
         style={{
           backgroundColor: th.barBg,
           borderBottom: `1px solid ${th.barBorder}`,
@@ -2365,7 +2369,7 @@ export const Player: React.FC = () => {
       {audioStarted && (
         <div
           ref={bottomBarRef}
-          className="fixed bottom-0 left-0 right-0 z-[1000]"
+          className="absolute bottom-0 left-0 right-0 z-[1000]"
           style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
         >
           <button
