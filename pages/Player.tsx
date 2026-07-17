@@ -2296,7 +2296,18 @@ export const Player: React.FC = () => {
           overhang stays as cheap insurance against sub-pixel rounding. */}
       <div
         className="fixed top-0 z-[1000]"
-        style={{ left: '-2px', right: '-2px' }}
+        style={{
+          left: '-2px',
+          right: '-2px',
+          // Force the bar onto its own GPU compositing layer. Without this,
+          // Safari composites the WebGL map canvas (which is GPU-promoted) ABOVE
+          // the bar at the sub-pixel right edge, leaking a bright map hairline.
+          // The bottom bar avoids this only incidentally — its backdrop-filter
+          // already promotes it. translateZ(0) promotes this one the same way.
+          transform: 'translateZ(0)',
+          willChange: 'transform',
+          isolation: 'isolate',
+        }}
       >
         <div
           className="w-full"
