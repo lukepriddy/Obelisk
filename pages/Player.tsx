@@ -2287,22 +2287,19 @@ export const Player: React.FC = () => {
       )}
 
       {/* ── TOP BAR ── */}
-      {/* Safari's backdrop-filter leaves a hairline of UNfiltered content at the
-          edge — a bright sliver of map down the right side (Chrome rasterizes it
-          exactly, so it never showed there). Two parts to the fix, mirroring the
-          bottom bar, which is why that one came out clean:
-            1. the fixed wrapper overhangs 2px each side, and
-            2. the blur lives on the INNER child, not the fixed element itself —
-               Safari clips a *fixed* element's backdrop region to the viewport,
-               so overhanging the blurred element alone doesn't move the hairline.
-          The child carries the background/border/safe-area padding so the notch
-          area stays filled. */}
+      {/* No backdrop-blur here, deliberately. barBg is 96% opaque, so the blur was
+          only ever filtering the 4% you can see through — visually near-nothing —
+          but Safari fails to paint a backdrop-filtered element's background along
+          its very edge, exposing the raw (100% bright) map as a hairline down the
+          right side. Chrome rasterizes it exactly, which is why it was Safari-only.
+          Dropping the filter removes the artifact at no visual cost. The 2px side
+          overhang stays as cheap insurance against sub-pixel rounding. */}
       <div
         className="fixed top-0 z-[1000]"
         style={{ left: '-2px', right: '-2px' }}
       >
         <div
-          className="w-full backdrop-blur-md"
+          className="w-full"
           style={{
             backgroundColor: th.barBg,
             borderBottom: `1px solid ${th.barBorder}`,
