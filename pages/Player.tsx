@@ -2287,22 +2287,28 @@ export const Player: React.FC = () => {
       )}
 
       {/* ── TOP BAR ── */}
-      {/* The -2px side overhang is deliberate: Safari's backdrop-filter leaves a
-          hairline of UNfiltered content at the element's edge, which showed as a
-          bright sliver of map down the right side (Chrome renders it exactly, so
-          it never appeared there). Bleeding the bar past the viewport puts that
-          hairline off-screen. Layout is unaffected — the inner row keeps its own
-          padding. */}
+      {/* Safari's backdrop-filter leaves a hairline of UNfiltered content at the
+          edge — a bright sliver of map down the right side (Chrome rasterizes it
+          exactly, so it never showed there). Two parts to the fix, mirroring the
+          bottom bar, which is why that one came out clean:
+            1. the fixed wrapper overhangs 2px each side, and
+            2. the blur lives on the INNER child, not the fixed element itself —
+               Safari clips a *fixed* element's backdrop region to the viewport,
+               so overhanging the blurred element alone doesn't move the hairline.
+          The child carries the background/border/safe-area padding so the notch
+          area stays filled. */}
       <div
-        className="fixed top-0 z-[1000] backdrop-blur-md"
-        style={{
-          left: '-2px',
-          right: '-2px',
-          backgroundColor: th.barBg,
-          borderBottom: `1px solid ${th.barBorder}`,
-          paddingTop: 'env(safe-area-inset-top, 0px)',
-        }}
+        className="fixed top-0 z-[1000]"
+        style={{ left: '-2px', right: '-2px' }}
       >
+        <div
+          className="w-full backdrop-blur-md"
+          style={{
+            backgroundColor: th.barBg,
+            borderBottom: `1px solid ${th.barBorder}`,
+            paddingTop: 'env(safe-area-inset-top, 0px)',
+          }}
+        >
         <div className="flex items-center h-14 px-3 gap-2">
 
           {audioStarted ? (
@@ -2366,6 +2372,7 @@ export const Player: React.FC = () => {
             </button>
           </div>
 
+        </div>
         </div>
       </div>
 
