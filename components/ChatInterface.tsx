@@ -24,9 +24,10 @@ interface ChatInterfaceProps {
   onClose: () => void;
   onUnlock?: (zoneId: string) => void;
   theme?: 'dark' | 'light';
+  accent?: string;
 }
 
-export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onUnlock, theme = 'dark' }) => {
+export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onUnlock, theme = 'dark', accent = '#10b981' }) => {
   // ── History via sessionStorage — survives any remount within the same tab ──
   const storageKey = `obelisk_chat_${zone.id}`;
   const loadHistory = (): ChatMessage[] => {
@@ -69,21 +70,21 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
     headerMuted:    dk ? 'text-zinc-500'                  : 'text-zinc-500',
     closeBtn:       dk ? 'text-zinc-400 hover:text-white hover:bg-zinc-800' : 'text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100',
     errorBg:        dk ? 'bg-red-500/10 border-red-500/30 text-red-300' : 'bg-red-50 border-red-200 text-red-600',
-    userBubble:     'bg-emerald-600 text-white rounded-br-md',
+    userBubble:     'text-white rounded-br-md',   // background set inline from accent
     aiBubble:       dk ? 'bg-zinc-800 text-zinc-100 rounded-bl-md' : 'bg-zinc-100 text-zinc-900 rounded-bl-md',
     typingDot:      dk ? 'bg-zinc-400' : 'bg-zinc-400',
     typingBg:       dk ? 'bg-zinc-800' : 'bg-zinc-100',
     inputBar:       dk ? 'border-zinc-800' : 'border-zinc-200',
     inputField:     dk ? 'bg-zinc-800 border-zinc-700 text-white placeholder-zinc-500 focus:border-indigo-500/60'
                        : 'bg-zinc-100 border-zinc-200 text-zinc-900 placeholder-zinc-400 focus:border-indigo-400',
-    sendActive:     'bg-emerald-600 hover:bg-emerald-500 text-white',
+    sendActive:     'text-white',   // background set inline from accent
     sendInactive:   dk ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed' : 'bg-zinc-100 text-zinc-400 cursor-not-allowed',
     spinnerBorder:  dk ? 'border-zinc-700 border-t-indigo-400' : 'border-zinc-300 border-t-indigo-500',
     spinnerText:    dk ? 'text-zinc-500' : 'text-zinc-500',
     handle:         dk ? 'bg-white/20' : 'bg-black/15',
+    // 'ready' colour comes from the accent inline; 'loading' stays amber.
     statusDot: (state: 'loading' | 'ready') =>
-      state === 'loading' ? 'bg-amber-400 animate-pulse'
-      : 'bg-emerald-400',
+      state === 'loading' ? 'bg-amber-400 animate-pulse' : '',
   };
 
   // ── Auto-scroll ───────────────────────────────────────────────────────────
@@ -206,10 +207,16 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
         {zone.character_image_url ? (
           <div className="relative shrink-0">
             <img src={zone.character_image_url} alt={zone.title} className="w-9 h-9 rounded-lg object-cover" />
-            <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 transition-colors ${dk ? 'border-zinc-950' : 'border-white'} ${t.statusDot(dotState)}`} />
+            <span
+              className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 transition-colors ${dk ? 'border-zinc-950' : 'border-white'} ${t.statusDot(dotState)}`}
+              style={dotState === 'ready' ? { backgroundColor: accent } : undefined}
+            />
           </div>
         ) : (
-          <div className={`w-2 h-2 rounded-full shrink-0 transition-colors ${t.statusDot(dotState)}`} />
+          <div
+            className={`w-2 h-2 rounded-full shrink-0 transition-colors ${t.statusDot(dotState)}`}
+            style={dotState === 'ready' ? { backgroundColor: accent } : undefined}
+          />
         )}
         <div className="flex-1 min-w-0">
           <h3 className={`font-semibold text-sm leading-tight truncate ${t.headerText}`}>{zone.title}</h3>
@@ -236,9 +243,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
 
         {history.map((msg, i) => (
           <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[78%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
-              msg.role === 'user' ? t.userBubble : t.aiBubble
-            }`}>
+            <div
+              className={`max-w-[78%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
+                msg.role === 'user' ? t.userBubble : t.aiBubble
+              }`}
+              style={msg.role === 'user' ? { backgroundColor: accent } : undefined}
+            >
               {msg.text}
             </div>
           </div>
@@ -279,6 +289,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
             className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all ${
               inputText.trim() && !isLoading && !chatLocked ? t.sendActive : t.sendInactive
             }`}
+            style={inputText.trim() && !isLoading && !chatLocked ? { backgroundColor: accent } : undefined}
           >
             <Send size={15} />
           </button>

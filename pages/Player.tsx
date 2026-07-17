@@ -15,7 +15,7 @@ import {
 import { getDistance, calculateAttenuation } from '../utils/geo';
 import { PlayerProgress, ProgressionReward, Tour, Zone } from '../types';
 import { FONT_STYLES, MAP_STYLES, DEFAULT_MAP_STYLE } from '../constants';
-import { Loader2, PlayCircle, Volume2, Mic, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu, Layers, Locate, RotateCcw, ZoomIn, ZoomOut, Backpack, Gem, Trash2, Info, RefreshCw, LogOut, Bug, Navigation, ChevronRight } from 'lucide-react';
+import { Loader2, PlayCircle, Volume2, MessageCircle, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu, Layers, Locate, RotateCcw, ZoomIn, ZoomOut, Backpack, Gem, Trash2, Info, RefreshCw, LogOut, Bug, Navigation, ChevronRight } from 'lucide-react';
 import { ChatInterface } from '../components/ChatInterface';
 
 // Player map style options, in selector order (Satellite HD default first).
@@ -1436,7 +1436,7 @@ export const Player: React.FC = () => {
                 >
                   {activeCharacterZone.character_image_url
                     ? <img src={activeCharacterZone.character_image_url} alt={activeCharacterZone.title} className="w-[70%] h-[70%] object-contain" />
-                    : <div className="w-full h-full flex items-center justify-center"><Mic size={22} color={accent} /></div>
+                    : <div className="w-full h-full flex items-center justify-center"><MessageCircle size={22} color={accent} /></div>
                   }
                 </div>
               </div>
@@ -1466,7 +1466,7 @@ export const Player: React.FC = () => {
                   >
                     {activeCharacterZone.character_image_url
                       ? <img src={activeCharacterZone.character_image_url} alt={activeCharacterZone.title} className="w-full h-full object-contain" />
-                      : <div className="w-full h-full flex items-center justify-center"><Mic size={26} color={accent} /></div>
+                      : <div className="w-full h-full flex items-center justify-center"><MessageCircle size={26} color={accent} /></div>
                     }
                   </div>
                 </div>
@@ -1495,8 +1495,8 @@ export const Player: React.FC = () => {
                   className="flex-1 py-2.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 active:opacity-80 transition-opacity"
                   style={{ backgroundColor: accent, boxShadow: `0 2px 16px ${accent}55` }}
                 >
-                  <Mic size={15} color="white" />
-                  <span className="text-white">Speak to {activeCharacterZone.title}</span>
+                  <MessageCircle size={15} color="white" />
+                  <span className="text-white">{activeCharacterZone.title}</span>
                 </button>
               </div>
             </div>
@@ -1618,6 +1618,7 @@ export const Player: React.FC = () => {
           key={chatKey}
           zone={persistedCharacterZone}
           theme={tour.player_theme || 'dark'}
+          accent={accent}
           onClose={() => setShowChat(false)}
           onUnlock={(zoneId) => {
             unlockedZoneIdsRef.current = new Set([...unlockedZoneIdsRef.current, zoneId]);
@@ -2198,9 +2199,8 @@ export const Player: React.FC = () => {
       {/* ── PASSPHRASE MODAL ── */}
       {passphraseChallenge && (
         <div
-          className="fixed inset-x-0 top-0 z-[2500] bg-black/70 backdrop-blur-sm flex items-end justify-center animate-in fade-in overflow-y-auto"
+          className="absolute inset-0 z-[2500] bg-black/70 backdrop-blur-sm flex items-end justify-center animate-in fade-in overflow-y-auto"
           style={{
-            height: '100dvh',
             paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)',
             paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)',
           }}

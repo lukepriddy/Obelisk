@@ -4,11 +4,13 @@
     <meta charset="UTF-8" />
 
     <!--
-      viewport-fit=cover → content extends into the notch/home-indicator safe areas
-      on iPhones. Combined with env(safe-area-inset-*) already used throughout the
-      app, this gives true edge-to-edge on all modern iPhones.
+      viewport-fit=cover → content extends into the notch/home-indicator safe areas.
+      maximum-scale=1 + user-scalable=no → the page itself never pinch-zooms, so
+      the header/footer/chrome stay rock-solid; the map does its own zoom internally
+      and is unaffected. (Belt-and-suspenders with the gesture handler below, since
+      iOS Safari ignores user-scalable on its own.)
     -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 
     <title>Obelisk</title>
 
@@ -24,14 +26,6 @@
     <meta name="apple-mobile-web-app-title" content="Obelisk" />
     <!-- 180×180 PNG — add public/icons/apple-touch-icon.png to enable       -->
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
-
-    <!-- ── Leaflet CSS ───────────────────────────────────────────────────── -->
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-      crossorigin=""
-    />
 
     <!-- Tailwind is now compiled at build time (see tailwind.config.js) —
          no CDN script, no unstyled first-paint flash. -->
@@ -61,12 +55,6 @@
         select {
           font-size: max(16px, 1em) !important;
         }
-      }
-
-      /* ── Leaflet ─────────────────────────────────────────────────────── */
-      .leaflet-container {
-        z-index: 0;
-        background: #09090b;
       }
 
       /* ── Hide all scrollbars (scroll still works, bar just invisible) ── */
@@ -113,6 +101,26 @@
 
     <div id="root" class="h-full"></div>
     <script type="module" src="/index.tsx"></script>
+
+    <!-- ── Block page-level pinch/double-tap zoom ──────────────────────────
+         iOS Safari ignores user-scalable=no, so also prevent its page-zoom
+         gesture + double-tap events. The MapLibre map zooms via its own touch
+         handling on the canvas, which is unaffected — only the surrounding app
+         chrome is locked so a stray pinch can't zoom the whole player. -->
+    <script>
+      ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (evt) {
+        document.addEventListener(evt, function (e) { e.preventDefault(); }, { passive: false });
+      });
+      // Kill double-tap-to-zoom on the page chrome (not the map, which handles its own).
+      var __lastTouchEnd = 0;
+      document.addEventListener('touchend', function (e) {
+        var now = Date.now();
+        if (now - __lastTouchEnd < 300 && !e.target.closest('.maplibregl-canvas-container')) {
+          e.preventDefault();
+        }
+        __lastTouchEnd = now;
+      }, { passive: false });
+    </script>
 
     <!-- ── Register service worker (enables Chrome install prompt + offline) -->
     <script>
