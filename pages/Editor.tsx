@@ -399,6 +399,7 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
           map_style: tour.map_style,
           player_theme: tour.player_theme,
           description_align: tour.description_align,
+          tags: tour.tags || [],
           is_public: tour.is_public,
           lat: tour.lat,
           lng: tour.lng,
