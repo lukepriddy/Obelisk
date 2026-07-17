@@ -2228,7 +2228,7 @@ export const Player: React.FC = () => {
 
       {passphraseChallenge && (
         <div
-          className="absolute inset-0 z-[2500] bg-black/70 backdrop-blur-sm flex items-end justify-center animate-in fade-in overflow-y-auto"
+          className="fixed inset-0 z-[2500] bg-black/70 backdrop-blur-sm flex items-end justify-center animate-in fade-in overflow-y-auto"
           style={{
             paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)',
             paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)',
@@ -2257,6 +2257,7 @@ export const Player: React.FC = () => {
               type="text"
               autoFocus
               className={`w-full bg-zinc-800 border rounded-xl px-4 py-3.5 text-white text-base font-mono tracking-wider focus:outline-none transition-colors mb-1 ${passphraseError ? 'border-red-500' : 'border-zinc-600 focus:border-amber-500'}`}
+              style={{ fontSize: '16px' }}
               value={passphraseInput}
               onChange={(e) => { setPassphraseInput(e.target.value); setPassphraseError(false); }}
               onKeyDown={(e) => e.key === 'Enter' && handlePassphraseSubmit()}
