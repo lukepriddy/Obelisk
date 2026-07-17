@@ -2287,9 +2287,17 @@ export const Player: React.FC = () => {
       )}
 
       {/* ── TOP BAR ── */}
+      {/* The -2px side overhang is deliberate: Safari's backdrop-filter leaves a
+          hairline of UNfiltered content at the element's edge, which showed as a
+          bright sliver of map down the right side (Chrome renders it exactly, so
+          it never appeared there). Bleeding the bar past the viewport puts that
+          hairline off-screen. Layout is unaffected — the inner row keeps its own
+          padding. */}
       <div
-        className="fixed top-0 left-0 right-0 z-[1000] backdrop-blur-md"
+        className="fixed top-0 z-[1000] backdrop-blur-md"
         style={{
+          left: '-2px',
+          right: '-2px',
           backgroundColor: th.barBg,
           borderBottom: `1px solid ${th.barBorder}`,
           paddingTop: 'env(safe-area-inset-top, 0px)',
@@ -2365,8 +2373,12 @@ export const Player: React.FC = () => {
       {audioStarted && (
         <div
           ref={bottomBarRef}
-          className="fixed bottom-0 left-0 right-0 z-[1000]"
-          style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+          className="fixed bottom-0 z-[1000]"
+          // -2px side overhang for the same Safari backdrop-filter hairline as the
+          // top bar (the blur lives on the w-full button inside, so widening the
+          // wrapper carries its edge off-screen too). Height is unchanged, so the
+          // bottomBarHeight measurement below stays correct.
+          style={{ left: '-2px', right: '-2px', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
         >
           <button
             onClick={openTourInfo}
