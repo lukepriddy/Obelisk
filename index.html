@@ -5,12 +5,12 @@
 
     <!--
       viewport-fit=cover → content extends into the notch/home-indicator safe areas.
-      maximum-scale=1 + user-scalable=no → the page itself never pinch-zooms, so
-      the header/footer/chrome stay rock-solid; the map does its own zoom internally
-      and is unaffected. (Belt-and-suspenders with the gesture handler below, since
-      iOS Safari ignores user-scalable on its own.)
+      NOTE: we intentionally do NOT set maximum-scale/user-scalable — on iOS that
+      combo desyncs the visual viewport with viewport-fit=cover and makes the
+      fixed header/footer/welcome drift. Page pinch-zoom is blocked by the
+      gesture handler below instead, which doesn't touch layout.
     -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 
     <title>Obelisk</title>
 
@@ -102,24 +102,16 @@
     <div id="root" class="h-full"></div>
     <script type="module" src="/index.tsx"></script>
 
-    <!-- ── Block page-level pinch/double-tap zoom ──────────────────────────
-         iOS Safari ignores user-scalable=no, so also prevent its page-zoom
-         gesture + double-tap events. The MapLibre map zooms via its own touch
-         handling on the canvas, which is unaffected — only the surrounding app
-         chrome is locked so a stray pinch can't zoom the whole player. -->
+    <!-- ── Block page-level pinch zoom ──────────────────────────────────────
+         Prevent iOS Safari's page-zoom gesture so a stray pinch can't zoom the
+         whole player chrome. This only cancels the pinch GESTURE — it doesn't
+         touch the viewport meta or layout, so header/footer/welcome stay put.
+         The MapLibre map zooms via its own touch handling on the canvas and is
+         unaffected. -->
     <script>
       ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (evt) {
         document.addEventListener(evt, function (e) { e.preventDefault(); }, { passive: false });
       });
-      // Kill double-tap-to-zoom on the page chrome (not the map, which handles its own).
-      var __lastTouchEnd = 0;
-      document.addEventListener('touchend', function (e) {
-        var now = Date.now();
-        if (now - __lastTouchEnd < 300 && !e.target.closest('.maplibregl-canvas-container')) {
-          e.preventDefault();
-        }
-        __lastTouchEnd = now;
-      }, { passive: false });
     </script>
 
     <!-- ── Register service worker (enables Chrome install prompt + offline) -->
