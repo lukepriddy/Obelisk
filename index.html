@@ -57,6 +57,18 @@
         }
       }
 
+      /* ── Kill iOS Safari's native double-tap ("smart") zoom. This was the
+         last remaining way the whole page could get scale-zoomed: inputs are
+         ≥16px (no focus zoom) and pinch is cancelled by the gesture handler,
+         but a quick double tap near any control still zoomed the page — and
+         Safari persists that zoom across reloads. `manipulation` disables only
+         double-tap zoom; scrolling/panning is untouched, and the MapLibre map
+         is unaffected because it handles all its gestures in JS on its own
+         canvas. ─────────────────────────────────────────────────────────── */
+      html, body {
+        touch-action: manipulation;
+      }
+
       /* ── Hide all scrollbars (scroll still works, bar just invisible) ── */
       ::-webkit-scrollbar { width: 0; height: 0; background: transparent; }
       * { scrollbar-width: none; }
@@ -112,6 +124,41 @@
       ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (evt) {
         document.addEventListener(evt, function (e) { e.preventDefault(); }, { passive: false });
       });
+    </script>
+
+    <!-- ── Escape hatch: reset a stuck page zoom ─────────────────────────────
+         iOS Safari REMEMBERS page scale across reloads, and the gesture handler
+         above blocks pinch — so if the page ever got zoomed (old builds had
+         double-tap zoom open), the user was trapped at that zoom forever, even
+         after reloading a fixed build. If the visual viewport reports scale > 1
+         while no gesture is in flight, transiently pin maximum-scale=1 on the
+         viewport meta and then restore it. The toggle snaps Safari back to 1:1;
+         restoring immediately avoids the persistent maximum-scale +
+         viewport-fit=cover desync that made the fixed bars drift. -->
+    <script>
+      (function () {
+        var vv = window.visualViewport;
+        var meta = document.querySelector('meta[name="viewport"]');
+        if (!vv || !meta) return;
+        var BASE = meta.getAttribute('content');
+        var resetting = false;
+        function resetZoom() {
+          if (resetting || vv.scale <= 1.02) return;
+          resetting = true;
+          meta.setAttribute('content', BASE + ', maximum-scale=1');
+          setTimeout(function () {
+            meta.setAttribute('content', BASE);
+            resetting = false;
+          }, 250);
+        }
+        window.addEventListener('pageshow', resetZoom);
+        var t;
+        vv.addEventListener('resize', function () {
+          clearTimeout(t);
+          t = setTimeout(resetZoom, 300);
+        });
+        resetZoom();
+      })();
     </script>
 
     <!-- ── Register service worker (enables Chrome install prompt + offline) -->
