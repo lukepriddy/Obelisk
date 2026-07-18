@@ -54,19 +54,6 @@
         -webkit-tap-highlight-color: transparent;
       }
 
-      /* ── Disable iOS double-tap smart-zoom on the app chrome. Two quick taps
-         (easy to do when tapping into an input) zoom the tapped block wider
-         than the screen and shift it sideways — and the pinch-gesture blocker
-         below means there's no way back out. touch-action:manipulation removes
-         ONLY the double-tap zoom gesture; scrolling and element-level touch
-         handling are untouched, and unlike viewport maximum-scale it has zero
-         layout side effects. MapLibre's canvas keeps its own touch-action
-         (class + inline styles beat the * selector), so map gestures still
-         work. ─────────────────────────────────────────────────────────── */
-      * {
-        touch-action: manipulation;
-      }
-
       /* ── Prevent iOS Safari from auto-zooming the page when the user taps
          into a text input with font-size below 16px. The @supports guard
          targets iOS Safari specifically (-webkit-touch-callout is iOS-only)
@@ -84,10 +71,13 @@
          ≥16px (no focus zoom) and pinch is cancelled by the gesture handler,
          but a quick double tap near any control still zoomed the page — and
          Safari persists that zoom across reloads. `manipulation` disables only
-         double-tap zoom; scrolling/panning is untouched, and the MapLibre map
-         is unaffected because it handles all its gestures in JS on its own
-         canvas. ─────────────────────────────────────────────────────────── */
-      html, body {
+         double-tap zoom; scrolling/panning is untouched.
+         NOTE: touch-action does NOT inherit — the browser evaluates it on the
+         element actually touched — so this must be `*`, not html/body. The
+         MapLibre canvas is unaffected: its own class + inline touch-action
+         rules beat the zero-specificity `*` selector, so map pan/pinch/rotate
+         keep working. ──────────────────────────────────────────────────── */
+      * {
         touch-action: manipulation;
       }
 
