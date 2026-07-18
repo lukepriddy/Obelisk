@@ -178,33 +178,41 @@
           var ae = document.activeElement;
           return !!ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable);
         }
-        function resync() {
+        function heal() {
           if (resetting) return;
-          // While an input is focused, Safari legitimately pans/resizes the
-          // visual viewport to reveal the field — never fight that.
-          if (keyboardOpen()) return;
-          // Desync = any disagreement between visual and layout viewports:
-          //  - scale drift (pinch/accessibility zoom that beat the clamp)
-          //  - width mismatch or horizontal offset at ~1x — the state iOS can
-          //    be left in after the keyboard dismisses, which shows as a strip
-          //    of map along the right edge of every full-bleed surface.
-          var desynced =
-            vv.scale > 1.02 ||
-            Math.abs(vv.width - window.innerWidth) > 1 ||
-            Math.abs(vv.offsetLeft) > 1;
-          if (!desynced) return;
           resetting = true;
-          meta.setAttribute('content', BASE + ', maximum-scale=1');
           window.scrollTo(0, 0);
+          meta.setAttribute('content', BASE + ', maximum-scale=1');
           setTimeout(function () {
             meta.setAttribute('content', BASE);
             resetting = false;
           }, 250);
         }
+        function resync() {
+          // While an input is focused, Safari legitimately pans/resizes the
+          // visual viewport to reveal the field — never fight that.
+          if (keyboardOpen()) return;
+          // Desync = any disagreement between visual and layout viewports:
+          //  - scale drift (pinch/accessibility zoom that beat the clamp)
+          //  - width mismatch or horizontal offset at ~1x.
+          var desynced =
+            vv.scale > 1.02 ||
+            Math.abs(vv.width - window.innerWidth) > 1 ||
+            Math.abs(vv.offsetLeft) > 1;
+          if (desynced) heal();
+        }
         window.addEventListener('pageshow', resync);
         var t;
+        var lastHeight = vv.height;
         vv.addEventListener('resize', function () {
+          var grew = vv.height - lastHeight;
+          lastHeight = vv.height;
           clearTimeout(t);
+          // Viewport got much taller = the keyboard just closed. This is the
+          // one path where iOS can leave fixed elements PAINTED offset while
+          // every JS metric reads in-sync — heal unconditionally instead of
+          // trusting the desync checks.
+          if (grew > 100 && !keyboardOpen()) { t = setTimeout(heal, 250); return; }
           t = setTimeout(resync, 300);
         });
         vv.addEventListener('scroll', function () {
@@ -212,9 +220,9 @@
           t = setTimeout(resync, 300);
         });
         // Keyboard dismissal: focus leaves the input slightly before the
-        // viewport settles — re-check shortly after.
+        // viewport settles — heal shortly after, unconditionally.
         document.addEventListener('focusout', function () {
-          setTimeout(resync, 450);
+          setTimeout(function () { if (!keyboardOpen()) heal(); }, 450);
         });
         resync();
       })();

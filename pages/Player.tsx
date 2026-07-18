@@ -207,6 +207,12 @@ export const Player: React.FC = () => {
   const [passphraseChallenge, setPassphraseChallenge] = useState<Zone | null>(null);
   const [passphraseInput, setPassphraseInput] = useState('');
   const [passphraseError, setPassphraseError] = useState(false);
+  // Bumped after the keyboard is dismissed to REMOUNT the passphrase modal.
+  // iOS can leave a fixed element painted a few px off after the keyboard
+  // closes while every JS metric reads in-sync — recreating the element is the
+  // one deterministic repaint. Also gates autoFocus so the remount doesn't
+  // reopen the keyboard.
+  const [lockNudge, setLockNudge] = useState(0);
   // A locked zone whose modal was dismissed while the player is still inside —
   // shown as a small tappable pill so they can reopen it without leaving.
   const [minimizedLock, setMinimizedLock] = useState<Zone | null>(null);
@@ -513,6 +519,7 @@ export const Player: React.FC = () => {
               // Only show passphrase modal if none is already shown
               if (!passphraseChallengeRef.current) {
                 passphraseChallengeRef.current = zone;
+                setLockNudge(0);
                 setPassphraseChallenge(zone);
               }
             } else if (prereqMet && zone.type !== 'discoverable') {
@@ -2269,7 +2276,7 @@ export const Player: React.FC = () => {
           to leave and re-enter the zone. */}
       {audioStarted && minimizedLock && !passphraseChallenge && (
         <button
-          onClick={() => { setMinimizedLock(null); setPassphraseChallenge(minimizedLock); setPassphraseInput(''); setPassphraseError(false); }}
+          onClick={() => { setMinimizedLock(null); setLockNudge(0); setPassphraseChallenge(minimizedLock); setPassphraseInput(''); setPassphraseError(false); }}
           className="absolute z-[1600] left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2.5 rounded-full bg-zinc-900/95 backdrop-blur border border-amber-500/50 shadow-xl active:opacity-80 animate-in slide-in-from-bottom-2"
           style={{ bottom: `calc(${bottomBarHeight}px + env(safe-area-inset-bottom, 0px) + 16px)` }}
         >
@@ -2281,13 +2288,18 @@ export const Player: React.FC = () => {
 
       {passphraseChallenge && (
         <div
-          className="overlay-edge-bleed fixed inset-0 z-[2500] bg-black/70 backdrop-blur-sm flex items-end justify-center animate-in fade-in overflow-y-auto"
+          // key remounts the whole fixed layer after each keyboard dismissal —
+          // the only reliable repaint for iOS's painted-offset state (see
+          // lockNudge). Entrance animations only play on the first mount so
+          // the remount is invisible.
+          key={`${passphraseChallenge.id}:${lockNudge}`}
+          className={`overlay-edge-bleed fixed inset-0 z-[2500] bg-black/70 backdrop-blur-sm flex items-end justify-center overflow-y-auto ${lockNudge === 0 ? 'animate-in fade-in' : ''}`}
           style={{
             paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)',
             paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)',
           }}
         >
-          <div className="bg-zinc-900 border border-amber-500/30 rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-lg p-6 pb-6 animate-in slide-in-from-bottom-4 max-h-[calc(100dvh-32px)] overflow-y-auto">
+          <div className={`bg-zinc-900 border border-amber-500/30 rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-lg p-6 pb-6 max-h-[calc(100dvh-32px)] overflow-y-auto ${lockNudge === 0 ? 'animate-in slide-in-from-bottom-4' : ''}`}>
             <div className="w-10 h-1 bg-zinc-700 rounded-full mx-auto mb-5" />
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0">
@@ -2308,7 +2320,16 @@ export const Player: React.FC = () => {
             </label>
             <input
               type="text"
-              autoFocus
+              autoFocus={lockNudge === 0}
+              onBlur={() => {
+                // Keyboard dismissed → schedule the remount nudge, unless focus
+                // just moved to another field (don't yank a reopened keyboard).
+                window.setTimeout(() => {
+                  const ae = document.activeElement;
+                  if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return;
+                  setLockNudge(n => n + 1);
+                }, 350);
+              }}
               className={`w-full bg-zinc-800 border rounded-xl px-4 py-3.5 text-white text-base font-mono tracking-wider focus:outline-none transition-colors mb-1 ${passphraseError ? 'border-red-500' : 'border-zinc-600 focus:border-amber-500'}`}
               style={{ fontSize: '16px' }}
               value={passphraseInput}
