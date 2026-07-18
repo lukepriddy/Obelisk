@@ -45,6 +45,19 @@
         -webkit-tap-highlight-color: transparent;
       }
 
+      /* ── Disable iOS double-tap smart-zoom on the app chrome. Two quick taps
+         (easy to do when tapping into an input) zoom the tapped block wider
+         than the screen and shift it sideways — and the pinch-gesture blocker
+         below means there's no way back out. touch-action:manipulation removes
+         ONLY the double-tap zoom gesture; scrolling and element-level touch
+         handling are untouched, and unlike viewport maximum-scale it has zero
+         layout side effects. MapLibre's canvas keeps its own touch-action
+         (class + inline styles beat the * selector), so map gestures still
+         work. ─────────────────────────────────────────────────────────── */
+      * {
+        touch-action: manipulation;
+      }
+
       /* ── Prevent iOS Safari from auto-zooming the page when the user taps
          into a text input with font-size below 16px. The @supports guard
          targets iOS Safari specifically (-webkit-touch-callout is iOS-only)
