@@ -5,12 +5,21 @@
 
     <!--
       viewport-fit=cover → content extends into the notch/home-indicator safe areas.
-      NOTE: we intentionally do NOT set maximum-scale/user-scalable — on iOS that
-      combo desyncs the visual viewport with viewport-fit=cover and makes the
-      fixed header/footer/welcome drift. Page pinch-zoom is blocked by the
-      gesture handler below instead, which doesn't touch layout.
+
+      maximum-scale=1 + user-scalable=no → the page can NEVER scale-zoom: not on
+      input focus, not on double-tap, and any zoom persisted by Safari from an
+      old session gets clamped back to 1:1 on load. This is a product decision:
+      the only zoom in Obelisk is the map's own pinch (MapLibre camera zoom on
+      its canvas — unaffected by the viewport meta).
+
+      History: maximum-scale was once removed because it was blamed for the
+      fixed header/footer drifting out of sync with viewport-fit=cover. That
+      drift only manifests when Safari ATTEMPTS an auto-zoom — which can no
+      longer happen: inputs are forced ≥16px (no focus zoom) and
+      touch-action: manipulation kills double-tap zoom. With the triggers gone,
+      keeping the hard clamp is safe. Do not remove it again.
     -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 
     <title>Obelisk</title>
 
@@ -70,6 +79,18 @@
         }
       }
 
+      /* ── Kill iOS Safari's native double-tap ("smart") zoom. This was the
+         last remaining way the whole page could get scale-zoomed: inputs are
+         ≥16px (no focus zoom) and pinch is cancelled by the gesture handler,
+         but a quick double tap near any control still zoomed the page — and
+         Safari persists that zoom across reloads. `manipulation` disables only
+         double-tap zoom; scrolling/panning is untouched, and the MapLibre map
+         is unaffected because it handles all its gestures in JS on its own
+         canvas. ─────────────────────────────────────────────────────────── */
+      html, body {
+        touch-action: manipulation;
+      }
+
       /* ── Hide all scrollbars (scroll still works, bar just invisible) ── */
       ::-webkit-scrollbar { width: 0; height: 0; background: transparent; }
       * { scrollbar-width: none; }
@@ -125,6 +146,39 @@
       ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (evt) {
         document.addEventListener(evt, function (e) { e.preventDefault(); }, { passive: false });
       });
+    </script>
+
+    <!-- ── Backstop: reset a stuck page zoom ─────────────────────────────────
+         The viewport meta's maximum-scale=1 should make page zoom impossible
+         and clamp any zoom Safari persisted from old builds. This watchdog is
+         the backstop for the rare paths where Safari overrides the clamp
+         (e.g. accessibility pinch): if the visual viewport ever reports
+         scale > 1, rewriting the meta content forces Safari to re-apply the
+         clamp and snap back to 1:1. -->
+    <script>
+      (function () {
+        var vv = window.visualViewport;
+        var meta = document.querySelector('meta[name="viewport"]');
+        if (!vv || !meta) return;
+        var BASE = meta.getAttribute('content');
+        var resetting = false;
+        function resetZoom() {
+          if (resetting || vv.scale <= 1.02) return;
+          resetting = true;
+          meta.setAttribute('content', BASE + ', maximum-scale=1');
+          setTimeout(function () {
+            meta.setAttribute('content', BASE);
+            resetting = false;
+          }, 250);
+        }
+        window.addEventListener('pageshow', resetZoom);
+        var t;
+        vv.addEventListener('resize', function () {
+          clearTimeout(t);
+          t = setTimeout(resetZoom, 300);
+        });
+        resetZoom();
+      })();
     </script>
 
     <!-- ── Register service worker (enables Chrome install prompt + offline) -->
