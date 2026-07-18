@@ -81,6 +81,24 @@
         touch-action: manipulation;
       }
 
+      /* ── Edge-bleed for full-screen overlays (sheets, modals, welcome, chat).
+         With the zoom-clamp viewport meta (maximum-scale=1 + user-scalable=no +
+         viewport-fit=cover), iOS Safari's visible screen edge and the layout
+         box can disagree by a couple of px on the right — every full-bleed
+         dark surface then shows a hairline of the map beside it. Same cure
+         that fixed the top/bottom bars: overhang the surface past both edges
+         so the mismatch has nothing to expose. Elements using this class must
+         be position:fixed — an absolute overhang gets clipped by the app
+         shell's overflow-hidden. !important because the built Tailwind CSS
+         (inset-0) loads after this inline block. Phone-width only; desktop
+         doesn't have the mismatch and chat's md: popup layout must win. ── */
+      @media (max-width: 767px) {
+        .overlay-edge-bleed {
+          left: -4px !important;
+          right: -4px !important;
+        }
+      }
+
       /* ── Hide all scrollbars (scroll still works, bar just invisible) ── */
       ::-webkit-scrollbar { width: 0; height: 0; background: transparent; }
       * { scrollbar-width: none; }

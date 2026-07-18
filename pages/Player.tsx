@@ -21,6 +21,37 @@ import { ChatInterface } from '../components/ChatInterface';
 // Player map style options, in selector order (Satellite HD default first).
 const PLAYER_MAP_STYLE_ORDER = ['satellite-hd', 'satellite', 'voyager', 'dark', 'light', 'streets'] as const;
 
+// Live layout-vs-visual viewport numbers, rendered inside Debug mode. Exists to
+// turn "there's a hairline strip on the right" reports into exact figures: if
+// innerWidth and visualViewport.width disagree (or scale ≠ 1), that delta IS
+// the strip, and we know precisely how many px the edge-bleed must cover.
+const ViewportStats: React.FC<{ labelColor: string; valueColor: string }> = ({ labelColor, valueColor }) => {
+  const [, force] = useState(0);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    const bump = () => force(n => n + 1);
+    vv?.addEventListener('resize', bump);
+    vv?.addEventListener('scroll', bump);
+    window.addEventListener('resize', bump);
+    return () => {
+      vv?.removeEventListener('resize', bump);
+      vv?.removeEventListener('scroll', bump);
+      window.removeEventListener('resize', bump);
+    };
+  }, []);
+  const vv = window.visualViewport;
+  return (
+    <>
+      <span style={{ color: labelColor }}>Layout vw</span>
+      <span className="text-right font-mono" style={{ color: valueColor }}>{window.innerWidth}px</span>
+      <span style={{ color: labelColor }}>Visual vw</span>
+      <span className="text-right font-mono" style={{ color: valueColor }}>
+        {vv ? `${vv.width.toFixed(1)}px @${vv.scale.toFixed(3)}x ol:${vv.offsetLeft.toFixed(1)}` : 'n/a'}
+      </span>
+    </>
+  );
+};
+
 export const Player: React.FC = () => {
   const { tourId } = useParams<{ tourId: string }>();
   const navigate = useNavigate();
@@ -1167,7 +1198,7 @@ export const Player: React.FC = () => {
 
         return (
           <div
-            className="fixed inset-0 z-[2000] flex flex-col overflow-hidden"
+            className="overlay-edge-bleed fixed inset-0 z-[2000] flex flex-col overflow-hidden"
             style={{ backgroundColor: bg, fontFamily }}
           >
             {/* ── HEADER — natural height, flex shrink-0 ── */}
@@ -1348,7 +1379,7 @@ export const Player: React.FC = () => {
           right edge. Sharing the root's coordinate system removes the gap. */}
       {tourInfoMounted && tour && (
         <div
-          className="absolute inset-0 z-[2000] flex items-end justify-center"
+          className="overlay-edge-bleed fixed inset-0 z-[2000] flex items-end justify-center"
           style={{
             backgroundColor: 'rgba(0,0,0,0.55)',
             opacity: tourInfoVisible ? 1 : 0,
@@ -1837,6 +1868,7 @@ export const Player: React.FC = () => {
               <span className="text-right font-semibold truncate" style={{ color: th.cardText }}>
                 {activeZones.length > 0 ? activeZones.map(zone => zone.title).join(', ') : 'None'}
               </span>
+              <ViewportStats labelColor={th.cardMuted} valueColor={th.cardText} />
             </div>
           </div>
         </div>
@@ -1845,7 +1877,7 @@ export const Player: React.FC = () => {
       {/* ── PROGRESSION INVENTORY ── */}
       {showInventory && tour.progression_enabled && playerProgress && (
         <div
-          className="absolute inset-0 z-[2500] bg-black/60 backdrop-blur-sm flex items-end justify-center"
+          className="overlay-edge-bleed fixed inset-0 z-[2500] bg-black/60 backdrop-blur-sm flex items-end justify-center"
           onClick={() => setShowInventory(false)}
         >
           <div
@@ -1941,7 +1973,7 @@ export const Player: React.FC = () => {
       {/* ── PLAYER MENU ── */}
       {showPlayerMenu && audioStarted && (
         <div
-          className="absolute inset-0 z-[2600] bg-black/60 backdrop-blur-sm flex items-end justify-center"
+          className="overlay-edge-bleed fixed inset-0 z-[2600] bg-black/60 backdrop-blur-sm flex items-end justify-center"
           onClick={closePlayerMenu}
         >
           <div
@@ -2249,7 +2281,7 @@ export const Player: React.FC = () => {
 
       {passphraseChallenge && (
         <div
-          className="fixed inset-0 z-[2500] bg-black/70 backdrop-blur-sm flex items-end justify-center animate-in fade-in overflow-y-auto"
+          className="overlay-edge-bleed fixed inset-0 z-[2500] bg-black/70 backdrop-blur-sm flex items-end justify-center animate-in fade-in overflow-y-auto"
           style={{
             paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)',
             paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)',
