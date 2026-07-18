@@ -2347,7 +2347,7 @@ export const Player: React.FC = () => {
           to leak at the edge. */}
       <div
         ref={topBarRef}
-        className="fixed top-0 left-0 right-0 z-[1000]"
+        className="overlay-edge-bleed fixed top-0 left-0 right-0 z-[1000]"
         style={{
           backgroundColor: th.barBg,
           borderBottom: `1px solid ${th.barBorder}`,
@@ -2424,12 +2424,11 @@ export const Player: React.FC = () => {
       {audioStarted && (
         <div
           ref={bottomBarRef}
-          className="fixed bottom-0 z-[1000]"
-          // -2px side overhang for the same Safari backdrop-filter hairline as the
-          // top bar (the blur lives on the w-full button inside, so widening the
-          // wrapper carries its edge off-screen too). Height is unchanged, so the
-          // bottomBarHeight measurement below stays correct.
-          style={{ left: '-2px', right: '-2px', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+          // overlay-edge-bleed gives the same 10px side shield as every other
+          // full-bleed surface. Height is unchanged, so the bottomBarHeight
+          // measurement below stays correct.
+          className="overlay-edge-bleed fixed bottom-0 left-0 right-0 z-[1000]"
+          style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
         >
           <button
             onClick={openTourInfo}

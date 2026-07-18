@@ -94,8 +94,12 @@
          doesn't have the mismatch and chat's md: popup layout must win. ── */
       @media (max-width: 767px) {
         .overlay-edge-bleed {
-          left: -4px !important;
-          right: -4px !important;
+          /* 10px: the keyboard open/close cycle can desync the visual viewport
+             by more than the 4px first tried (passphrase modal showed a strip
+             after keyboard dismiss). Sheets have 24px corner radii, so losing
+             10px of curve off-screen is barely visible. */
+          left: -10px !important;
+          right: -10px !important;
         }
       }
 
@@ -170,22 +174,49 @@
         if (!vv || !meta) return;
         var BASE = meta.getAttribute('content');
         var resetting = false;
-        function resetZoom() {
-          if (resetting || vv.scale <= 1.02) return;
+        function keyboardOpen() {
+          var ae = document.activeElement;
+          return !!ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable);
+        }
+        function resync() {
+          if (resetting) return;
+          // While an input is focused, Safari legitimately pans/resizes the
+          // visual viewport to reveal the field — never fight that.
+          if (keyboardOpen()) return;
+          // Desync = any disagreement between visual and layout viewports:
+          //  - scale drift (pinch/accessibility zoom that beat the clamp)
+          //  - width mismatch or horizontal offset at ~1x — the state iOS can
+          //    be left in after the keyboard dismisses, which shows as a strip
+          //    of map along the right edge of every full-bleed surface.
+          var desynced =
+            vv.scale > 1.02 ||
+            Math.abs(vv.width - window.innerWidth) > 1 ||
+            Math.abs(vv.offsetLeft) > 1;
+          if (!desynced) return;
           resetting = true;
           meta.setAttribute('content', BASE + ', maximum-scale=1');
+          window.scrollTo(0, 0);
           setTimeout(function () {
             meta.setAttribute('content', BASE);
             resetting = false;
           }, 250);
         }
-        window.addEventListener('pageshow', resetZoom);
+        window.addEventListener('pageshow', resync);
         var t;
         vv.addEventListener('resize', function () {
           clearTimeout(t);
-          t = setTimeout(resetZoom, 300);
+          t = setTimeout(resync, 300);
         });
-        resetZoom();
+        vv.addEventListener('scroll', function () {
+          clearTimeout(t);
+          t = setTimeout(resync, 300);
+        });
+        // Keyboard dismissal: focus leaves the input slightly before the
+        // viewport settles — re-check shortly after.
+        document.addEventListener('focusout', function () {
+          setTimeout(resync, 450);
+        });
+        resync();
       })();
     </script>
 
