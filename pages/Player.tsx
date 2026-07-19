@@ -2294,12 +2294,16 @@ export const Player: React.FC = () => {
           // the remount is invisible.
           key={`${passphraseChallenge.id}:${lockNudge}`}
           className={`overlay-edge-bleed fixed inset-0 z-[2500] bg-black/70 backdrop-blur-sm flex items-end justify-center overflow-y-auto ${lockNudge === 0 ? 'animate-in fade-in' : ''}`}
-          style={{
-            paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)',
-            paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)',
-          }}
+          style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)' }}
         >
-          <div className={`bg-zinc-900 border border-amber-500/30 rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-lg p-6 pb-6 max-h-[calc(100dvh-32px)] overflow-y-auto ${lockNudge === 0 ? 'animate-in slide-in-from-bottom-4' : ''}`}>
+          {/* Bottom-anchored sheet flush with the screen edge (safe-area padding
+              lives inside), matching the other slide-ups — continuous dark grey,
+              no gap. Amber accent kept on the TOP edge only (1px, same as the
+              input's focus border); no border on the sides/bottom. */}
+          <div
+            className={`bg-zinc-900 border-t border-amber-500/40 rounded-t-3xl shadow-2xl w-full max-w-lg px-6 pt-6 max-h-[calc(100dvh-16px)] overflow-y-auto ${lockNudge === 0 ? 'animate-in slide-in-from-bottom-4' : ''}`}
+            style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }}
+          >
             <div className="w-10 h-1 bg-zinc-700 rounded-full mx-auto mb-5" />
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0">
