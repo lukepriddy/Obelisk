@@ -8,6 +8,12 @@ This contains everything you need to run your app locally.
 
 View your app in AI Studio: https://ai.studio/apps/91123241-86ba-4948-b21c-09b686bcc0c4
 
+## Critical Player UI Note
+
+Before changing any full-screen player surface, read
+[Mobile Player Edge-Seam Runbook](docs/mobile-player-edge-seams.md). It records
+the required iOS Safari edge treatment for sheets and character chat.
+
 ## Run Locally
 
 **Prerequisites:**  Node.js
