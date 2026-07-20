@@ -69,6 +69,85 @@ const skyVector = (bearingDeg: number, elevDeg: number) => {
   return [Math.cos(e) * Math.sin(b), Math.cos(e) * Math.cos(b), Math.sin(e)];
 };
 
+type Quaternion = [number, number, number, number];
+
+const matrixToQuaternion = (m: number[]): Quaternion => {
+  const trace = m[0] + m[4] + m[8];
+  let w: number;
+  let x: number;
+  let y: number;
+  let z: number;
+
+  if (trace > 0) {
+    const s = 2 * Math.sqrt(trace + 1);
+    w = 0.25 * s;
+    x = (m[7] - m[5]) / s;
+    y = (m[2] - m[6]) / s;
+    z = (m[3] - m[1]) / s;
+  } else if (m[0] > m[4] && m[0] > m[8]) {
+    const s = 2 * Math.sqrt(1 + m[0] - m[4] - m[8]);
+    w = (m[7] - m[5]) / s;
+    x = 0.25 * s;
+    y = (m[1] + m[3]) / s;
+    z = (m[2] + m[6]) / s;
+  } else if (m[4] > m[8]) {
+    const s = 2 * Math.sqrt(1 + m[4] - m[0] - m[8]);
+    w = (m[2] - m[6]) / s;
+    x = (m[1] + m[3]) / s;
+    y = 0.25 * s;
+    z = (m[5] + m[7]) / s;
+  } else {
+    const s = 2 * Math.sqrt(1 + m[8] - m[0] - m[4]);
+    w = (m[3] - m[1]) / s;
+    x = (m[2] + m[6]) / s;
+    y = (m[5] + m[7]) / s;
+    z = 0.25 * s;
+  }
+
+  const length = Math.hypot(w, x, y, z) || 1;
+  return [w / length, x / length, y / length, z / length];
+};
+
+const quaternionToMatrix = ([w, x, y, z]: Quaternion) => [
+  1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w),
+  2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w),
+  2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y),
+];
+
+const slerpQuaternion = (from: Quaternion, to: Quaternion, amount: number): Quaternion => {
+  let [bw, bx, by, bz] = to;
+  let dot = from[0] * bw + from[1] * bx + from[2] * by + from[3] * bz;
+
+  // q and -q describe the same pose. Take the short arc so the filter cannot
+  // swing through a full turn at the quaternion seam.
+  if (dot < 0) {
+    dot = -dot;
+    bw = -bw; bx = -bx; by = -by; bz = -bz;
+  }
+
+  if (dot > 0.9995) {
+    const q: Quaternion = [
+      from[0] + (bw - from[0]) * amount,
+      from[1] + (bx - from[1]) * amount,
+      from[2] + (by - from[2]) * amount,
+      from[3] + (bz - from[3]) * amount,
+    ];
+    const length = Math.hypot(...q) || 1;
+    return [q[0] / length, q[1] / length, q[2] / length, q[3] / length];
+  }
+
+  const theta = Math.acos(Math.min(1, dot));
+  const sinTheta = Math.sin(theta);
+  const a = Math.sin((1 - amount) * theta) / sinTheta;
+  const b = Math.sin(amount * theta) / sinTheta;
+  return [
+    from[0] * a + bw * b,
+    from[1] * a + bx * b,
+    from[2] * a + by * b,
+    from[3] * a + bz * b,
+  ];
+};
+
 // Rough rear-camera FOV in portrait; only affects spread, not direction.
 const HFOV = 63;
 const VFOV = 95;
@@ -114,7 +193,7 @@ export const SkyLab: React.FC = () => {
   const posRef = useRef<{ lat: number; lng: number; acc: number } | null>(null);
   const anchorRef = useRef<Anchor | null>(null);
   const lastBearing = useRef<number | null>(null);
-  const smoothPos = useRef<{ x: number; y: number } | null>(null);
+  const filteredOrientation = useRef<{ value: Quaternion; at: number } | null>(null);
   const modeRef = useRef(mode);
   const altRef = useRef(altitude);
   const testRef = useRef({ b: testBearing, e: testElev });
@@ -279,7 +358,7 @@ export const SkyLab: React.FC = () => {
       if (bearing === null || elevation === null) {
         el.style.display = 'none';
       } else {
-        const m = deviceToEarth(o.alpha, o.beta, o.gamma);
+        const rawMatrix = deviceToEarth(o.alpha, o.beta, o.gamma);
 
         // ── True-north alignment: measure ONCE, then lock ───────────────────
         // The matrix maps device -> an earth frame whose azimuth origin is
@@ -296,7 +375,7 @@ export const SkyLab: React.FC = () => {
         // of samples agrees, it's locked and never auto-updated again.
         const flatPose = Math.abs(o.beta) < 20 && Math.abs(o.gamma) < 20;
         if (!o.offsetLocked && flatPose && o.heading !== null && o.jitter < 8) {
-          const azInFrame = (toDeg(Math.atan2(m[1], m[4])) + 360) % 360;
+          const azInFrame = (toDeg(Math.atan2(rawMatrix[1], rawMatrix[4])) + 360) % 360;
           const measured = ((o.heading - azInFrame) % 360 + 360) % 360;
           const r = toRad(measured);
           if (!o.primed) {
@@ -314,8 +393,31 @@ export const SkyLab: React.FC = () => {
         o.wellConditioned = o.offsetLocked;
         o.flatPose = flatPose;
 
+        let projectionMatrix = rawMatrix;
+        if (smoothingRef.current) {
+          const rawOrientation = matrixToQuaternion(rawMatrix);
+          const previous = filteredOrientation.current;
+          if (!previous) {
+            filteredOrientation.current = { value: rawOrientation, at: t };
+          } else {
+            const elapsed = Math.min(100, Math.max(0, t - previous.at));
+            // A 150ms low-pass is long enough to damp magnetometer and motion
+            // noise, but short enough that a deliberate pan still tracks the
+            // user's hand. Using elapsed time keeps its behavior consistent
+            // across 30/60/120Hz devices.
+            const blend = 1 - Math.exp(-elapsed / 150);
+            filteredOrientation.current = {
+              value: slerpQuaternion(previous.value, rawOrientation, blend),
+              at: t,
+            };
+          }
+          projectionMatrix = quaternionToMatrix(filteredOrientation.current.value);
+        } else {
+          filteredOrientation.current = null;
+        }
+
         const bearingInFrame = ((bearing - northOffset) % 360 + 360) % 360;
-        const v = earthToDevice(m, skyVector(bearingInFrame, elevation));
+        const v = earthToDevice(projectionMatrix, skyVector(bearingInFrame, elevation));
         // Rear camera looks along -Z in device space.
         const depth = -v[2];
         if (depth <= 0.02) {
@@ -341,26 +443,12 @@ export const SkyLab: React.FC = () => {
 
           if (opacity < 0.01) {
             el.style.display = 'none';
-            smoothPos.current = null;
           } else {
-            // Smooth the PROJECTED POSITION, not the Euler angles. This is
-            // downstream of the matrix so it can't desync the triple, and it
-            // takes the edge off residual magnetometer noise. Snap rather than
-            // glide on big jumps so it doesn't visibly slide across the screen.
-            let px = x, py = y;
-            if (smoothingRef.current) {
-              const prev = smoothPos.current;
-              if (prev && Math.hypot(x - prev.x, y - prev.y) < window.innerWidth * 0.4) {
-                px = prev.x + (x - prev.x) * 0.18;
-                py = prev.y + (y - prev.y) * 0.18;
-              }
-              smoothPos.current = { x: px, y: py };
-            }
             el.style.display = 'block';
             el.style.width = `${size}px`;
             el.style.height = `${size}px`;
             el.style.opacity = `${opacity}`;
-            el.style.transform = `translate3d(${px}px, ${py}px, 0) translate(-50%, -50%)`;
+            el.style.transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -50%)`;
           }
         }
       }
