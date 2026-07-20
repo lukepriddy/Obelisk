@@ -110,31 +110,6 @@
           clip-path: inset(0 16px 0 16px round 24px 24px 0 0);
         }
 
-        /* The locked sheet carries a visible amber outline, so give it a little
-           extra paint headroom and draw its top cap inside the same clipped box.
-           This prevents a right-edge map leak while the amber line follows both
-           rounded corners at the same 1px weight as the focused passphrase field. */
-        .locked-overlay-edge-bleed {
-          left: -20px !important;
-          right: -20px !important;
-        }
-        .locked-sheet-edge {
-          position: relative;
-          clip-path: inset(0 20px 0 20px round 24px 24px 0 0);
-        }
-        .locked-sheet-edge::before {
-          content: '';
-          position: absolute;
-          z-index: 1;
-          pointer-events: none;
-          top: 0;
-          left: 20px;
-          right: 20px;
-          height: 25px;
-          border: 1px solid #f59e0b;
-          border-bottom: 0;
-          border-radius: 24px 24px 0 0;
-        }
       }
 
       /* ── Hide all scrollbars (scroll still works, bar just invisible) ── */
