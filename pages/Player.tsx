@@ -1398,7 +1398,7 @@ export const Player: React.FC = () => {
           onClick={closeTourInfo}
         >
           <div
-            className="w-full max-w-lg flex flex-col rounded-t-3xl shadow-2xl overflow-hidden"
+            className="w-[calc(100%-4rem)] md:w-full max-w-lg flex flex-col rounded-t-3xl shadow-2xl overflow-hidden"
             style={{
               backgroundColor: th.sheetBg,
               transform: tourInfoVisible ? 'translateY(0)' : 'translateY(100%)',
@@ -1416,7 +1416,7 @@ export const Player: React.FC = () => {
               <div className="w-10 h-1 rounded-full" style={{ backgroundColor: th.sheetHandle }} />
             </div>
 
-            <div className="px-6 pt-3 pb-6 flex flex-col gap-4">
+            <div className="px-5 pt-3 pb-6 flex flex-col gap-4">
               {/* Header — mirrors the welcome screen's centred stack. It used to
                   be a left-aligned avatar+title row sitting above a centred
                   description, which read as the title being skewed left. The
@@ -1437,7 +1437,7 @@ export const Player: React.FC = () => {
                     className="w-20 h-20 object-cover rounded-2xl shadow-lg"
                   />
                 )}
-                <div className="min-w-0 w-full px-6">
+                <div className="min-w-0 w-full">
                   <h2 className="font-bold text-xl leading-tight break-words" style={{ color: th.sheetText }}>{tour.title}</h2>
                   {tour.welcome_subtitle && (
                     <p className="text-sm mt-1" style={{ color: accent }}>{tour.welcome_subtitle}</p>
@@ -1892,7 +1892,7 @@ export const Player: React.FC = () => {
           onClick={() => setShowInventory(false)}
         >
           <div
-            className="w-full max-w-lg flex flex-col rounded-t-3xl shadow-2xl overflow-hidden"
+            className="w-[calc(100%-4rem)] md:w-full max-w-lg flex flex-col rounded-t-3xl shadow-2xl overflow-hidden"
             style={{
               backgroundColor: th.sheetBg,
               color: th.sheetText,
@@ -1906,7 +1906,7 @@ export const Player: React.FC = () => {
             </div>
 
             <div
-              className="px-6 pt-3 overflow-y-auto overscroll-contain"
+              className="px-5 pt-3 overflow-y-auto overscroll-contain"
               style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 88px)' }}
             >
               <div className="flex items-center justify-between mb-5">
@@ -1988,7 +1988,7 @@ export const Player: React.FC = () => {
           onClick={closePlayerMenu}
         >
           <div
-            className="w-full max-w-lg rounded-t-3xl shadow-2xl overflow-hidden flex flex-col"
+            className="w-[calc(100%-4rem)] md:w-full max-w-lg rounded-t-3xl shadow-2xl overflow-hidden flex flex-col"
             style={{
               backgroundColor: th.sheetBg,
               color: th.sheetText,
@@ -2305,7 +2305,7 @@ export const Player: React.FC = () => {
               no gap. Amber accent kept on the TOP edge only (1px, same as the
               input's focus border); no border on the sides/bottom. */}
           <div
-            className={`border-t border-amber-500/40 rounded-t-3xl shadow-[0_-12px_28px_rgba(0,0,0,0.35)] w-full max-w-lg px-6 pt-6 max-h-[calc(100dvh-16px)] overflow-y-auto ${lockNudge === 0 ? 'animate-in slide-in-from-bottom-4' : ''}`}
+            className={`border-t border-amber-500/40 rounded-t-3xl w-[calc(100%-4rem)] md:w-full max-w-lg px-5 pt-6 max-h-[calc(100dvh-16px)] overflow-y-auto ${lockNudge === 0 ? 'animate-in slide-in-from-bottom-4' : ''}`}
             style={{ backgroundColor: '#09090b', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }}
           >
             <div className="w-10 h-1 bg-zinc-700 rounded-full mx-auto mb-5" />
