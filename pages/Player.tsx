@@ -1600,35 +1600,6 @@ export const Player: React.FC = () => {
             </div>
           ) : null}
 
-          {/* An AR-only media zone may not have a detail card. Keep this
-              persistent cue available until the player leaves the zone. */}
-          {activeARZone && !activeMediaZone && activeARZone.id !== activeCharacterZone?.id && (
-            <div
-              className="w-full rounded-2xl p-3 flex items-center gap-3 animate-in slide-in-from-bottom-3 duration-300"
-              style={{
-                backgroundColor: th.cardBg,
-                border: `1px solid ${accent}45`,
-                backdropFilter: 'blur(18px)',
-                boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-              }}
-            >
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: `${accent}20` }}>
-                <Camera size={18} color={accent} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-bold" style={{ color: th.cardText }}>Camera object nearby</p>
-                <p className="text-[11px] mt-0.5" style={{ color: th.cardMuted }}>{activeARZone.title}</p>
-              </div>
-              <button
-                onClick={() => setArCameraZone(activeARZone)}
-                className="shrink-0 rounded-xl px-3 py-2 text-xs font-bold active:opacity-70 transition-opacity"
-                style={{ backgroundColor: accent, color: '#fff' }}
-              >
-                Open camera
-              </button>
-            </div>
-          )}
-
           {/* Media-zone content — additive to the existing audio card. */}
           {activeMediaZone && (
             <div
@@ -1852,6 +1823,41 @@ export const Player: React.FC = () => {
             >
               <PlayCircle size={15} />
               {resumingAudio ? 'Starting...' : 'Tap to resume'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* AR is an optional camera mode, not a bottom-card feature. Keep its
+          entry point in a dedicated, persistent position so it remains clear
+          when a zone also has audio, images, character chat, or notices. */}
+      {audioStarted && activeARZone && !arCameraZone && (
+        <div
+          className="absolute left-4 right-4 z-[1600] animate-in slide-in-from-top-4 duration-300"
+          style={{ top: `calc(${TOP_BAR + (showAudioResume ? 92 : 12)}px + env(safe-area-inset-top, 0px))` }}
+        >
+          <div
+            className="max-w-sm mx-auto rounded-2xl shadow-2xl p-3 flex items-center gap-3 backdrop-blur-xl"
+            style={{
+              backgroundColor: th.hudBg,
+              border: `1px solid ${accent}55`,
+              boxShadow: `0 10px 35px rgba(0,0,0,0.45), 0 0 20px ${accent}18`,
+            }}
+          >
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: `${accent}20` }}>
+              <Camera size={19} color={accent} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold" style={{ color: th.hudText }}>Camera object nearby</p>
+              <p className="text-[11px] leading-snug mt-0.5 truncate" style={{ color: th.barMuted }}>{activeARZone.title}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setArCameraZone(activeARZone)}
+              className="h-10 px-3 rounded-xl text-white text-xs font-bold flex items-center gap-1.5 shrink-0 active:scale-95 transition-transform"
+              style={{ backgroundColor: accent }}
+            >
+              <Camera size={15} /> Open camera
             </button>
           </div>
         </div>
