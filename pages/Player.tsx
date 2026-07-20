@@ -2297,7 +2297,7 @@ export const Player: React.FC = () => {
           // lockNudge). Entrance animations only play on the first mount so
           // the remount is invisible.
           key={`${passphraseChallenge.id}:${lockNudge}`}
-          className={`overlay-edge-bleed fixed inset-0 z-[2500] bg-black/70 backdrop-blur-sm flex items-end justify-center overflow-y-auto ${lockNudge === 0 ? 'animate-in fade-in' : ''}`}
+          className={`overlay-edge-bleed locked-overlay-edge-bleed fixed inset-0 z-[2500] bg-black/70 backdrop-blur-sm flex items-end justify-center overflow-y-auto ${lockNudge === 0 ? 'animate-in fade-in' : ''}`}
           style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)' }}
         >
           {/* Bottom-anchored sheet flush with the screen edge (safe-area padding
@@ -2305,7 +2305,7 @@ export const Player: React.FC = () => {
               no gap. Amber accent kept on the TOP edge only (1px, same as the
               input's focus border); no border on the sides/bottom. */}
           <div
-            className={`player-sheet-edge -mb-px border-t border-amber-500/40 rounded-t-3xl w-full max-w-lg px-8 pt-6 max-h-[calc(100dvh-16px)] overflow-y-auto ${lockNudge === 0 ? 'animate-in slide-in-from-bottom-4' : ''}`}
+            className={`locked-sheet-edge -mb-px rounded-t-3xl w-full max-w-lg px-9 pt-6 md:px-8 max-h-[calc(100dvh-16px)] overflow-y-auto ${lockNudge === 0 ? 'animate-in slide-in-from-bottom-4' : ''}`}
             style={{ backgroundColor: '#09090b', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }}
           >
             <div className="w-10 h-1 bg-zinc-700 rounded-full mx-auto mb-5" />
