@@ -1128,8 +1128,10 @@ export const Player: React.FC = () => {
   const isDark  = (tour.player_theme || 'dark') === 'dark';
   const accent  = tour.accent_color || '#10b981';
   const th = {
-    // Top / bottom bars
-    barBg:       isDark ? '#09090b'              : '#ffffff',
+    // Top / bottom bars — intentionally the SAME as sheetBg so a bottom sheet
+    // sliding up out of the footer is seamless (no grey-into-black step), and
+    // the header/footer read as one consistent chrome surface.
+    barBg:       isDark ? '#18181b'              : '#ffffff',
     barBorder:   isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
     barText:     isDark ? '#ffffff'              : '#09090b',
     barMuted:    isDark ? '#71717a'              : '#52525b',
@@ -2457,7 +2459,10 @@ export const Player: React.FC = () => {
         >
           <button
             onClick={openTourInfo}
-            className="w-full backdrop-blur-md flex flex-col items-center gap-1.5 pt-2.5 pb-3"
+            // No backdrop-blur: barBg is opaque, so the blur did nothing but let
+            // Safari tint/re-composite the footer (grey-ish, and shifting after a
+            // blurred sheet opened) — that was the footer's color inconsistency.
+            className="w-full flex flex-col items-center gap-1.5 pt-2.5 pb-3"
             style={{
               backgroundColor: th.barBg,
               borderTop: `1px solid ${th.barBorder}`,
