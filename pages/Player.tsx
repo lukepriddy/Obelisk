@@ -122,6 +122,7 @@ export const Player: React.FC = () => {
   const persistedCharZoneRef = useRef<Zone | null>(null);
   const [showChat, setShowChat] = useState(false);
   const [arCameraZone, setArCameraZone] = useState<Zone | null>(null);
+  const [activeARZone, setActiveARZone] = useState<Zone | null>(null);
   // Incremented only when entering a *different* character zone, so the
   // ChatInterface re-mounts for a fresh session.  Re-entering the same
   // zone keeps history alive.
@@ -487,6 +488,7 @@ export const Player: React.FC = () => {
       const activeState: { id: string; title: string; volume: number; replayable: boolean }[] = [];
       let foundCharZone: Zone | null = null;
       let foundMediaZone: Zone | null = null;
+      let foundARZone: Zone | null = null;
       const currentZoneIds = new Set<string>();
       const currentCollectZoneIds = new Set<string>();
 
@@ -535,6 +537,9 @@ export const Player: React.FC = () => {
 
           // Only activate zone if it's accessible
           if (isZoneAccessible(zone)) {
+            if (!foundARZone && zone.ar_config?.enabled && zone.ar_config.asset_url) {
+              foundARZone = zone;
+            }
             if (zone.type === 'character') {
               foundCharZone = zone;
             } else if (zone.type !== 'discoverable') {
@@ -631,6 +636,7 @@ export const Player: React.FC = () => {
         setActiveZones(activeState);
       }
       setActiveMediaZone(foundMediaZone);
+      setActiveARZone(foundARZone);
 
       if (foundCharZone?.id !== activeCharZoneRef.current?.id) {
         if (foundCharZone) {
@@ -1653,6 +1659,35 @@ export const Player: React.FC = () => {
               </div>
             </div>
           ) : null}
+
+          {/* An AR-only media zone may not have a detail card. Keep this
+              persistent cue available until the player leaves the zone. */}
+          {activeARZone && !activeMediaZone && activeARZone.id !== activeCharacterZone?.id && (
+            <div
+              className="w-full rounded-2xl p-3 flex items-center gap-3 animate-in slide-in-from-bottom-3 duration-300"
+              style={{
+                backgroundColor: th.cardBg,
+                border: `1px solid ${accent}45`,
+                backdropFilter: 'blur(18px)',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+              }}
+            >
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: `${accent}20` }}>
+                <Camera size={18} color={accent} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold" style={{ color: th.cardText }}>Camera object nearby</p>
+                <p className="text-[11px] mt-0.5" style={{ color: th.cardMuted }}>{activeARZone.title}</p>
+              </div>
+              <button
+                onClick={() => setArCameraZone(activeARZone)}
+                className="shrink-0 rounded-xl px-3 py-2 text-xs font-bold active:opacity-70 transition-opacity"
+                style={{ backgroundColor: accent, color: '#fff' }}
+              >
+                Open camera
+              </button>
+            </div>
+          )}
 
           {/* Media-zone content — additive to the existing audio card. */}
           {activeMediaZone && (
