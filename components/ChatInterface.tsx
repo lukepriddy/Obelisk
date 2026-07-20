@@ -198,7 +198,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
     <div
       key={kbNudge}
       className={`
-        overlay-edge-bleed fixed inset-0 z-[5000]
+        overlay-edge-bleed chat-edge-shield fixed inset-0 z-[5000]
         flex flex-col px-8
         md:inset-auto md:bottom-6 md:right-6
         md:w-[420px] md:h-[600px] md:px-0
@@ -206,6 +206,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
         ${t.root}
       `}
       style={{
+        '--chat-edge-bg': dk ? '#09090b' : '#ffffff',
         transform: dragOffset ? `translateY(${dragOffset}px)` : undefined,
         transition: isDraggingHandle ? 'none' : 'transform 220ms cubic-bezier(0.32, 0.72, 0, 1)',
       }}

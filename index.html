@@ -102,6 +102,13 @@
           right: -16px !important;
         }
 
+        /* Chat is a full-screen surface rather than a bottom sheet. Its own
+           opaque paint extends past the layout edge, so iOS cannot reveal a
+           hairline of the map during compositing or keyboard transitions. */
+        .chat-edge-shield {
+          box-shadow: -16px 0 0 var(--chat-edge-bg), 16px 0 0 var(--chat-edge-bg);
+        }
+
       }
 
       /* ── Hide all scrollbars (scroll still works, bar just invisible) ── */
