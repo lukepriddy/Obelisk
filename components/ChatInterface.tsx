@@ -278,7 +278,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
 
       {/* ── Input bar ── */}
       <div
-        className={`px-0 pt-2 shrink-0 border-t md:px-3 ${t.inputBar}`}
+        className={`relative px-0 pt-2 shrink-0 before:absolute before:top-0 before:-left-4 before:h-px before:w-[calc(100%+2rem)] md:px-3 md:before:left-0 md:before:w-full ${dk ? 'before:bg-zinc-800' : 'before:bg-zinc-200'}`}
         style={{ paddingBottom: 'calc(10px + env(safe-area-inset-bottom, 0px))' }}
       >
         <div className="flex items-end gap-2">
