@@ -196,9 +196,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
       key={kbNudge}
       className={`
         overlay-edge-bleed fixed inset-0 z-[5000]
-        flex flex-col
+        flex flex-col px-4
         md:inset-auto md:bottom-6 md:right-6
-        md:w-[420px] md:h-[600px]
+        md:w-[420px] md:h-[600px] md:px-0
         md:rounded-2xl md:border md:shadow-2xl
         ${t.root}
       `}
@@ -213,7 +213,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
       </button>
 
       {/* ── Header ── */}
-      <div className={`flex items-center gap-3 px-4 pt-0.5 pb-3 border-b shrink-0 ${t.header}`}>
+      <div className={`flex items-center gap-3 px-0 pt-0.5 pb-3 border-b shrink-0 md:px-4 ${t.header}`}>
         {zone.character_image_url ? (
           <div className="relative shrink-0">
             <img src={zone.character_image_url} alt={zone.title} className="w-9 h-9 rounded-lg object-cover" />
@@ -244,7 +244,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
       </div>
 
       {/* ── Chat log ── */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 pt-3 pb-6 flex flex-col gap-3 min-h-0">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-0 pt-3 pb-6 flex flex-col gap-3 min-h-0 md:px-4">
         {errorMsg && (
           <div className={`text-sm px-4 py-3 rounded-2xl text-center border ${t.errorBg}`}>
             {errorMsg}
@@ -278,7 +278,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
 
       {/* ── Input bar ── */}
       <div
-        className={`px-3 pt-2 shrink-0 border-t ${t.inputBar}`}
+        className={`px-0 pt-2 shrink-0 border-t md:px-3 ${t.inputBar}`}
         style={{ paddingBottom: 'calc(10px + env(safe-area-inset-bottom, 0px))' }}
       >
         <div className="flex items-end gap-2">

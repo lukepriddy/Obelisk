@@ -1506,11 +1506,11 @@ export const Player: React.FC = () => {
                   className="absolute inset-0 rounded-full animate-ping"
                   style={{ backgroundColor: accent, opacity: 0.25, animationDuration: '2.5s' }}
                 />
-                {/* Character artwork — translucent circle so the map shows through
-                    rather than a solid dark blob covering it. */}
+                {/* Character artwork sits on an opaque card surface so the
+                    minimized control remains clearly tappable over any map. */}
                 <div
                   className="absolute inset-0 rounded-full overflow-hidden shadow-2xl flex items-center justify-center"
-                  style={{ backgroundColor: 'rgba(24,24,27,0.5)', boxShadow: `0 0 20px ${accent}45` }}
+                  style={{ backgroundColor: th.cardBg, boxShadow: `0 0 20px ${accent}45` }}
                 >
                   {activeCharacterZone.character_image_url
                     ? <img src={activeCharacterZone.character_image_url} alt={activeCharacterZone.title} className="w-[70%] h-[70%] object-contain" />
