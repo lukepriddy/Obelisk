@@ -196,7 +196,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
       key={kbNudge}
       className={`
         overlay-edge-bleed fixed inset-0 z-[5000]
-        flex flex-col px-4
+        flex flex-col px-8
         md:inset-auto md:bottom-6 md:right-6
         md:w-[420px] md:h-[600px] md:px-0
         md:rounded-2xl md:border md:shadow-2xl

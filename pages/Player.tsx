@@ -1510,7 +1510,7 @@ export const Player: React.FC = () => {
                     minimized control remains clearly tappable over any map. */}
                 <div
                   className="absolute inset-0 rounded-full overflow-hidden shadow-2xl flex items-center justify-center"
-                  style={{ backgroundColor: th.cardBg, boxShadow: `0 0 20px ${accent}45` }}
+                  style={{ backgroundColor: isDark ? '#18181b' : '#ffffff', boxShadow: `0 0 20px ${accent}45` }}
                 >
                   {activeCharacterZone.character_image_url
                     ? <img src={activeCharacterZone.character_image_url} alt={activeCharacterZone.title} className="w-[70%] h-[70%] object-contain" />
@@ -2305,7 +2305,7 @@ export const Player: React.FC = () => {
               no gap. Amber accent kept on the TOP edge only (1px, same as the
               input's focus border); no border on the sides/bottom. */}
           <div
-            className={`border-t border-amber-500/40 rounded-t-3xl shadow-2xl w-full max-w-lg px-6 pt-6 max-h-[calc(100dvh-16px)] overflow-y-auto ${lockNudge === 0 ? 'animate-in slide-in-from-bottom-4' : ''}`}
+            className={`border-t border-amber-500/40 rounded-t-3xl shadow-[0_-12px_28px_rgba(0,0,0,0.35)] w-full max-w-lg px-6 pt-6 max-h-[calc(100dvh-16px)] overflow-y-auto ${lockNudge === 0 ? 'animate-in slide-in-from-bottom-4' : ''}`}
             style={{ backgroundColor: '#09090b', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }}
           >
             <div className="w-10 h-1 bg-zinc-700 rounded-full mx-auto mb-5" />
