@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Zone, ChatMessage } from '../types';
 import { geminiService } from '../services/geminiService';
-import { Send, ChevronDown } from 'lucide-react';
+import { Send, X } from 'lucide-react';
 
 // Appended to every character system instruction so Gemini never
 // adds stage directions like "(smiles)" or "(pauses solemnly)".
@@ -59,6 +59,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   const textareaRef    = useRef<HTMLTextAreaElement>(null);
   const hasGreetedRef  = useRef(hasExistingHistory); // skip greeting if history loaded
   const hasUnlockedRef = useRef(false);
+  const handleStartYRef = useRef<number | null>(null);
 
   // ── Textarea auto-resize ──────────────────────────────────────────────────
   useEffect(() => {
@@ -203,14 +204,19 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
         ${t.root}
       `}
     >
-      {/* ── Drag handle — also a close affordance ── */}
-      <button
-        onClick={handleClose}
-        aria-label="Close"
+      {/* ── Drag handle — downward swipe dismisses; the X remains the explicit close. */}
+      <div
+        onTouchStart={(event) => { handleStartYRef.current = event.touches[0]?.clientY ?? null; }}
+        onTouchEnd={(event) => {
+          const startY = handleStartYRef.current;
+          handleStartYRef.current = null;
+          if (startY !== null && event.changedTouches[0] && event.changedTouches[0].clientY - startY > 56) handleClose();
+        }}
         className="flex items-center justify-center pt-3 pb-1.5 w-full shrink-0"
+        aria-hidden="true"
       >
         <div className={`w-10 h-[3px] rounded-full ${t.handle}`} />
-      </button>
+      </div>
 
       {/* ── Header ── */}
       <div className={`flex items-center gap-3 px-0 pt-0.5 pb-3 border-b shrink-0 md:px-4 ${t.header}`}>
@@ -239,7 +245,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
           className={`w-9 h-9 flex items-center justify-center rounded-full transition-colors shrink-0 ${t.closeBtn}`}
           aria-label="Close chat"
         >
-          <ChevronDown size={20} />
+          <X size={20} />
         </button>
       </div>
 
