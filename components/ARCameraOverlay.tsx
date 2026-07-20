@@ -133,7 +133,7 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
   const videoRef = useRef<HTMLVideoElement>(null);
   const objectRef = useRef<HTMLDivElement>(null);
   const threeHostRef = useRef<HTMLDivElement>(null);
-  const threeRef = useRef<{ renderer: THREE.WebGLRenderer; scene: THREE.Scene; camera: THREE.PerspectiveCamera; model: THREE.Group | null } | null>(null);
+  const threeRef = useRef<{ renderer: THREE.WebGLRenderer; scene: THREE.Scene; camera: THREE.PerspectiveCamera; model: THREE.Group | null; mixer: THREE.AnimationMixer | null; lastFrame: number } | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const orientationRef = useRef({ alpha: 0, beta: 0, gamma: 0, heading: null as number | null });
   const filterRef = useRef<{ value: Quaternion; at: number } | null>(null);
@@ -179,7 +179,7 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
     fillLight.position.set(-3, 1, -2);
     scene.add(fillLight);
 
-    const state = { renderer, scene, camera, model: null as THREE.Group | null };
+    const state = { renderer, scene, camera, model: null as THREE.Group | null, mixer: null as THREE.AnimationMixer | null, lastFrame: performance.now() };
     threeRef.current = state;
     const loader = new GLTFLoader();
     loader.load(
@@ -197,6 +197,10 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
         pivot.visible = false;
         scene.add(pivot);
         state.model = pivot;
+        if (gltf.animations.length) {
+          state.mixer = new THREE.AnimationMixer(pivot);
+          gltf.animations.forEach(clip => state.mixer?.clipAction(clip).play());
+        }
       },
       undefined,
       () => setModelError('This GLB could not be loaded. Try a smaller .glb with embedded textures.'),
@@ -278,6 +282,10 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
       raf = requestAnimationFrame(frame);
       const object = objectRef.current;
       const three = threeRef.current;
+      if (three) {
+        three.mixer?.update(Math.min(0.1, Math.max(0, (time - three.lastFrame) / 1000)));
+        three.lastFrame = time;
+      }
       const usingGlb = isGlbAsset(configRef.current);
       const orientation = orientationRef.current;
       const calibration = calibrationRef.current;
