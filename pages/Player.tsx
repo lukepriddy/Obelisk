@@ -1398,7 +1398,7 @@ export const Player: React.FC = () => {
           onClick={closeTourInfo}
         >
           <div
-            className="player-sheet-edge w-full max-w-lg flex flex-col rounded-t-3xl shadow-2xl overflow-hidden"
+            className="-mb-px w-full max-w-lg flex flex-col rounded-t-[40px] shadow-2xl overflow-hidden"
             style={{
               backgroundColor: th.sheetBg,
               transform: tourInfoVisible ? 'translateY(0)' : 'translateY(100%)',
@@ -1892,7 +1892,7 @@ export const Player: React.FC = () => {
           onClick={() => setShowInventory(false)}
         >
           <div
-            className="player-sheet-edge w-full max-w-lg flex flex-col rounded-t-3xl shadow-2xl overflow-hidden"
+            className="-mb-px w-full max-w-lg flex flex-col rounded-t-[40px] shadow-2xl overflow-hidden"
             style={{
               backgroundColor: th.sheetBg,
               color: th.sheetText,
@@ -1988,7 +1988,7 @@ export const Player: React.FC = () => {
           onClick={closePlayerMenu}
         >
           <div
-            className="player-sheet-edge w-full max-w-lg rounded-t-3xl shadow-2xl overflow-hidden flex flex-col"
+            className="-mb-px w-full max-w-lg rounded-t-[40px] shadow-2xl overflow-hidden flex flex-col"
             style={{
               backgroundColor: th.sheetBg,
               color: th.sheetText,
