@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Zone, ChatMessage } from '../types';
 import { geminiService } from '../services/geminiService';
-import { Send, ChevronDown } from 'lucide-react';
+import { Send, X } from 'lucide-react';
 
 // Appended to every character system instruction so Gemini never
 // adds stage directions like "(smiles)" or "(pauses solemnly)".
@@ -24,9 +24,10 @@ interface ChatInterfaceProps {
   onClose: () => void;
   onUnlock?: (zoneId: string) => void;
   theme?: 'dark' | 'light';
+  accent?: string;
 }
 
-export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onUnlock, theme = 'dark' }) => {
+export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onUnlock, theme = 'dark', accent = '#10b981' }) => {
   // ── History via sessionStorage — survives any remount within the same tab ──
   const storageKey = `obelisk_chat_${zone.id}`;
   const loadHistory = (): ChatMessage[] => {
@@ -40,6 +41,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   const [isSending, setIsSending]     = useState(false);
   const [errorMsg, setErrorMsg]       = useState<string | null>(null);
   const [inputText, setInputText]     = useState('');
+  const [dragOffset, setDragOffset]   = useState(0);
+  const [isDraggingHandle, setIsDraggingHandle] = useState(false);
 
   // ── Rate limits: conversation winds down gracefully ───────────────────────
   // Derived from saved history so state survives remounts within the same tab.
@@ -47,10 +50,18 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   const [chatLocked, setChatLocked] = useState(savedModelCount >= TEXT_LIMIT);
   const textCountRef  = useRef(savedModelCount);
 
+  // Bumped after the keyboard is dismissed to REMOUNT the fixed root — iOS can
+  // leave a fixed element painted a few px off after the keyboard closes while
+  // every JS metric reads in-sync; recreating the element is the one reliable
+  // repaint. History lives in sessionStorage so nothing is lost, and the
+  // greeting is skipped when history already exists (no re-greet).
+  const [kbNudge, setKbNudge] = useState(0);
+
   const scrollRef      = useRef<HTMLDivElement>(null);
   const textareaRef    = useRef<HTMLTextAreaElement>(null);
   const hasGreetedRef  = useRef(hasExistingHistory); // skip greeting if history loaded
   const hasUnlockedRef = useRef(false);
+  const handleStartYRef = useRef<number | null>(null);
 
   // ── Textarea auto-resize ──────────────────────────────────────────────────
   useEffect(() => {
@@ -69,27 +80,29 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
     headerMuted:    dk ? 'text-zinc-500'                  : 'text-zinc-500',
     closeBtn:       dk ? 'text-zinc-400 hover:text-white hover:bg-zinc-800' : 'text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100',
     errorBg:        dk ? 'bg-red-500/10 border-red-500/30 text-red-300' : 'bg-red-50 border-red-200 text-red-600',
-    userBubble:     'bg-emerald-600 text-white rounded-br-md',
+    userBubble:     'text-white rounded-br-md',   // background set inline from accent
     aiBubble:       dk ? 'bg-zinc-800 text-zinc-100 rounded-bl-md' : 'bg-zinc-100 text-zinc-900 rounded-bl-md',
     typingDot:      dk ? 'bg-zinc-400' : 'bg-zinc-400',
     typingBg:       dk ? 'bg-zinc-800' : 'bg-zinc-100',
     inputBar:       dk ? 'border-zinc-800' : 'border-zinc-200',
     inputField:     dk ? 'bg-zinc-800 border-zinc-700 text-white placeholder-zinc-500 focus:border-indigo-500/60'
                        : 'bg-zinc-100 border-zinc-200 text-zinc-900 placeholder-zinc-400 focus:border-indigo-400',
-    sendActive:     'bg-emerald-600 hover:bg-emerald-500 text-white',
+    sendActive:     'text-white',   // background set inline from accent
     sendInactive:   dk ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed' : 'bg-zinc-100 text-zinc-400 cursor-not-allowed',
     spinnerBorder:  dk ? 'border-zinc-700 border-t-indigo-400' : 'border-zinc-300 border-t-indigo-500',
     spinnerText:    dk ? 'text-zinc-500' : 'text-zinc-500',
     handle:         dk ? 'bg-white/20' : 'bg-black/15',
+    // 'ready' colour comes from the accent inline; 'loading' stays amber.
     statusDot: (state: 'loading' | 'ready') =>
-      state === 'loading' ? 'bg-amber-400 animate-pulse'
-      : 'bg-emerald-400',
+      state === 'loading' ? 'bg-amber-400 animate-pulse' : '',
   };
 
   // ── Auto-scroll ───────────────────────────────────────────────────────────
+  // kbNudge in the deps so the remounted (keyboard-dismiss) message list snaps
+  // back to the bottom instead of showing the top.
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [history, isSending]);
+  }, [history, isSending, kbNudge]);
 
   // ── Persist history to sessionStorage on every change ───────────────────
   useEffect(() => {
@@ -183,33 +196,72 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div
+      key={kbNudge}
       className={`
-        fixed inset-0 z-[5000]
-        flex flex-col
+        overlay-edge-bleed fixed inset-0 z-[5000]
+        flex flex-col px-8
         md:inset-auto md:bottom-6 md:right-6
-        md:w-[420px] md:h-[600px]
+        md:w-[420px] md:h-[600px] md:px-0
         md:rounded-2xl md:border md:shadow-2xl
         ${t.root}
       `}
+      style={{
+        transform: dragOffset ? `translateY(${dragOffset}px)` : undefined,
+        transition: isDraggingHandle ? 'none' : 'transform 220ms cubic-bezier(0.32, 0.72, 0, 1)',
+      }}
     >
-      {/* ── Drag handle — also a close affordance ── */}
-      <button
-        onClick={handleClose}
-        aria-label="Close"
-        className="flex items-center justify-center pt-3 pb-1.5 w-full shrink-0"
+      {/* ── Drag handle — downward swipe dismisses; the X remains the explicit close. */}
+      <div
+        onTouchStart={(event) => {
+          handleStartYRef.current = event.touches[0]?.clientY ?? null;
+          setIsDraggingHandle(true);
+        }}
+        onTouchMove={(event) => {
+          const startY = handleStartYRef.current;
+          if (startY === null || !event.touches[0]) return;
+          const offset = Math.max(0, event.touches[0].clientY - startY);
+          setDragOffset(offset);
+          if (offset > 0) event.preventDefault();
+        }}
+        onTouchEnd={(event) => {
+          const startY = handleStartYRef.current;
+          handleStartYRef.current = null;
+          setIsDraggingHandle(false);
+          const offset = startY !== null && event.changedTouches[0]
+            ? Math.max(0, event.changedTouches[0].clientY - startY)
+            : 0;
+          if (offset > 96) {
+            handleClose();
+          } else {
+            setDragOffset(0);
+          }
+        }}
+        onTouchCancel={() => {
+          handleStartYRef.current = null;
+          setIsDraggingHandle(false);
+          setDragOffset(0);
+        }}
+        className="flex items-center justify-center pt-3 pb-1.5 w-full shrink-0 touch-none"
+        aria-hidden="true"
       >
         <div className={`w-10 h-[3px] rounded-full ${t.handle}`} />
-      </button>
+      </div>
 
       {/* ── Header ── */}
-      <div className={`flex items-center gap-3 px-4 pt-0.5 pb-3 border-b shrink-0 ${t.header}`}>
+      <div className={`flex items-center gap-3 px-0 pt-0.5 pb-3 border-b shrink-0 md:px-4 ${t.header}`}>
         {zone.character_image_url ? (
           <div className="relative shrink-0">
             <img src={zone.character_image_url} alt={zone.title} className="w-9 h-9 rounded-lg object-cover" />
-            <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 transition-colors ${dk ? 'border-zinc-950' : 'border-white'} ${t.statusDot(dotState)}`} />
+            <span
+              className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 transition-colors ${dk ? 'border-zinc-950' : 'border-white'} ${t.statusDot(dotState)}`}
+              style={dotState === 'ready' ? { backgroundColor: accent } : undefined}
+            />
           </div>
         ) : (
-          <div className={`w-2 h-2 rounded-full shrink-0 transition-colors ${t.statusDot(dotState)}`} />
+          <div
+            className={`w-2 h-2 rounded-full shrink-0 transition-colors ${t.statusDot(dotState)}`}
+            style={dotState === 'ready' ? { backgroundColor: accent } : undefined}
+          />
         )}
         <div className="flex-1 min-w-0">
           <h3 className={`font-semibold text-sm leading-tight truncate ${t.headerText}`}>{zone.title}</h3>
@@ -222,12 +274,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
           className={`w-9 h-9 flex items-center justify-center rounded-full transition-colors shrink-0 ${t.closeBtn}`}
           aria-label="Close chat"
         >
-          <ChevronDown size={20} />
+          <X size={20} />
         </button>
       </div>
 
       {/* ── Chat log ── */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 pt-3 pb-6 flex flex-col gap-3 min-h-0">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-0 pt-3 pb-6 flex flex-col gap-3 min-h-0 md:px-4">
         {errorMsg && (
           <div className={`text-sm px-4 py-3 rounded-2xl text-center border ${t.errorBg}`}>
             {errorMsg}
@@ -236,9 +288,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
 
         {history.map((msg, i) => (
           <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[78%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
-              msg.role === 'user' ? t.userBubble : t.aiBubble
-            }`}>
+            <div
+              className={`max-w-[78%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
+                msg.role === 'user' ? t.userBubble : t.aiBubble
+              }`}
+              style={msg.role === 'user' ? { backgroundColor: accent } : undefined}
+            >
               {msg.text}
             </div>
           </div>
@@ -258,7 +313,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
 
       {/* ── Input bar ── */}
       <div
-        className={`px-3 pt-2 shrink-0 border-t ${t.inputBar}`}
+        className={`relative px-0 pt-2 shrink-0 before:absolute before:top-0 before:-left-4 before:h-px before:w-[calc(100%+2rem)] md:px-3 md:before:left-0 md:before:w-full ${dk ? 'before:bg-zinc-800' : 'before:bg-zinc-200'}`}
         style={{ paddingBottom: 'calc(10px + env(safe-area-inset-bottom, 0px))' }}
       >
         <div className="flex items-end gap-2">
@@ -270,6 +325,15 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
             rows={1}
             disabled={isLoading || chatLocked}
             onChange={(e) => setInputText(e.target.value)}
+            onBlur={() => {
+              // Keyboard dismissed → remount the fixed root to repaint it (see
+              // kbNudge), unless focus just moved elsewhere in the chat.
+              window.setTimeout(() => {
+                const ae = document.activeElement;
+                if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return;
+                setKbNudge(n => n + 1);
+              }, 350);
+            }}
             style={{ fontSize: '16px', overflowY: 'hidden' }}
           />
 
@@ -279,6 +343,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
             className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all ${
               inputText.trim() && !isLoading && !chatLocked ? t.sendActive : t.sendInactive
             }`}
+            style={inputText.trim() && !isLoading && !chatLocked ? { backgroundColor: accent } : undefined}
           >
             <Send size={15} />
           </button>

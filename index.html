@@ -4,11 +4,22 @@
     <meta charset="UTF-8" />
 
     <!--
-      viewport-fit=cover → content extends into the notch/home-indicator safe areas
-      on iPhones. Combined with env(safe-area-inset-*) already used throughout the
-      app, this gives true edge-to-edge on all modern iPhones.
+      viewport-fit=cover → content extends into the notch/home-indicator safe areas.
+
+      maximum-scale=1 + user-scalable=no → the page can NEVER scale-zoom: not on
+      input focus, not on double-tap, and any zoom persisted by Safari from an
+      old session gets clamped back to 1:1 on load. This is a product decision:
+      the only zoom in Obelisk is the map's own pinch (MapLibre camera zoom on
+      its canvas — unaffected by the viewport meta).
+
+      History: maximum-scale was once removed because it was blamed for the
+      fixed header/footer drifting out of sync with viewport-fit=cover. That
+      drift only manifests when Safari ATTEMPTS an auto-zoom — which can no
+      longer happen: inputs are forced ≥16px (no focus zoom) and
+      touch-action: manipulation kills double-tap zoom. With the triggers gone,
+      keeping the hard clamp is safe. Do not remove it again.
     -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 
     <title>Obelisk</title>
 
@@ -24,14 +35,6 @@
     <meta name="apple-mobile-web-app-title" content="Obelisk" />
     <!-- 180×180 PNG — add public/icons/apple-touch-icon.png to enable       -->
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
-
-    <!-- ── Leaflet CSS ───────────────────────────────────────────────────── -->
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-      crossorigin=""
-    />
 
     <!-- Tailwind is now compiled at build time (see tailwind.config.js) —
          no CDN script, no unstyled first-paint flash. -->
@@ -63,10 +66,50 @@
         }
       }
 
-      /* ── Leaflet ─────────────────────────────────────────────────────── */
-      .leaflet-container {
-        z-index: 0;
-        background: #09090b;
+      /* ── Kill iOS Safari's native double-tap ("smart") zoom. This was the
+         last remaining way the whole page could get scale-zoomed: inputs are
+         ≥16px (no focus zoom) and pinch is cancelled by the gesture handler,
+         but a quick double tap near any control still zoomed the page — and
+         Safari persists that zoom across reloads. `manipulation` disables only
+         double-tap zoom; scrolling/panning is untouched.
+         NOTE: touch-action does NOT inherit — the browser evaluates it on the
+         element actually touched — so this must be `*`, not html/body. The
+         MapLibre canvas is unaffected: its own class + inline touch-action
+         rules beat the zero-specificity `*` selector, so map pan/pinch/rotate
+         keep working. ──────────────────────────────────────────────────── */
+      * {
+        touch-action: manipulation;
+      }
+
+      /* ── Edge-bleed for full-screen overlays (sheets, modals, welcome, chat).
+         With the zoom-clamp viewport meta (maximum-scale=1 + user-scalable=no +
+         viewport-fit=cover), iOS Safari's visible screen edge and the layout
+         box can disagree by a couple of px on the right — every full-bleed
+         dark surface then shows a hairline of the map beside it. Same cure
+         that fixed the top/bottom bars: overhang the surface past both edges
+         so the mismatch has nothing to expose. Elements using this class must
+         be position:fixed — an absolute overhang gets clipped by the app
+         shell's overflow-hidden. !important because the built Tailwind CSS
+         (inset-0) loads after this inline block. Phone-width only; desktop
+         doesn't have the mismatch and chat's md: popup layout must win. ── */
+      @media (max-width: 767px) {
+        .overlay-edge-bleed {
+          /* Overhang each full-bleed surface past both screen edges so the iOS
+             visible-edge-vs-layout-box mismatch (and post-keyboard paint drift)
+             has nothing to expose. 16px headroom; sheets have 24px corner radii
+             and 24px content padding, so the lost strip is invisible. */
+          left: -16px !important;
+          right: -16px !important;
+        }
+
+        /* Bottom sheets keep their body flush with the visible screen edges,
+           while this clip reveals real rounded corners only at the top. The
+           sheet itself is still oversized beneath the clip, so there is no
+           map seam down either side. */
+        .player-sheet-edge {
+          clip-path: inset(0 16px 0 16px round 24px 24px 0 0);
+        }
+
       }
 
       /* ── Hide all scrollbars (scroll still works, bar just invisible) ── */
@@ -113,6 +156,86 @@
 
     <div id="root" class="h-full"></div>
     <script type="module" src="/index.tsx"></script>
+
+    <!-- ── Block page-level pinch zoom ──────────────────────────────────────
+         Prevent iOS Safari's page-zoom gesture so a stray pinch can't zoom the
+         whole player chrome. This only cancels the pinch GESTURE — it doesn't
+         touch the viewport meta or layout, so header/footer/welcome stay put.
+         The MapLibre map zooms via its own touch handling on the canvas and is
+         unaffected. -->
+    <script>
+      ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (evt) {
+        document.addEventListener(evt, function (e) { e.preventDefault(); }, { passive: false });
+      });
+    </script>
+
+    <!-- ── Backstop: reset a stuck page zoom ─────────────────────────────────
+         The viewport meta's maximum-scale=1 should make page zoom impossible
+         and clamp any zoom Safari persisted from old builds. This watchdog is
+         the backstop for the rare paths where Safari overrides the clamp
+         (e.g. accessibility pinch): if the visual viewport ever reports
+         scale > 1, rewriting the meta content forces Safari to re-apply the
+         clamp and snap back to 1:1. -->
+    <script>
+      (function () {
+        var vv = window.visualViewport;
+        var meta = document.querySelector('meta[name="viewport"]');
+        if (!vv || !meta) return;
+        var BASE = meta.getAttribute('content');
+        var resetting = false;
+        function keyboardOpen() {
+          var ae = document.activeElement;
+          return !!ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable);
+        }
+        function heal() {
+          if (resetting) return;
+          resetting = true;
+          window.scrollTo(0, 0);
+          meta.setAttribute('content', BASE + ', maximum-scale=1');
+          setTimeout(function () {
+            meta.setAttribute('content', BASE);
+            resetting = false;
+          }, 250);
+        }
+        function resync() {
+          // While an input is focused, Safari legitimately pans/resizes the
+          // visual viewport to reveal the field — never fight that.
+          if (keyboardOpen()) return;
+          // Desync = any disagreement between visual and layout viewports:
+          //  - scale drift (pinch/accessibility zoom that beat the clamp)
+          //  - width mismatch or horizontal offset at ~1x.
+          var desynced =
+            vv.scale > 1.02 ||
+            Math.abs(vv.width - window.innerWidth) > 1 ||
+            Math.abs(vv.offsetLeft) > 1;
+          if (desynced) heal();
+        }
+        window.addEventListener('pageshow', resync);
+        var t;
+        var lastHeight = vv.height;
+        vv.addEventListener('resize', function () {
+          var grew = vv.height - lastHeight;
+          lastHeight = vv.height;
+          clearTimeout(t);
+          // Viewport got much taller = the keyboard just closed. This is the
+          // one path where iOS can leave fixed elements PAINTED offset while
+          // every JS metric reads in-sync — heal unconditionally instead of
+          // trusting the desync checks.
+          if (grew > 100 && !keyboardOpen()) { t = setTimeout(heal, 250); return; }
+          t = setTimeout(resync, 300);
+        });
+        vv.addEventListener('scroll', function () {
+          clearTimeout(t);
+          t = setTimeout(resync, 300);
+        });
+        // Keyboard dismissal: focus leaves the input slightly before the
+        // viewport settles — heal shortly after, unconditionally.
+        document.addEventListener('focusout', function () {
+          setTimeout(function () { if (!keyboardOpen()) heal(); }, 450);
+        });
+        resync();
+      })();
+    </script>
 
     <!-- ── Register service worker (enables Chrome install prompt + offline) -->
     <script>

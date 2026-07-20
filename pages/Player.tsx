@@ -1,7 +1,7 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { MapContainer, TileLayer, Marker, Circle, useMap, useMapEvents } from 'react-leaflet';
-import L from 'leaflet';
+import { PlayerMap } from '../components/PlayerMap';
+import { WelcomePreviewMap, WelcomePreviewHandle } from '../components/WelcomePreviewMap';
 import { getTourById, getZonesByTourId, startSession, endSession, recordZoneVisit } from '../services/db';
 import { audioService } from '../services/audioService';
 import {
@@ -14,63 +14,43 @@ import {
 } from '../services/progressionService';
 import { getDistance, calculateAttenuation } from '../utils/geo';
 import { PlayerProgress, ProgressionReward, Tour, Zone } from '../types';
-import { FONT_STYLES, MAP_STYLES } from '../constants';
-import { Loader2, PlayCircle, Volume2, Mic, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu, Layers, Locate, RotateCcw, ZoomIn, ZoomOut, Backpack, Gem, Trash2, Info, RefreshCw, LogOut, Bug, Navigation, ChevronRight, Camera } from 'lucide-react';
+import { FONT_STYLES, MAP_STYLES, DEFAULT_MAP_STYLE } from '../constants';
+import { Loader2, PlayCircle, Volume2, MessageCircle, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu, Layers, Locate, RotateCcw, ZoomIn, ZoomOut, Backpack, Gem, Trash2, Info, RefreshCw, LogOut, Bug, Navigation, ChevronRight, Camera } from 'lucide-react';
 import { ChatInterface } from '../components/ChatInterface';
 import { ARCameraOverlay } from '../components/ARCameraOverlay';
 
-// Custom icons
-const UserIcon = L.divIcon({
-  html: `<div style="background-color: #ef4444; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
-  className: 'custom-user-icon',
-  iconSize: [16, 16],
-  iconAnchor: [8, 8]
-});
+// Player map style options, in selector order (Satellite HD default first).
+const PLAYER_MAP_STYLE_ORDER = ['satellite-hd', 'satellite', 'voyager', 'dark', 'light', 'streets'] as const;
 
-const PLAYER_MAP_STYLE_ORDER = ['satellite', 'voyager', 'dark', 'light'] as const;
-
-// Map controller — only re-centers when `enabled` (user hasn't manually panned away).
-const MapRecenter = ({ lat, lng, enabled }: { lat: number; lng: number; enabled: boolean }) => {
-  const map = useMap();
+// Live layout-vs-visual viewport numbers, rendered inside Debug mode. Exists to
+// turn "there's a hairline strip on the right" reports into exact figures: if
+// innerWidth and visualViewport.width disagree (or scale ≠ 1), that delta IS
+// the strip, and we know precisely how many px the edge-bleed must cover.
+const ViewportStats: React.FC<{ labelColor: string; valueColor: string }> = ({ labelColor, valueColor }) => {
+  const [, force] = useState(0);
   useEffect(() => {
-    if (enabled) map.setView([lat, lng], map.getZoom());
-  }, [lat, lng, map, enabled]);
-  return null;
-};
-
-// Detects a user-initiated drag so we can pause auto-follow.
-const DragDetector = ({ onDrag }: { onDrag: () => void }) => {
-  useMapEvents({ dragstart: onDrag });
-  return null;
-};
-
-// Forces Leaflet to re-measure container after CSS aspect-ratio resolves
-const InvalidateSize = () => {
-  const map = useMap();
-  useEffect(() => {
-    const t = setTimeout(() => map.invalidateSize(), 50);
-    return () => clearTimeout(t);
-  }, [map]);
-  return null;
-};
-
-// Leaflet reads interaction options only when the map is created. Toggle the
-// handlers directly so the welcome preview can become interactive after a tap.
-const WelcomeMapInteraction = ({ enabled }: { enabled: boolean }) => {
-  const map = useMap();
-  useEffect(() => {
-    const handlers = [
-      map.dragging,
-      map.touchZoom,
-      map.doubleClickZoom,
-      map.boxZoom,
-      map.keyboard,
-    ];
-    handlers.forEach(handler => enabled ? handler.enable() : handler.disable());
-    map.getContainer().style.touchAction = enabled ? 'none' : 'pan-y';
-    map.invalidateSize();
-  }, [enabled, map]);
-  return null;
+    const vv = window.visualViewport;
+    const bump = () => force(n => n + 1);
+    vv?.addEventListener('resize', bump);
+    vv?.addEventListener('scroll', bump);
+    window.addEventListener('resize', bump);
+    return () => {
+      vv?.removeEventListener('resize', bump);
+      vv?.removeEventListener('scroll', bump);
+      window.removeEventListener('resize', bump);
+    };
+  }, []);
+  const vv = window.visualViewport;
+  return (
+    <>
+      <span style={{ color: labelColor }}>Layout vw</span>
+      <span className="text-right font-mono" style={{ color: valueColor }}>{window.innerWidth}px</span>
+      <span style={{ color: labelColor }}>Visual vw</span>
+      <span className="text-right font-mono" style={{ color: valueColor }}>
+        {vv ? `${vv.width.toFixed(1)}px @${vv.scale.toFixed(3)}x ol:${vv.offsetLeft.toFixed(1)}` : 'n/a'}
+      </span>
+    </>
+  );
 };
 
 export const Player: React.FC = () => {
@@ -97,6 +77,8 @@ export const Player: React.FC = () => {
   const [prefetchStatus, setPrefetchStatus] = useState<{ done: number; total: number } | null>(null);
   const [bottomBarHeight, setBottomBarHeight] = useState(104);
   const bottomBarRef = useRef<HTMLDivElement | null>(null);
+  const [topBarHeight, setTopBarHeight] = useState(56);
+  const topBarRef = useRef<HTMLDivElement | null>(null);
   const [simulationMode, setSimulationMode] = useState(isPreview);
   const [activeZones, setActiveZones] = useState<{id: string, title: string, volume: number, replayable: boolean}[]>([]);
   const [activeMediaZone, setActiveMediaZone] = useState<Zone | null>(null);
@@ -104,7 +86,7 @@ export const Player: React.FC = () => {
   // Map style — starts at the tour's chosen style, user can override in-session
   const [mapStyleOverride, setMapStyleOverride] = useState<string | null>(null);
   const [welcomeMapInteractive, setWelcomeMapInteractive] = useState(false);
-  const welcomeMapRef = useRef<L.Map | null>(null);
+  const welcomeMapRef = useRef<WelcomePreviewHandle | null>(null);
   const [showPlayerMenu, setShowPlayerMenu] = useState(false);
   const [playerMenuView, setPlayerMenuView] = useState<'main' | 'about' | 'progress'>('main');
   const [showDebug, setShowDebug] = useState(false);
@@ -116,6 +98,16 @@ export const Player: React.FC = () => {
 
   // Character Interaction
   const [activeCharacterZone, setActiveCharacterZone] = useState<Zone | null>(null);
+
+  // Set of zone ids currently "active" (playing / open) — drives the blue map
+  // highlight. Memoised so PlayerMap only rebuilds when it actually changes.
+  const activeZoneIds = useMemo(
+    () => new Set<string>([
+      ...activeZones.map(z => z.id),
+      ...(activeCharacterZone ? [activeCharacterZone.id] : []),
+    ]),
+    [activeZones, activeCharacterZone],
+  );
   // persistedCharacterZone keeps the last character zone so the chat
   // session (and history) survives briefly leaving the zone radius.
   const [persistedCharacterZone, setPersistedCharacterZone] = useState<Zone | null>(null);
@@ -219,6 +211,17 @@ export const Player: React.FC = () => {
   const [passphraseChallenge, setPassphraseChallenge] = useState<Zone | null>(null);
   const [passphraseInput, setPassphraseInput] = useState('');
   const [passphraseError, setPassphraseError] = useState(false);
+  // Bumped after the keyboard is dismissed to REMOUNT the passphrase modal.
+  // iOS can leave a fixed element painted a few px off after the keyboard
+  // closes while every JS metric reads in-sync — recreating the element is the
+  // one deterministic repaint. Also gates autoFocus so the remount doesn't
+  // reopen the keyboard.
+  const [lockNudge, setLockNudge] = useState(0);
+  // A locked zone whose modal was dismissed while the player is still inside —
+  // shown as a small tappable pill so they can reopen it without leaving.
+  const [minimizedLock, setMinimizedLock] = useState<Zone | null>(null);
+  const minimizedLockRef = useRef<Zone | null>(null);
+  useEffect(() => { minimizedLockRef.current = minimizedLock; }, [minimizedLock]);
 
   // Zone state tracking. The ref feeds the audio loop while state redraws the
   // map immediately when a prerequisite zone becomes available.
@@ -455,6 +458,7 @@ export const Player: React.FC = () => {
       }
       passphraseChallengeRef.current = null;
       setPassphraseChallenge(null);
+      setMinimizedLock(null);
       setPassphraseInput('');
       setPassphraseError(false);
     } else {
@@ -520,6 +524,7 @@ export const Player: React.FC = () => {
               // Only show passphrase modal if none is already shown
               if (!passphraseChallengeRef.current) {
                 passphraseChallengeRef.current = zone;
+                setLockNudge(0);
                 setPassphraseChallenge(zone);
               }
             } else if (prereqMet && zone.type !== 'discoverable') {
@@ -614,6 +619,15 @@ export const Player: React.FC = () => {
       });
 
       prevCollectZoneIdsRef.current = currentCollectZoneIds;
+
+      // Left a locked zone (modal open or minimized pill) → clear it so the ref
+      // resets and re-entry prompts again cleanly.
+      const lockedZone = passphraseChallengeRef.current || minimizedLockRef.current;
+      if (lockedZone && !currentZoneIds.has(lockedZone.id)) {
+        passphraseChallengeRef.current = null;
+        setPassphraseChallenge(null);
+        setMinimizedLock(null);
+      }
 
       prevZoneIdsRef.current = currentZoneIds;
       dismissedMediaZoneIdsRef.current = new Set(
@@ -789,6 +803,19 @@ export const Player: React.FC = () => {
       observer.disconnect();
       window.removeEventListener('resize', updateBottomBarHeight);
     };
+  }, [audioStarted]);
+
+  // Measure the top bar (its height varies with the safe-area inset) so the map
+  // can be inset to sit exactly below it — see the map wrapper.
+  useEffect(() => {
+    if (!topBarRef.current) return;
+    const topBar = topBarRef.current;
+    const update = () => setTopBarHeight(Math.ceil(topBar.getBoundingClientRect().height));
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(topBar);
+    window.addEventListener('resize', update);
+    return () => { observer.disconnect(); window.removeEventListener('resize', update); };
   }, [audioStarted]);
 
   useEffect(() => {
@@ -986,6 +1013,7 @@ export const Player: React.FC = () => {
   };
 
   const loadTour = async (id: string) => {
+   try {
     const t = await getTourById(id);
     if (!t) { setNotFound(true); setLoading(false); return; }
     setTour(t);
@@ -1026,6 +1054,13 @@ export const Player: React.FC = () => {
     }
 
     setLoading(false);
+   } catch (e) {
+    // Any unexpected load failure resolves into the "not found" state instead of
+    // hanging forever on "Loading Experience…".
+    console.error('loadTour failed:', e);
+    setNotFound(true);
+    setLoading(false);
+   }
   };
 
   const startAudio = async () => {
@@ -1036,12 +1071,15 @@ export const Player: React.FC = () => {
       .filter(z => z.type === 'audio' || z.type === 'discoverable')
       .forEach(z => audioService.loadAudio(z.id, z.media_url));
 
-    // Some browsers can leave AudioContext.resume() pending indefinitely.
-    // Never block entry to the experience while the audio engine catches up.
-    await Promise.race([
+    // Kick the audio engine off inside the Begin gesture, but DON'T await it
+    // before showing the experience — that wait (up to 1.5s) is what made the
+    // button feel like it hung. The engine warms up behind the map; the 2s
+    // zone entry delay covers the rest, and updateVolumes no-ops until unlocked.
+    void Promise.race([
       audioService.init().then(() => audioService.primeLoadedAudio()),
       new Promise<void>(resolve => window.setTimeout(resolve, 1500)),
-    ]);
+    ]).catch(() => { /* non-fatal — tap-to-resume covers a failed unlock */ });
+
     setAudioStarted(true);
 
     // Middle-ground prefetch: begin fully downloading every zone's audio in
@@ -1099,8 +1137,11 @@ export const Player: React.FC = () => {
   const isDark  = (tour.player_theme || 'dark') === 'dark';
   const accent  = tour.accent_color || '#10b981';
   const th = {
-    // Top / bottom bars
-    barBg:       isDark ? 'rgba(9,9,11,0.96)'   : 'rgba(255,255,255,0.96)',
+    // Top / bottom bars + all slide-up sheets share this dark surface (#09090b),
+    // so header, footer, and every sheet are one seamless colour. Only the small
+    // pill/floating elements use the lighter grey (cardBg / zinc-900) to stand
+    // out against it.
+    barBg:       isDark ? '#09090b'              : '#ffffff',
     barBorder:   isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
     barText:     isDark ? '#ffffff'              : '#09090b',
     barMuted:    isDark ? '#71717a'              : '#52525b',
@@ -1109,8 +1150,8 @@ export const Player: React.FC = () => {
     cardBorder:  isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
     cardText:    isDark ? '#ffffff'              : '#09090b',
     cardMuted:   isDark ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.55)',
-    // Info sheet
-    sheetBg:     isDark ? '#18181b'              : '#ffffff',
+    // Info sheet — same dark surface as the bars (see barBg note).
+    sheetBg:     isDark ? '#09090b'              : '#ffffff',
     sheetText:   isDark ? '#ffffff'              : '#09090b',
     sheetMuted:  isDark ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.55)',
     sheetHandle: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)',
@@ -1130,130 +1171,35 @@ export const Player: React.FC = () => {
   return (
     <div className="h-full relative bg-zinc-950 overflow-hidden">
 
-      {/* ── FULL-SCREEN MAP ── */}
-      {/* touch-action:none tells the browser to hand ALL touch events to Leaflet,
-          preventing the vertical-scroll ghost that appears during pinch-to-zoom */}
-      <div className="absolute inset-0" style={{ touchAction: 'none' }}>
-        <MapContainer
-          center={[tour.lat, tour.lng]}
-          zoom={tour.start_zoom ?? 18}
-          maxZoom={22}
-          style={{ height: '100%', width: '100%' }}
-          zoomControl={false}
-        >
-          {(() => {
-            const styleKey = mapStyleOverride || tour?.map_style || 'dark';
-            const styleObj = MAP_STYLES[styleKey] || MAP_STYLES.dark;
-            return (
-              <TileLayer
-                key={styleKey}
-                url={styleObj.url}
-                attribution={styleObj.attribution}
-                maxNativeZoom={19}
-                maxZoom={22}
-              />
-            );
-          })()}
-          
-          <InvalidateSize />
-          {!simulationMode && userPos && (
-            <MapRecenter lat={userPos[0]} lng={userPos[1]} enabled={followUser} />
-          )}
-          {/* Pause auto-follow whenever the user manually pans the map */}
-          {!simulationMode && <DragDetector onDrag={() => setFollowUser(false)} />}
-
-          {/* Zones */}
-          {zones.map(zone => {
-             const isActive = activeZones.find(az => az.id === zone.id) || (activeCharacterZone?.id === zone.id);
-             if (!zone.is_visible) return null;
-             if (zone.requires_zone_id && !visitedZoneIds.has(zone.requires_zone_id)) return null;
-             if (
-               tour.progression_enabled &&
-               playerProgress &&
-               !canMeetProgressionRequirements(zone, playerProgress)
-             ) return null;
-             // A found discoverable disappears cleanly rather than lingering
-             // as a dead spot — no circle, no icon, no hint audio (silenced
-             // separately in the geofencing loop).
-             const isDiscoverable = zone.type === 'discoverable';
-             if (isDiscoverable && playerProgress?.granted_zone_ids.includes(zone.id)) return null;
-
-             const isChar = zone.type === 'character';
-             const isLocked = zone.lock_type === 'passphrase';
-
-             // Universal colour language for the player:
-             //   active (any type) → blue · inactive audio → green
-             //   inactive character → purple · inactive discoverable → pink
-             //   inactive locked → yellow
-             // (Invisible zones are never drawn — handled above.)
-             const ACTIVE = '#3b82f6'; // blue-500
-             const color = isActive
-               ? ACTIVE
-               : isLocked      ? '#f59e0b'   // amber/yellow
-               : isChar        ? '#8b5cf6'   // violet/purple
-               : isDiscoverable ? '#ec4899'  // pink
-               :                 '#10b981';  // emerald/green
-
-             const DiscoverableIcon = isDiscoverable ? L.divIcon({
-               html: zone.is_mystery || !zone.zone_image_url
-                 ? `<div style="width:22px;height:22px;border-radius:50%;background:#ec4899;border:2px solid white;box-shadow:0 1px 5px rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;color:white;font-size:12px;font-weight:800">?</div>`
-                 : `<div style="width:26px;height:26px;border-radius:50%;background-image:url('${zone.zone_image_url}');background-size:cover;background-position:center;border:2px solid white;box-shadow:0 1px 5px rgba(0,0,0,0.5)"></div>`,
-               className: '',
-               iconSize: zone.is_mystery || !zone.zone_image_url ? [22, 22] : [26, 26],
-               iconAnchor: zone.is_mystery || !zone.zone_image_url ? [11, 11] : [13, 13],
-             }) : null;
-
-             return (
-              <React.Fragment key={zone.id}>
-                <Circle
-                  center={[zone.lat, zone.lng]}
-                  radius={zone.radius}
-                  pathOptions={{
-                    color,
-                    fillColor: color,
-                    fillOpacity: isActive ? 0.35 : 0.18,
-                    weight: isActive ? 3 : 2,
-                    dashArray: isLocked && !isActive ? '6 4' : undefined
-                  }}
-                />
-                {DiscoverableIcon && (
-                  <Marker position={[zone.lat, zone.lng]} icon={DiscoverableIcon} />
-                )}
-              </React.Fragment>
-             );
-          })}
-
-          {/* User Marker — only render when we have an actual position */}
-          {userPos && gpsAccuracy && gpsAccuracy > 0 && (
-            <Circle
-              center={userPos}
-              radius={Math.min(gpsAccuracy, 120)}
-              pathOptions={{
-                color: '#ef4444',
-                fillColor: '#ef4444',
-                fillOpacity: 0.08,
-                weight: 1,
-                dashArray: '4 4',
-              }}
-            />
-          )}
-          {userPos && (
-            <Marker
-              position={userPos}
-              icon={UserIcon}
-              draggable={simulationMode}
-              eventHandlers={{
-                drag: (e) => {
-                  const marker = e.target;
-                  const pos = marker.getLatLng();
-                  const newPos: [number, number] = [pos.lat, pos.lng];
-                  setUserPos(newPos);
-                  simPosRef.current = newPos;
-                }
-              }}
-            />
-          )}
-        </MapContainer>
+      {/* ── MAP (MapLibre) ── */}
+      {/* Inset to sit exactly BETWEEN the top and bottom bars rather than edge to
+          edge. The bars are opaque, so the area under them showed nothing anyway —
+          but keeping the WebGL canvas out from under them is what eliminates the
+          Safari-only bright hairline at the bars' edges (no overlap = nothing for
+          Safari's compositor to leak). Kept mounted but hidden until Begin so it
+          can pre-warm tiles. */}
+      <div
+        className="absolute left-0 right-0"
+        style={{
+          top: `${topBarHeight}px`,
+          bottom: `${bottomBarHeight}px`,
+          visibility: audioStarted ? 'visible' : 'hidden',
+        }}
+      >
+        <PlayerMap
+          tour={tour}
+          zones={zones}
+          activeZoneIds={activeZoneIds}
+          visitedZoneIds={visitedZoneIds}
+          playerProgress={playerProgress}
+          userPos={userPos}
+          gpsAccuracy={gpsAccuracy}
+          styleKey={mapStyleOverride || tour.map_style || DEFAULT_MAP_STYLE}
+          simulationMode={simulationMode}
+          followUser={followUser}
+          onDragAway={() => setFollowUser(false)}
+          onSimMove={(pos) => { setUserPos(pos); simPosRef.current = pos; }}
+        />
       </div>
 
       {/* ── WELCOME SCREEN (z-2000, covers map + bars) ── */}
@@ -1262,7 +1208,6 @@ export const Player: React.FC = () => {
         const accent     = tour.accent_color || '#10b981';
         const textColor  = tour.text_color   || '#ffffff';
         const fontFamily = FONT_STYLES[tour.font_style || 'sans']?.fontFamily;
-        const mapStyle   = MAP_STYLES[tour.map_style || 'dark'] || MAP_STYLES.dark;
 
         const copyCoords = () => {
           navigator.clipboard.writeText(`${tour.lat.toFixed(6)}, ${tour.lng.toFixed(6)}`);
@@ -1270,19 +1215,9 @@ export const Player: React.FC = () => {
           setTimeout(() => setCoordsCopied(false), 2000);
         };
 
-        const StartMarkerIcon = L.divIcon({
-          html: `<div style="display:flex;flex-direction:column;align-items:center;gap:2px">
-            <div style="background:#10b981;width:18px;height:18px;border-radius:50%;border:3px solid white;box-shadow:0 0 0 2px #10b981,0 2px 8px rgba(16,185,129,0.5)"></div>
-            <div style="background:#10b981;color:white;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;white-space:nowrap;letter-spacing:0.05em">START</div>
-          </div>`,
-          className: '',
-          iconSize: [60, 38],
-          iconAnchor: [30, 11],
-        });
-
         return (
           <div
-            className="fixed inset-0 z-[2000] flex flex-col overflow-hidden"
+            className="overlay-edge-bleed fixed inset-0 z-[2000] flex flex-col overflow-hidden"
             style={{ backgroundColor: bg, fontFamily }}
           >
             {/* ── HEADER — natural height, flex shrink-0 ── */}
@@ -1318,25 +1253,14 @@ export const Player: React.FC = () => {
                 )}
 
                 <div className="relative w-full aspect-[4/3] max-h-[240px] rounded-xl overflow-hidden border border-white/10 shadow-lg">
-                  <MapContainer
+                  <WelcomePreviewMap
                     ref={welcomeMapRef}
-                    center={[tour.lat, tour.lng]}
+                    lat={tour.lat}
+                    lng={tour.lng}
                     zoom={tour.start_zoom ?? 18}
-                    style={{ width: '100%', height: '100%' }}
-                    zoomControl={false}
-                    scrollWheelZoom={false}
-                    dragging={welcomeMapInteractive}
-                    touchZoom={welcomeMapInteractive}
-                    doubleClickZoom={welcomeMapInteractive}
-                    boxZoom={false}
-                    keyboard={false}
-                    attributionControl={false}
-                  >
-                    <TileLayer url={mapStyle.url} />
-                    <Marker position={[tour.lat, tour.lng]} icon={StartMarkerIcon} />
-                    <InvalidateSize />
-                    <WelcomeMapInteraction enabled={welcomeMapInteractive} />
-                  </MapContainer>
+                    styleKey={tour.map_style || DEFAULT_MAP_STYLE}
+                    interactive={welcomeMapInteractive}
+                  />
                   {!welcomeMapInteractive ? (
                     <button
                       type="button"
@@ -1436,7 +1360,7 @@ export const Player: React.FC = () => {
                 <button
                   onClick={startAudio}
                   disabled={!isPreview && !userPos}
-                  className="flex items-center justify-center gap-2 text-white w-full py-4 rounded-2xl text-lg font-bold shadow-xl active:scale-95 transition-transform disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
+                  className="flex items-center justify-center gap-2 text-white w-full py-4 rounded-2xl text-lg font-bold shadow-xl disabled:opacity-40 disabled:cursor-not-allowed"
                   style={{ backgroundColor: accent }}
                 >
                   <PlayCircle size={22} /> Begin
@@ -1467,9 +1391,14 @@ export const Player: React.FC = () => {
       )}
 
       {/* ── TOUR INFO SHEET — smooth CSS transition ── */}
+      {/* absolute (not fixed) so the dimming scrim shares the map's exact box.
+          The map is `absolute inset-0` in this same player root; a `fixed`
+          scrim resolves to the viewport instead, and on iOS those two boxes
+          disagree by a pixel or two — the map used to peek past the scrim's
+          right edge. Sharing the root's coordinate system removes the gap. */}
       {tourInfoMounted && tour && (
         <div
-          className="fixed inset-0 z-[2000] flex items-end justify-center"
+          className="overlay-edge-bleed fixed inset-0 z-[2000] flex items-end justify-center"
           style={{
             backgroundColor: 'rgba(0,0,0,0.55)',
             opacity: tourInfoVisible ? 1 : 0,
@@ -1478,7 +1407,7 @@ export const Player: React.FC = () => {
           onClick={closeTourInfo}
         >
           <div
-            className="w-full max-w-lg flex flex-col rounded-t-3xl shadow-2xl overflow-hidden"
+            className="player-sheet-edge w-full max-w-lg flex flex-col rounded-t-3xl shadow-2xl overflow-hidden"
             style={{
               backgroundColor: th.sheetBg,
               transform: tourInfoVisible ? 'translateY(0)' : 'translateY(100%)',
@@ -1496,23 +1425,33 @@ export const Player: React.FC = () => {
               <div className="w-10 h-1 rounded-full" style={{ backgroundColor: th.sheetHandle }} />
             </div>
 
-            <div className="px-6 pt-3 pb-6 flex flex-col gap-4">
-              {/* Header */}
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3 flex-1 min-w-0">
-                  {tour.welcome_image_url && (
-                    <img src={tour.welcome_image_url} alt="" className="w-14 h-14 object-cover rounded-xl shrink-0 shadow-lg" />
-                  )}
-                  <div className="min-w-0">
-                    <h2 className="font-bold text-xl leading-tight" style={{ color: th.sheetText }}>{tour.title}</h2>
-                    {tour.welcome_subtitle && (
-                      <p className="text-sm mt-0.5" style={{ color: accent }}>{tour.welcome_subtitle}</p>
-                    )}
-                  </div>
-                </div>
-                <button onClick={closeTourInfo} className="p-1.5 rounded-full shrink-0 mt-0.5" style={{ color: th.sheetMuted }}>
+            <div className="px-8 pt-3 pb-6 flex flex-col gap-4">
+              {/* Header — mirrors the welcome screen's centred stack. It used to
+                  be a left-aligned avatar+title row sitting above a centred
+                  description, which read as the title being skewed left. The
+                  close button is absolute so it can't offset the centring. */}
+              <div className="relative flex flex-col items-center text-center gap-3">
+                <button
+                  onClick={closeTourInfo}
+                  className="absolute -top-1 -right-2 p-1.5 rounded-full"
+                  style={{ color: th.sheetMuted }}
+                  aria-label="Close details"
+                >
                   <X size={18} />
                 </button>
+                {tour.welcome_image_url && (
+                  <img
+                    src={tour.welcome_image_url}
+                    alt=""
+                    className="w-20 h-20 object-cover rounded-2xl shadow-lg"
+                  />
+                )}
+                <div className="min-w-0 w-full">
+                  <h2 className="font-bold text-xl leading-tight break-words" style={{ color: th.sheetText }}>{tour.title}</h2>
+                  {tour.welcome_subtitle && (
+                    <p className="text-sm mt-1" style={{ color: accent }}>{tour.welcome_subtitle}</p>
+                  )}
+                </div>
               </div>
 
               {/* Description */}
@@ -1576,14 +1515,15 @@ export const Player: React.FC = () => {
                   className="absolute inset-0 rounded-full animate-ping"
                   style={{ backgroundColor: accent, opacity: 0.25, animationDuration: '2.5s' }}
                 />
-                {/* Character artwork */}
+                {/* Character artwork sits on an opaque card surface so the
+                    minimized control remains clearly tappable over any map. */}
                 <div
                   className="absolute inset-0 rounded-full overflow-hidden shadow-2xl flex items-center justify-center"
-                  style={{ backgroundColor: th.cardBg, boxShadow: `0 0 20px ${accent}45` }}
+                  style={{ backgroundColor: isDark ? '#18181b' : '#ffffff', boxShadow: `0 0 20px ${accent}45` }}
                 >
                   {activeCharacterZone.character_image_url
                     ? <img src={activeCharacterZone.character_image_url} alt={activeCharacterZone.title} className="w-[70%] h-[70%] object-contain" />
-                    : <div className="w-full h-full flex items-center justify-center"><Mic size={22} color={accent} /></div>
+                    : <div className="w-full h-full flex items-center justify-center"><MessageCircle size={22} color={accent} /></div>
                   }
                 </div>
               </div>
@@ -1613,7 +1553,7 @@ export const Player: React.FC = () => {
                   >
                     {activeCharacterZone.character_image_url
                       ? <img src={activeCharacterZone.character_image_url} alt={activeCharacterZone.title} className="w-full h-full object-contain" />
-                      : <div className="w-full h-full flex items-center justify-center"><Mic size={26} color={accent} /></div>
+                      : <div className="w-full h-full flex items-center justify-center"><MessageCircle size={26} color={accent} /></div>
                     }
                   </div>
                 </div>
@@ -1642,8 +1582,8 @@ export const Player: React.FC = () => {
                   className="flex-1 py-2.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 active:opacity-80 transition-opacity"
                   style={{ backgroundColor: accent, boxShadow: `0 2px 16px ${accent}55` }}
                 >
-                  <Mic size={15} color="white" />
-                  <span className="text-white">Speak to {activeCharacterZone.title}</span>
+                  <MessageCircle size={15} color="white" />
+                  <span className="text-white">{activeCharacterZone.title}</span>
                 </button>
                 {activeCharacterZone.ar_config?.enabled && (
                   <button
@@ -1820,6 +1760,7 @@ export const Player: React.FC = () => {
           key={chatKey}
           zone={persistedCharacterZone}
           theme={tour.player_theme || 'dark'}
+          accent={accent}
           onClose={() => setShowChat(false)}
           onUnlock={(zoneId) => {
             unlockedZoneIdsRef.current = new Set([...unlockedZoneIdsRef.current, zoneId]);
@@ -2010,6 +1951,7 @@ export const Player: React.FC = () => {
               <span className="text-right font-semibold truncate" style={{ color: th.cardText }}>
                 {activeZones.length > 0 ? activeZones.map(zone => zone.title).join(', ') : 'None'}
               </span>
+              <ViewportStats labelColor={th.cardMuted} valueColor={th.cardText} />
             </div>
           </div>
         </div>
@@ -2018,11 +1960,11 @@ export const Player: React.FC = () => {
       {/* ── PROGRESSION INVENTORY ── */}
       {showInventory && tour.progression_enabled && playerProgress && (
         <div
-          className="absolute inset-0 z-[2500] bg-black/60 backdrop-blur-sm flex items-end justify-center"
+          className="overlay-edge-bleed fixed inset-0 z-[2500] bg-black/60 backdrop-blur-sm flex items-end justify-center"
           onClick={() => setShowInventory(false)}
         >
           <div
-            className="w-full max-w-lg flex flex-col rounded-t-3xl shadow-2xl overflow-hidden"
+            className="player-sheet-edge w-full max-w-lg flex flex-col rounded-t-3xl shadow-2xl overflow-hidden"
             style={{
               backgroundColor: th.sheetBg,
               color: th.sheetText,
@@ -2036,7 +1978,7 @@ export const Player: React.FC = () => {
             </div>
 
             <div
-              className="px-6 pt-3 overflow-y-auto overscroll-contain"
+              className="px-8 pt-3 overflow-y-auto overscroll-contain"
               style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 88px)' }}
             >
               <div className="flex items-center justify-between mb-5">
@@ -2114,11 +2056,11 @@ export const Player: React.FC = () => {
       {/* ── PLAYER MENU ── */}
       {showPlayerMenu && audioStarted && (
         <div
-          className="absolute inset-0 z-[2600] bg-black/60 backdrop-blur-sm flex items-end justify-center"
+          className="overlay-edge-bleed fixed inset-0 z-[2600] bg-black/60 backdrop-blur-sm flex items-end justify-center"
           onClick={closePlayerMenu}
         >
           <div
-            className="w-full max-w-lg rounded-t-3xl shadow-2xl overflow-hidden flex flex-col"
+            className="player-sheet-edge w-full max-w-lg rounded-t-3xl shadow-2xl overflow-hidden flex flex-col"
             style={{
               backgroundColor: th.sheetBg,
               color: th.sheetText,
@@ -2140,7 +2082,7 @@ export const Player: React.FC = () => {
                 }}
               >
                 {/* Main menu */}
-                <div className="w-1/2 h-full px-5 pt-3 pb-6 overflow-y-auto overscroll-contain shrink-0">
+                <div className="w-1/2 h-full px-8 pt-3 pb-6 overflow-y-auto overscroll-contain shrink-0">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="font-bold text-lg">Player menu</h3>
                     <button
@@ -2406,16 +2348,38 @@ export const Player: React.FC = () => {
       )}
 
       {/* ── PASSPHRASE MODAL ── */}
+      {/* Minimized locked-zone pill — reopens the passphrase modal without needing
+          to leave and re-enter the zone. */}
+      {audioStarted && minimizedLock && !passphraseChallenge && (
+        <button
+          onClick={() => { setMinimizedLock(null); setLockNudge(0); setPassphraseChallenge(minimizedLock); setPassphraseInput(''); setPassphraseError(false); }}
+          className="absolute z-[1600] left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2.5 rounded-full bg-zinc-900/95 backdrop-blur border border-amber-500/50 shadow-xl active:opacity-80 animate-in slide-in-from-bottom-2"
+          style={{ bottom: `calc(${bottomBarHeight}px + env(safe-area-inset-bottom, 0px) + 16px)` }}
+        >
+          <Lock size={15} className="text-amber-400" />
+          <span className="text-white text-sm font-semibold max-w-[160px] truncate">{minimizedLock.title}</span>
+          <span className="text-amber-400/70 text-xs shrink-0">Unlock</span>
+        </button>
+      )}
+
       {passphraseChallenge && (
         <div
-          className="fixed inset-x-0 top-0 z-[2500] bg-black/70 backdrop-blur-sm flex items-end justify-center animate-in fade-in overflow-y-auto"
-          style={{
-            height: '100dvh',
-            paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)',
-            paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)',
-          }}
+          // key remounts the whole fixed layer after each keyboard dismissal —
+          // the only reliable repaint for iOS's painted-offset state (see
+          // lockNudge). Entrance animations only play on the first mount so
+          // the remount is invisible.
+          key={`${passphraseChallenge.id}:${lockNudge}`}
+          className={`overlay-edge-bleed fixed inset-0 z-[2500] bg-black/70 backdrop-blur-sm flex items-end justify-center overflow-y-auto ${lockNudge === 0 ? 'animate-in fade-in' : ''}`}
+          style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)' }}
         >
-          <div className="bg-zinc-900 border border-amber-500/30 rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-lg p-6 pb-6 animate-in slide-in-from-bottom-4 max-h-[calc(100dvh-32px)] overflow-y-auto">
+          {/* Bottom-anchored sheet flush with the screen edge (safe-area padding
+              lives inside), matching the other slide-ups — continuous dark grey,
+              no gap. Amber accent kept on the TOP edge only (1px, same as the
+              input's focus border); no border on the sides/bottom. */}
+          <div
+            className={`player-sheet-edge -mb-px border-t border-amber-500 rounded-t-3xl w-full max-w-lg px-8 pt-6 max-h-[calc(100dvh-16px)] overflow-y-auto ${lockNudge === 0 ? 'animate-in slide-in-from-bottom-4' : ''}`}
+            style={{ backgroundColor: '#09090b', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }}
+          >
             <div className="w-10 h-1 bg-zinc-700 rounded-full mx-auto mb-5" />
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0">
@@ -2436,17 +2400,34 @@ export const Player: React.FC = () => {
             </label>
             <input
               type="text"
-              autoFocus
+              autoFocus={lockNudge === 0}
+              onBlur={() => {
+                // Keyboard dismissed → schedule the remount nudge, unless focus
+                // just moved to another field (don't yank a reopened keyboard).
+                window.setTimeout(() => {
+                  const ae = document.activeElement;
+                  if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return;
+                  setLockNudge(n => n + 1);
+                }, 350);
+              }}
               className={`w-full bg-zinc-800 border rounded-xl px-4 py-3.5 text-white text-base font-mono tracking-wider focus:outline-none transition-colors mb-1 ${passphraseError ? 'border-red-500' : 'border-zinc-600 focus:border-amber-500'}`}
+              style={{ fontSize: '16px' }}
               value={passphraseInput}
               onChange={(e) => { setPassphraseInput(e.target.value); setPassphraseError(false); }}
               onKeyDown={(e) => e.key === 'Enter' && handlePassphraseSubmit()}
               placeholder="..."
             />
             {passphraseError && <p className="text-red-400 text-xs mb-3">Incorrect passphrase. Try again.</p>}
-            <div className="flex gap-3 mt-4 sticky bottom-0 bg-zinc-900 pt-3 pb-1">
+            <div className="flex gap-3 mt-4 sticky bottom-0 pt-3 pb-1" style={{ backgroundColor: '#09090b' }}>
               <button
-                onClick={() => { setPassphraseChallenge(null); passphraseChallengeRef.current = null; setPassphraseInput(''); setPassphraseError(false); }}
+                onClick={() => {
+                  // Minimize to a pill instead of fully dismissing — keep the ref
+                  // set so the entry event doesn't auto-reopen it while inside.
+                  setMinimizedLock(passphraseChallenge);
+                  setPassphraseChallenge(null);
+                  setPassphraseInput('');
+                  setPassphraseError(false);
+                }}
                 className="flex-1 py-3.5 rounded-xl bg-zinc-800 text-zinc-400 text-sm font-medium active:bg-zinc-700"
               >
                 Cancel
@@ -2460,8 +2441,14 @@ export const Player: React.FC = () => {
       )}
 
       {/* ── TOP BAR ── */}
+      {/* Opaque, plain fixed bar. It doesn't need to hide any map underneath —
+          the map is inset to start BELOW this bar (see the map wrapper), so no
+          canvas ever sits under it. That's what finally killed the Safari-only
+          bright hairline: with no overlap, there's nothing for Safari's compositor
+          to leak at the edge. */}
       <div
-        className="fixed top-0 left-0 right-0 z-[1000] backdrop-blur-md"
+        ref={topBarRef}
+        className="overlay-edge-bleed fixed top-0 left-0 right-0 z-[1000]"
         style={{
           backgroundColor: th.barBg,
           borderBottom: `1px solid ${th.barBorder}`,
@@ -2538,12 +2525,18 @@ export const Player: React.FC = () => {
       {audioStarted && (
         <div
           ref={bottomBarRef}
-          className="fixed bottom-0 left-0 right-0 z-[1000]"
+          // overlay-edge-bleed gives the same 10px side shield as every other
+          // full-bleed surface. Height is unchanged, so the bottomBarHeight
+          // measurement below stays correct.
+          className="overlay-edge-bleed fixed bottom-0 left-0 right-0 z-[1000]"
           style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
         >
           <button
             onClick={openTourInfo}
-            className="w-full backdrop-blur-md flex flex-col items-center gap-1.5 pt-2.5 pb-3"
+            // No backdrop-blur: barBg is opaque, so the blur did nothing but let
+            // Safari tint/re-composite the footer (grey-ish, and shifting after a
+            // blurred sheet opened) — that was the footer's color inconsistency.
+            className="w-full flex flex-col items-center gap-1.5 pt-2.5 pb-3"
             style={{
               backgroundColor: th.barBg,
               borderTop: `1px solid ${th.barBorder}`,

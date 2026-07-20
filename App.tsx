@@ -4,6 +4,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Editor } from './pages/Editor';
 import { Player } from './pages/Player';
 import { SkyLab } from './pages/SkyLab';
+import { MapLibreLab } from './pages/MapLibreLab';
 import { Auth } from './pages/Auth';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { supabase } from './services/db';
@@ -22,7 +23,7 @@ const AppShell: React.FC<{ user: User | null; onLogout: () => void }> = ({ user,
   const showHeader = !isPlayer && !isDashboard && !isSkyLab;
 
   return (
-    <div className={`flex flex-col h-screen overflow-hidden ${isEditor ? 'bg-zinc-950' : 'bg-zinc-950'}`}>
+    <div className={`flex flex-col h-dvh overflow-hidden ${isEditor ? 'bg-zinc-950' : 'bg-zinc-950'}`}>
       {showHeader && (
         <header className={`px-5 py-3.5 z-10 flex justify-between items-center shrink-0 ${
           isEditor
@@ -59,6 +60,7 @@ const AppShell: React.FC<{ user: User | null; onLogout: () => void }> = ({ user,
           <Route path="/editor/:tourId?" element={user ? <Editor user={user} /> : <Navigate to="/auth" />} />
           <Route path="/player/:tourId" element={<ErrorBoundary><Player /></ErrorBoundary>} />
           <Route path="/ar-lab" element={<ErrorBoundary><SkyLab /></ErrorBoundary>} />
+          <Route path="/maplibre/:tourId?" element={<MapLibreLab />} />
         </Routes>
       </main>
     </div>

@@ -31,6 +31,9 @@ interface NodeData {
   destroyOnEnd: boolean;
   fadeIn: number;
   healthRecoveries: number;
+  /** Last observed currentTime, and when it last actually moved — stall detection. */
+  lastPos: number;
+  lastPosAt: number;
   /** True once the full file is downloaded and playing from a local blob. */
   prefetched: boolean;
   /** Object URL of the fully-downloaded copy (revoked in stopAll). */
@@ -288,6 +291,8 @@ export class AudioService {
         hasStarted: shouldRestart,
         played: shouldRestart ? false : oldNode.played,
         healthRecoveries: 0,
+        lastPos: 0,
+        lastPosAt: 0,
       };
       this.setNodeVolume(rebuilt, 0);
       this.attachEndBehavior(rebuilt);
@@ -393,6 +398,8 @@ export class AudioService {
         destroyOnEnd: false,
         fadeIn: 0,
         healthRecoveries: 0,
+        lastPos: 0,
+        lastPosAt: 0,
         prefetched: false,
         localUrl: null,
       });
@@ -630,6 +637,28 @@ export class AudioService {
       nodeData.desiredVolume = volume;
       if (this.interruptionPaused) return;
 
+      // Ongoing stall watchdog. The 1200ms health check only covers the moment
+      // of starting; a track can also wedge mid-playback (network or decoder
+      // hiccup) while still reporting itself as un-paused. "Paused when it
+      // should be playing" is already handled below by the re-scheduling
+      // branch, so this only has to catch the frozen-clock case.
+      if (nodeData.hasStarted && !nodeData.played && !nodeData.destroyed && !audioEl.paused) {
+        const now = performance.now();
+        if (audioEl.currentTime > nodeData.lastPos + 0.05) {
+          nodeData.lastPos = audioEl.currentTime;
+          nodeData.lastPosAt = now;
+        } else if (nodeData.lastPosAt && now - nodeData.lastPosAt > 3000 && nodeData.healthRecoveries < 3) {
+          nodeData.healthRecoveries += 1;
+          console.warn(`Zone audio stalled mid-playback; restarting (${zone.id})`);
+          nodeData.lastPosAt = now;
+          this.cancelFade(nodeData);
+          this.setNodeVolume(nodeData, 0);
+          audioEl.pause();
+          this.beginPlayback(nodeData, zone.id, nodeData.loop, nodeData.destroyOnEnd, nodeData.fadeIn);
+          return;
+        }
+      }
+
       // A keep-playing track may still be advancing silently outside the zone.
       // Fade it back up immediately when the player returns.
       if (!audioEl.paused && justEntered) {
@@ -674,6 +703,8 @@ export class AudioService {
     audioEl.muted = false;
     this.setNodeVolume(nodeData, 0);
     const startPosition = audioEl.currentTime || 0;
+    nodeData.lastPos = startPosition;
+    nodeData.lastPosAt = performance.now();
     audioEl.play().catch(e => {
       console.warn(`Zone audio play failed (${zoneId}):`, e);
       nodeData.hasStarted = false;
@@ -694,7 +725,7 @@ export class AudioService {
         nodeData.destroyed ||
         nodeData.played ||
         !nodeData.hasStarted ||
-        nodeData.healthRecoveries >= 1
+        nodeData.healthRecoveries >= 3
       ) return;
 
       const currentPosition = nodeData.audioEl.currentTime || 0;

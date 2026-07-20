@@ -5,6 +5,7 @@ import {
   ProgressionReward,
   Zone,
 } from '../types';
+import { safeUUID } from '../utils/uuid';
 
 const PLAYER_ID_KEY = 'obelisk_player_id';
 const PROGRESS_KEY_PREFIX = 'obelisk_progress_';
@@ -18,11 +19,11 @@ const getPlayerId = () => {
   try {
     const existing = localStorage.getItem(PLAYER_ID_KEY);
     if (existing) return existing;
-    const id = crypto.randomUUID();
+    const id = safeUUID();
     localStorage.setItem(PLAYER_ID_KEY, id);
     return id;
   } catch {
-    return crypto.randomUUID();
+    return safeUUID();
   }
 };
 

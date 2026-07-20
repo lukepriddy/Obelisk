@@ -28,6 +28,9 @@ export interface Tour {
   // Welcome screen always uses bg_color/text_color regardless of this setting
   player_theme?: 'dark' | 'light';
 
+  // Free-form tags — act as lightweight folders on the dashboard
+  tags?: string[];
+
   // Optional player progression
   progression_enabled?: boolean;
   progression_resources?: ProgressionResource[];
