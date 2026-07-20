@@ -41,6 +41,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   const [isSending, setIsSending]     = useState(false);
   const [errorMsg, setErrorMsg]       = useState<string | null>(null);
   const [inputText, setInputText]     = useState('');
+  const [dragOffset, setDragOffset]   = useState(0);
+  const [isDraggingHandle, setIsDraggingHandle] = useState(false);
 
   // ── Rate limits: conversation winds down gracefully ───────────────────────
   // Derived from saved history so state survives remounts within the same tab.
@@ -203,16 +205,43 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
         md:rounded-2xl md:border md:shadow-2xl
         ${t.root}
       `}
+      style={{
+        transform: dragOffset ? `translateY(${dragOffset}px)` : undefined,
+        transition: isDraggingHandle ? 'none' : 'transform 220ms cubic-bezier(0.32, 0.72, 0, 1)',
+      }}
     >
       {/* ── Drag handle — downward swipe dismisses; the X remains the explicit close. */}
       <div
-        onTouchStart={(event) => { handleStartYRef.current = event.touches[0]?.clientY ?? null; }}
+        onTouchStart={(event) => {
+          handleStartYRef.current = event.touches[0]?.clientY ?? null;
+          setIsDraggingHandle(true);
+        }}
+        onTouchMove={(event) => {
+          const startY = handleStartYRef.current;
+          if (startY === null || !event.touches[0]) return;
+          const offset = Math.max(0, event.touches[0].clientY - startY);
+          setDragOffset(offset);
+          if (offset > 0) event.preventDefault();
+        }}
         onTouchEnd={(event) => {
           const startY = handleStartYRef.current;
           handleStartYRef.current = null;
-          if (startY !== null && event.changedTouches[0] && event.changedTouches[0].clientY - startY > 56) handleClose();
+          setIsDraggingHandle(false);
+          const offset = startY !== null && event.changedTouches[0]
+            ? Math.max(0, event.changedTouches[0].clientY - startY)
+            : 0;
+          if (offset > 96) {
+            handleClose();
+          } else {
+            setDragOffset(0);
+          }
         }}
-        className="flex items-center justify-center pt-3 pb-1.5 w-full shrink-0"
+        onTouchCancel={() => {
+          handleStartYRef.current = null;
+          setIsDraggingHandle(false);
+          setDragOffset(0);
+        }}
+        className="flex items-center justify-center pt-3 pb-1.5 w-full shrink-0 touch-none"
         aria-hidden="true"
       >
         <div className={`w-10 h-[3px] rounded-full ${t.handle}`} />
