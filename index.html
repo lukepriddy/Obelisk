@@ -101,6 +101,14 @@
           left: -16px !important;
           right: -16px !important;
         }
+
+        /* Bottom sheets keep their body flush with the visible screen edges,
+           while this clip reveals real rounded corners only at the top. The
+           sheet itself is still oversized beneath the clip, so there is no
+           map seam down either side. */
+        .player-sheet-edge {
+          clip-path: inset(0 16px 0 16px round 24px 24px 0 0);
+        }
       }
 
       /* ── Hide all scrollbars (scroll still works, bar just invisible) ── */
