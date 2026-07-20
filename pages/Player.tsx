@@ -1682,15 +1682,6 @@ export const Player: React.FC = () => {
                       {activeMediaZone.description}
                     </p>
                   )}
-                  {activeMediaZone.ar_config?.enabled && (
-                    <button
-                      onClick={() => setArCameraZone(activeMediaZone)}
-                      className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold"
-                      style={{ color: accent }}
-                    >
-                      <Camera size={13} /> View in camera
-                    </button>
-                  )}
                 </div>
                 <button
                   onClick={() => {
@@ -1704,6 +1695,21 @@ export const Player: React.FC = () => {
                   <X size={16} />
                 </button>
               </div>
+              {activeMediaZone.ar_config?.enabled && (
+                <div className="px-3 pb-3">
+                  <button
+                    onClick={() => setArCameraZone(activeMediaZone)}
+                    className="w-full rounded-xl py-2.5 flex items-center justify-center gap-2 text-sm font-bold active:opacity-70 transition-opacity"
+                    style={{
+                      backgroundColor: `${accent}20`,
+                      border: `1px solid ${accent}55`,
+                      color: accent,
+                    }}
+                  >
+                    <Camera size={15} /> View in camera
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

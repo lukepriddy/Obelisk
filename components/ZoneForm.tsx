@@ -219,9 +219,11 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
   const [fileName, setFileName] = useState<string>('');
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [imageUploadError, setImageUploadError] = useState<string | null>(null);
+  const [arAssetUploadError, setArAssetUploadError] = useState<string | null>(null);
   const [showAllVoices, setShowAllVoices] = useState(false);
   const [audioUploading, setAudioUploading] = useState(false);
   const [imageUploading, setImageUploading] = useState(false);
+  const [arAssetUploading, setArAssetUploading] = useState(false);
   const [playingVoice, setPlayingVoice] = useState<string | null>(null);
   const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -376,19 +378,23 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = '';
-    setImageUploadError(null);
-    if (file.size > 10 * 1024 * 1024) {
-      setImageUploadError('Image too large (max 10 MB).');
+    setArAssetUploadError(null);
+    const isGlb = file.name.toLowerCase().endsWith('.glb') || file.type === 'model/gltf-binary';
+    const maxBytes = isGlb ? 25 * 1024 * 1024 : 10 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      setArAssetUploadError(isGlb
+        ? '3D model too large (max 25 MB). Keep mobile models under 15 MB when possible.'
+        : 'Image too large (max 10 MB).');
       return;
     }
-    setImageUploading(true);
+    setArAssetUploading(true);
     const url = await uploadARAsset(file, zone.tour_id);
-    setImageUploading(false);
+    setArAssetUploading(false);
     if (!url) {
-      setImageUploadError('Upload failed — check your connection and try again.');
+      setArAssetUploadError('Upload failed — check your connection and try again.');
       return;
     }
-    updateArConfig({ asset_url: url, asset_type: file.name.toLowerCase().endsWith('.glb') ? 'glb' : 'image' });
+    updateArConfig({ asset_url: url, asset_type: isGlb ? 'glb' : 'image' });
   };
 
   // A discoverable only ever grants a progression reward — it's a dead end
@@ -1479,10 +1485,11 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
               <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => !imageUploading && arImageInputRef.current?.click()}
+                  onClick={() => !arAssetUploading && arImageInputRef.current?.click()}
+                  disabled={arAssetUploading}
                   className="w-20 h-20 rounded-xl border border-dashed border-sky-500/50 bg-sky-500/5 overflow-hidden flex items-center justify-center shrink-0"
                 >
-                  {arConfig.asset_url && arConfig.asset_type !== 'glb' ? <img src={arConfig.asset_url} alt="AR object" className="w-full h-full object-contain" /> : arConfig.asset_type === 'glb' ? <span className="text-[10px] font-bold text-sky-300">GLB</span> : imageUploading ? <Loader2 size={18} className="animate-spin text-sky-400" /> : <Upload size={18} className="text-sky-400" />}
+                  {arConfig.asset_url && arConfig.asset_type !== 'glb' ? <img src={arConfig.asset_url} alt="AR object" className="w-full h-full object-contain" /> : arConfig.asset_type === 'glb' ? <span className="text-[10px] font-bold text-sky-300">GLB</span> : arAssetUploading ? <Loader2 size={18} className="animate-spin text-sky-400" /> : <Upload size={18} className="text-sky-400" />}
                 </button>
                 <div className="min-w-0">
                   <p className="text-xs font-semibold text-zinc-200">Object image</p>
@@ -1490,6 +1497,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
                   {arConfig.asset_url && <button type="button" onClick={() => updateArConfig({ asset_url: null })} className="mt-1.5 text-[10px] text-zinc-500 hover:text-red-400">Remove image</button>}
                 </div>
               </div>
+              {arAssetUploadError && <p className="text-xs text-red-400 -mt-2">{arAssetUploadError}</p>}
 
               <div>
                 <label className="block text-xs font-bold text-zinc-400 uppercase mb-1.5">Behavior</label>
