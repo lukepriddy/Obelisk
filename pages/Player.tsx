@@ -1128,10 +1128,11 @@ export const Player: React.FC = () => {
   const isDark  = (tour.player_theme || 'dark') === 'dark';
   const accent  = tour.accent_color || '#10b981';
   const th = {
-    // Top / bottom bars — intentionally the SAME as sheetBg so a bottom sheet
-    // sliding up out of the footer is seamless (no grey-into-black step), and
-    // the header/footer read as one consistent chrome surface.
-    barBg:       isDark ? '#18181b'              : '#ffffff',
+    // Top / bottom bars + all slide-up sheets share this dark surface (#09090b),
+    // so header, footer, and every sheet are one seamless colour. Only the small
+    // pill/floating elements use the lighter grey (cardBg / zinc-900) to stand
+    // out against it.
+    barBg:       isDark ? '#09090b'              : '#ffffff',
     barBorder:   isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
     barText:     isDark ? '#ffffff'              : '#09090b',
     barMuted:    isDark ? '#71717a'              : '#52525b',
@@ -1140,8 +1141,8 @@ export const Player: React.FC = () => {
     cardBorder:  isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
     cardText:    isDark ? '#ffffff'              : '#09090b',
     cardMuted:   isDark ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.55)',
-    // Info sheet
-    sheetBg:     isDark ? '#18181b'              : '#ffffff',
+    // Info sheet — same dark surface as the bars (see barBg note).
+    sheetBg:     isDark ? '#09090b'              : '#ffffff',
     sheetText:   isDark ? '#ffffff'              : '#09090b',
     sheetMuted:  isDark ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.55)',
     sheetHandle: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)',
@@ -1505,10 +1506,11 @@ export const Player: React.FC = () => {
                   className="absolute inset-0 rounded-full animate-ping"
                   style={{ backgroundColor: accent, opacity: 0.25, animationDuration: '2.5s' }}
                 />
-                {/* Character artwork */}
+                {/* Character artwork — translucent circle so the map shows through
+                    rather than a solid dark blob covering it. */}
                 <div
                   className="absolute inset-0 rounded-full overflow-hidden shadow-2xl flex items-center justify-center"
-                  style={{ backgroundColor: th.cardBg, boxShadow: `0 0 20px ${accent}45` }}
+                  style={{ backgroundColor: 'rgba(24,24,27,0.5)', boxShadow: `0 0 20px ${accent}45` }}
                 >
                   {activeCharacterZone.character_image_url
                     ? <img src={activeCharacterZone.character_image_url} alt={activeCharacterZone.title} className="w-[70%] h-[70%] object-contain" />
@@ -2303,8 +2305,8 @@ export const Player: React.FC = () => {
               no gap. Amber accent kept on the TOP edge only (1px, same as the
               input's focus border); no border on the sides/bottom. */}
           <div
-            className={`bg-zinc-900 border-t border-amber-500/40 rounded-t-3xl shadow-2xl w-full max-w-lg px-6 pt-6 max-h-[calc(100dvh-16px)] overflow-y-auto ${lockNudge === 0 ? 'animate-in slide-in-from-bottom-4' : ''}`}
-            style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }}
+            className={`border-t border-amber-500/40 rounded-t-3xl shadow-2xl w-full max-w-lg px-6 pt-6 max-h-[calc(100dvh-16px)] overflow-y-auto ${lockNudge === 0 ? 'animate-in slide-in-from-bottom-4' : ''}`}
+            style={{ backgroundColor: '#09090b', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }}
           >
             <div className="w-10 h-1 bg-zinc-700 rounded-full mx-auto mb-5" />
             <div className="flex items-center gap-3 mb-4">
@@ -2344,7 +2346,7 @@ export const Player: React.FC = () => {
               placeholder="..."
             />
             {passphraseError && <p className="text-red-400 text-xs mb-3">Incorrect passphrase. Try again.</p>}
-            <div className="flex gap-3 mt-4 sticky bottom-0 bg-zinc-900 pt-3 pb-1">
+            <div className="flex gap-3 mt-4 sticky bottom-0 pt-3 pb-1" style={{ backgroundColor: '#09090b' }}>
               <button
                 onClick={() => {
                   // Minimize to a pill instead of fully dismissing — keep the ref

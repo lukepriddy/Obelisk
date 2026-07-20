@@ -48,6 +48,13 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   const [chatLocked, setChatLocked] = useState(savedModelCount >= TEXT_LIMIT);
   const textCountRef  = useRef(savedModelCount);
 
+  // Bumped after the keyboard is dismissed to REMOUNT the fixed root — iOS can
+  // leave a fixed element painted a few px off after the keyboard closes while
+  // every JS metric reads in-sync; recreating the element is the one reliable
+  // repaint. History lives in sessionStorage so nothing is lost, and the
+  // greeting is skipped when history already exists (no re-greet).
+  const [kbNudge, setKbNudge] = useState(0);
+
   const scrollRef      = useRef<HTMLDivElement>(null);
   const textareaRef    = useRef<HTMLTextAreaElement>(null);
   const hasGreetedRef  = useRef(hasExistingHistory); // skip greeting if history loaded
@@ -88,9 +95,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   };
 
   // ── Auto-scroll ───────────────────────────────────────────────────────────
+  // kbNudge in the deps so the remounted (keyboard-dismiss) message list snaps
+  // back to the bottom instead of showing the top.
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [history, isSending]);
+  }, [history, isSending, kbNudge]);
 
   // ── Persist history to sessionStorage on every change ───────────────────
   useEffect(() => {
@@ -184,6 +193,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div
+      key={kbNudge}
       className={`
         overlay-edge-bleed fixed inset-0 z-[5000]
         flex flex-col
@@ -280,6 +290,15 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
             rows={1}
             disabled={isLoading || chatLocked}
             onChange={(e) => setInputText(e.target.value)}
+            onBlur={() => {
+              // Keyboard dismissed → remount the fixed root to repaint it (see
+              // kbNudge), unless focus just moved elsewhere in the chat.
+              window.setTimeout(() => {
+                const ae = document.activeElement;
+                if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return;
+                setKbNudge(n => n + 1);
+              }, 350);
+            }}
             style={{ fontSize: '16px', overflowY: 'hidden' }}
           />
 

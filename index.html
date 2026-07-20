@@ -94,12 +94,12 @@
          doesn't have the mismatch and chat's md: popup layout must win. ── */
       @media (max-width: 767px) {
         .overlay-edge-bleed {
-          /* 10px: the keyboard open/close cycle can desync the visual viewport
-             by more than the 4px first tried (passphrase modal showed a strip
-             after keyboard dismiss). Sheets have 24px corner radii, so losing
-             10px of curve off-screen is barely visible. */
-          left: -10px !important;
-          right: -10px !important;
+          /* Overhang each full-bleed surface past both screen edges so the iOS
+             visible-edge-vs-layout-box mismatch (and post-keyboard paint drift)
+             has nothing to expose. 16px headroom; sheets have 24px corner radii
+             and 24px content padding, so the lost strip is invisible. */
+          left: -16px !important;
+          right: -16px !important;
         }
       }
 
