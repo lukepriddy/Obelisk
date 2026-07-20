@@ -15,8 +15,9 @@ import {
 import { getDistance, calculateAttenuation } from '../utils/geo';
 import { PlayerProgress, ProgressionReward, Tour, Zone } from '../types';
 import { FONT_STYLES, MAP_STYLES } from '../constants';
-import { Loader2, PlayCircle, Volume2, Mic, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu, Layers, Locate, RotateCcw, ZoomIn, ZoomOut, Backpack, Gem, Trash2, Info, RefreshCw, LogOut, Bug, Navigation, ChevronRight } from 'lucide-react';
+import { Loader2, PlayCircle, Volume2, Mic, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu, Layers, Locate, RotateCcw, ZoomIn, ZoomOut, Backpack, Gem, Trash2, Info, RefreshCw, LogOut, Bug, Navigation, ChevronRight, Camera } from 'lucide-react';
 import { ChatInterface } from '../components/ChatInterface';
+import { ARCameraOverlay } from '../components/ARCameraOverlay';
 
 // Custom icons
 const UserIcon = L.divIcon({
@@ -120,6 +121,7 @@ export const Player: React.FC = () => {
   const [persistedCharacterZone, setPersistedCharacterZone] = useState<Zone | null>(null);
   const persistedCharZoneRef = useRef<Zone | null>(null);
   const [showChat, setShowChat] = useState(false);
+  const [arCameraZone, setArCameraZone] = useState<Zone | null>(null);
   // Incremented only when entering a *different* character zone, so the
   // ChatInterface re-mounts for a fresh session.  Re-entering the same
   // zone keeps history alive.
@@ -161,6 +163,7 @@ export const Player: React.FC = () => {
     closePlayerMenu();
     setShowInventory(false);
     setShowChat(false);
+    setArCameraZone(null);
     setShowDebug(false);
     setActiveZones([]);
     setActiveMediaZone(null);
@@ -1636,6 +1639,17 @@ export const Player: React.FC = () => {
                   <Mic size={15} color="white" />
                   <span className="text-white">Speak to {activeCharacterZone.title}</span>
                 </button>
+                {activeCharacterZone.ar_config?.enabled && (
+                  <button
+                    onClick={() => setArCameraZone(activeCharacterZone)}
+                    className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-opacity active:opacity-60"
+                    style={{ backgroundColor: `${accent}20`, border: `1px solid ${accent}40` }}
+                    aria-label="View in camera"
+                    title="View in camera"
+                  >
+                    <Camera size={15} color={accent} />
+                  </button>
+                )}
               </div>
             </div>
           ) : null}
@@ -1667,6 +1681,15 @@ export const Player: React.FC = () => {
                     <p className="text-xs mt-1.5 leading-relaxed whitespace-pre-wrap" style={{ color: th.cardMuted }}>
                       {activeMediaZone.description}
                     </p>
+                  )}
+                  {activeMediaZone.ar_config?.enabled && (
+                    <button
+                      onClick={() => setArCameraZone(activeMediaZone)}
+                      className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold"
+                      style={{ color: accent }}
+                    >
+                      <Camera size={13} /> View in camera
+                    </button>
                   )}
                 </div>
                 <button
@@ -1763,6 +1786,14 @@ export const Player: React.FC = () => {
             const unlockedZone = zones.find(z => z.id === zoneId);
             if (unlockedZone) showHud('Zone Unlocked', `${unlockedZone.title} is now accessible.`);
           }}
+        />
+      )}
+
+      {arCameraZone && (
+        <ARCameraOverlay
+          zone={arCameraZone}
+          userPosition={userPos}
+          onClose={() => setArCameraZone(null)}
         />
       )}
 
