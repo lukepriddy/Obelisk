@@ -55,3 +55,21 @@ export async function uploadImage(file: File, folder: string): Promise<string | 
   const { data } = supabase.storage.from('images').getPublicUrl(path);
   return data.publicUrl;
 }
+
+/**
+ * Camera-object images and GLB models currently share the public images bucket
+ * so creators do not need a separate storage setup for the AR experiment.
+ */
+export async function uploadARAsset(file: File, tourId: string): Promise<string | null> {
+  const ext = file.name.split('.').pop() ?? 'bin';
+  const path = `${tourId}/ar/${Date.now()}.${ext}`;
+  const { error } = await supabase.storage
+    .from('images')
+    .upload(path, file, { upsert: false, contentType: file.type || (ext.toLowerCase() === 'glb' ? 'model/gltf-binary' : undefined) });
+  if (error) {
+    console.error('AR asset upload failed:', error.message);
+    return null;
+  }
+  const { data } = supabase.storage.from('images').getPublicUrl(path);
+  return data.publicUrl;
+}

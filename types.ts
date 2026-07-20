@@ -43,6 +43,7 @@ export type ARObjectBehavior = 'static' | 'flyover';
 export interface ARObjectConfig {
   enabled: boolean;
   asset_url?: string | null;
+  asset_type?: 'image' | 'glb';
   behavior: ARObjectBehavior;
   // The object defaults to the zone coordinate. These optional fields leave
   // room for an independent anchor without creating a second zone model.

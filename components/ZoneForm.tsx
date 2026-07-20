@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { ARObjectConfig, ProgressionResource, Zone, ZoneExitBehavior, ZoneEndBehavior } from '../types';
 import { SAMPLE_AUDIO_FILES, VOICES, CHARACTER_TEMPLATES } from '../constants';
-import { uploadAudio, uploadImage } from '../services/storageService';
+import { uploadARAsset, uploadAudio, uploadImage } from '../services/storageService';
 import { supabase } from '../services/supabaseClient';
 import { Music, AlertCircle, Clock, Volume2, EyeOff, Radio, PlayCircle, Upload, Link as LinkIcon, FileAudio, ListMusic, Bot, MessageSquare, Lock, Unlock, GitBranch, Bell, Sparkles, KeySquare, ImageIcon, X, Trash2, Play, Pause, Loader2, Gift, HelpCircle, Camera } from 'lucide-react';
 import { ZoneProgressionSettings } from './ZoneProgressionSettings';
@@ -360,6 +360,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
   const arConfig: ARObjectConfig = {
     enabled: false,
     asset_url: zone.type === 'character' ? zone.character_image_url : zone.zone_image_url,
+    asset_type: 'image',
     behavior: 'static',
     altitude_m: 25,
     scale_m: 3,
@@ -381,13 +382,13 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
       return;
     }
     setImageUploading(true);
-    const url = await uploadImage(file, zone.tour_id);
+    const url = await uploadARAsset(file, zone.tour_id);
     setImageUploading(false);
     if (!url) {
       setImageUploadError('Upload failed — check your connection and try again.');
       return;
     }
-    updateArConfig({ asset_url: url });
+    updateArConfig({ asset_url: url, asset_type: file.name.toLowerCase().endsWith('.glb') ? 'glb' : 'image' });
   };
 
   // A discoverable only ever grants a progression reward — it's a dead end
@@ -1474,18 +1475,18 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
 
           {arConfig.enabled && (
             <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
-              <input ref={arImageInputRef} type="file" accept="image/png,image/webp,image/jpeg" className="hidden" onChange={handleArImageUpload} />
+              <input ref={arImageInputRef} type="file" accept="image/png,image/webp,image/jpeg,.glb,model/gltf-binary" className="hidden" onChange={handleArImageUpload} />
               <div className="flex items-center gap-3">
                 <button
                   type="button"
                   onClick={() => !imageUploading && arImageInputRef.current?.click()}
                   className="w-20 h-20 rounded-xl border border-dashed border-sky-500/50 bg-sky-500/5 overflow-hidden flex items-center justify-center shrink-0"
                 >
-                  {arConfig.asset_url ? <img src={arConfig.asset_url} alt="AR object" className="w-full h-full object-contain" /> : imageUploading ? <Loader2 size={18} className="animate-spin text-sky-400" /> : <Upload size={18} className="text-sky-400" />}
+                  {arConfig.asset_url && arConfig.asset_type !== 'glb' ? <img src={arConfig.asset_url} alt="AR object" className="w-full h-full object-contain" /> : arConfig.asset_type === 'glb' ? <span className="text-[10px] font-bold text-sky-300">GLB</span> : imageUploading ? <Loader2 size={18} className="animate-spin text-sky-400" /> : <Upload size={18} className="text-sky-400" />}
                 </button>
                 <div className="min-w-0">
                   <p className="text-xs font-semibold text-zinc-200">Object image</p>
-                  <p className="text-[10px] text-zinc-500 mt-1 leading-relaxed">Transparent PNG or WebP works best. It appears only when a player chooses camera view.</p>
+                  <p className="text-[10px] text-zinc-500 mt-1 leading-relaxed">Transparent PNG/WebP for 2D, or a GLB model for 3D. It appears only when a player chooses camera view.</p>
                   {arConfig.asset_url && <button type="button" onClick={() => updateArConfig({ asset_url: null })} className="mt-1.5 text-[10px] text-zinc-500 hover:text-red-400">Remove image</button>}
                 </div>
               </div>

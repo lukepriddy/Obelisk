@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Camera, Compass, Loader2, X } from 'lucide-react';
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { ARObjectConfig, Zone } from '../types';
 import { getDistance } from '../utils/geo';
 
@@ -109,6 +111,7 @@ const slerp = (from: Quaternion, to: Quaternion, amount: number): Quaternion => 
 const defaultConfig = (zone: Zone): ARObjectConfig => ({
   enabled: true,
   asset_url: zone.type === 'character' ? zone.character_image_url : zone.zone_image_url,
+  asset_type: 'image',
   behavior: 'static',
   altitude_m: 25,
   scale_m: 3,
@@ -119,6 +122,8 @@ const defaultConfig = (zone: Zone): ARObjectConfig => ({
 });
 
 const configFor = (zone: Zone) => ({ ...defaultConfig(zone), ...(zone.ar_config || {}) });
+const isGlbAsset = (config: ARObjectConfig) =>
+  config.asset_type === 'glb' || Boolean(config.asset_url?.split('?')[0].toLowerCase().endsWith('.glb'));
 
 const HFOV = 63;
 const VFOV = 95;
@@ -127,12 +132,15 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
   const configRef = useRef(configFor(zone));
   const videoRef = useRef<HTMLVideoElement>(null);
   const objectRef = useRef<HTMLDivElement>(null);
+  const threeHostRef = useRef<HTMLDivElement>(null);
+  const threeRef = useRef<{ renderer: THREE.WebGLRenderer; scene: THREE.Scene; camera: THREE.PerspectiveCamera; model: THREE.Group | null } | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const orientationRef = useRef({ alpha: 0, beta: 0, gamma: 0, heading: null as number | null });
   const filterRef = useRef<{ value: Quaternion; at: number } | null>(null);
   const calibrationRef = useRef({ sin: 0, cos: 1, samples: 0, locked: false });
   const [phase, setPhase] = useState<Phase>('intro');
   const [error, setError] = useState<string | null>(null);
+  const [modelError, setModelError] = useState<string | null>(null);
   const [calibrationProgress, setCalibrationProgress] = useState(0);
 
   useEffect(() => {
@@ -145,6 +153,73 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
   };
 
   useEffect(() => () => stopCamera(), []);
+
+  // GLB rendering is a transparent WebGL layer over the camera video. Its
+  // projection is updated by the same loop as the 2D image path below.
+  useEffect(() => {
+    const config = configRef.current;
+    const host = threeHostRef.current;
+    if (!host || !isGlbAsset(config) || !config.asset_url || (phase !== 'calibrating' && phase !== 'ready')) return;
+
+    setModelError(null);
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(VFOV, window.innerWidth / window.innerHeight, 0.01, 100);
+    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setClearColor(0x000000, 0);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.domElement.className = 'absolute inset-0 w-full h-full pointer-events-none';
+    host.appendChild(renderer.domElement);
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x1f2937, 2.4));
+    const keyLight = new THREE.DirectionalLight(0xffffff, 2.2);
+    keyLight.position.set(2, 4, 3);
+    scene.add(keyLight);
+    const fillLight = new THREE.DirectionalLight(0x80bfff, 0.8);
+    fillLight.position.set(-3, 1, -2);
+    scene.add(fillLight);
+
+    const state = { renderer, scene, camera, model: null as THREE.Group | null };
+    threeRef.current = state;
+    const loader = new GLTFLoader();
+    loader.load(
+      config.asset_url,
+      gltf => {
+        if (threeRef.current !== state) return;
+        const model = gltf.scene;
+        const bounds = new THREE.Box3().setFromObject(model);
+        const center = bounds.getCenter(new THREE.Vector3());
+        const maxDimension = Math.max(bounds.getSize(new THREE.Vector3()).x, bounds.getSize(new THREE.Vector3()).y, bounds.getSize(new THREE.Vector3()).z, 0.001);
+        model.position.sub(center);
+        model.scale.setScalar(1 / maxDimension);
+        const pivot = new THREE.Group();
+        pivot.add(model);
+        pivot.visible = false;
+        scene.add(pivot);
+        state.model = pivot;
+      },
+      undefined,
+      () => setModelError('This GLB could not be loaded. Try a smaller .glb with embedded textures.'),
+    );
+    const resize = () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    };
+    window.addEventListener('resize', resize);
+    return () => {
+      window.removeEventListener('resize', resize);
+      scene.traverse(node => {
+        const mesh = node as THREE.Mesh;
+        mesh.geometry?.dispose?.();
+        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        materials.filter(Boolean).forEach(material => material.dispose?.());
+      });
+      renderer.dispose();
+      renderer.domElement.remove();
+      if (threeRef.current === state) threeRef.current = null;
+    };
+  }, [phase, zone]);
 
   const startCamera = async () => {
     setError(null);
@@ -202,6 +277,8 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
     const frame = (time: number) => {
       raf = requestAnimationFrame(frame);
       const object = objectRef.current;
+      const three = threeRef.current;
+      const usingGlb = isGlbAsset(configRef.current);
       const orientation = orientationRef.current;
       const calibration = calibrationRef.current;
       const rawMatrix = deviceToEarth(orientation.alpha, orientation.beta, orientation.gamma);
@@ -228,14 +305,16 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
           setCalibrationProgress(clamp(calibration.samples / 75, 0, 1));
         }
         if (calibration.samples < 75) {
-          object && (object.style.display = 'none');
+          if (object) object.style.display = 'none';
+          if (three?.model) three.model.visible = false;
+          three?.renderer.render(three.scene, three.camera);
           return;
         }
         calibration.locked = true;
         setPhase('ready');
       }
 
-      if (!object || !userPosition) return;
+      if (!userPosition) return;
       const config = configRef.current;
       const anchorLat = config.anchor_lat ?? zone.lat;
       const anchorLng = config.anchor_lng ?? zone.lng;
@@ -275,7 +354,9 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
       const deviceVector = earthToDevice(quaternionToMatrix(filterRef.current.value), objectVector);
       const depth = -deviceVector[2];
       if (depth <= 0.02) {
-        object.style.display = 'none';
+        if (object) object.style.display = 'none';
+        if (three?.model) three.model.visible = false;
+        three?.renderer.render(three.scene, three.camera);
         return;
       }
 
@@ -291,14 +372,39 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
       const facingScale = 0.35 + 0.65 * Math.max(0, Math.cos(toRad(facingDifference)));
       const distanceOpacity = config.behavior === 'flyover' ? clamp(1 - horizontalDistance / 260, 0, 1) : 1;
       if (distanceOpacity < 0.02 || x < -size || x > width + size || y < -size || y > height + size) {
-        object.style.display = 'none';
+        if (object) object.style.display = 'none';
+        if (three?.model) three.model.visible = false;
+        three?.renderer.render(three.scene, three.camera);
         return;
       }
-      object.style.display = 'block';
-      object.style.width = `${size}px`;
-      object.style.height = `${size}px`;
-      object.style.opacity = `${distanceOpacity}`;
-      object.style.transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -50%) scaleX(${facingScale})`;
+      if (usingGlb) {
+        if (object) object.style.display = 'none';
+        if (three?.model) {
+          // Keep the physical scale independent of the camera-space distance.
+          // Models are normalized to one unit when loaded, then projected from
+          // a stable virtual camera distance.
+          const virtualDistance = 10;
+          const position = new THREE.Vector3(deviceVector[0], deviceVector[1], deviceVector[2]).normalize().multiplyScalar(virtualDistance);
+          const facingDevice = earthToDevice(
+            quaternionToMatrix(filterRef.current.value),
+            skyVector(((objectFacing - northOffset) % 360 + 360) % 360, 0),
+          );
+          const forward = new THREE.Vector3(facingDevice[0], facingDevice[1], facingDevice[2]).normalize();
+          three.model.visible = true;
+          three.model.position.copy(position);
+          three.model.scale.setScalar(Math.max(0.002, virtualDistance * config.scale_m / Math.max(slantDistance, 1)));
+          three.model.lookAt(position.clone().add(forward));
+        }
+        three?.renderer.render(three.scene, three.camera);
+      } else if (object) {
+        if (three?.model) three.model.visible = false;
+        three?.renderer.render(three.scene, three.camera);
+        object.style.display = 'block';
+        object.style.width = `${size}px`;
+        object.style.height = `${size}px`;
+        object.style.opacity = `${distanceOpacity}`;
+        object.style.transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -50%) scaleX(${facingScale})`;
+      }
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
@@ -314,12 +420,13 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
     <div className="fixed inset-0 z-[5000] bg-black text-white overflow-hidden">
       <video ref={videoRef} playsInline muted className="absolute inset-0 w-full h-full object-cover" />
       <div className="absolute inset-0 bg-black/10 pointer-events-none" />
+      <div ref={threeHostRef} className="absolute inset-0 pointer-events-none" />
       <div ref={objectRef} className="absolute top-0 left-0 pointer-events-none will-change-transform" style={{ display: 'none' }}>
-        {config.asset_url ? (
+        {config.asset_url && !isGlbAsset(config) ? (
           <img src={config.asset_url} alt="" className="w-full h-full object-contain drop-shadow-2xl" />
-        ) : (
+        ) : !isGlbAsset(config) ? (
           <div className="w-full h-full rounded-full bg-emerald-400/80 border-2 border-white/70 shadow-[0_0_40px_rgba(16,185,129,0.7)]" />
-        )}
+        ) : null}
       </div>
 
       <div className="absolute top-0 inset-x-0 pt-[max(1rem,env(safe-area-inset-top))] px-4 flex items-center justify-between">
@@ -357,6 +464,12 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
       {phase === 'ready' && (
         <div className="absolute inset-x-0 bottom-[max(1.25rem,env(safe-area-inset-bottom))] flex justify-center pointer-events-none">
           <div className="rounded-full bg-black/65 backdrop-blur px-3 py-1.5 text-[11px] text-zinc-200">{config.behavior === 'flyover' ? 'Flyover active' : 'Object anchored'}</div>
+        </div>
+      )}
+
+      {modelError && phase === 'ready' && (
+        <div className="absolute inset-x-5 bottom-[max(4rem,calc(env(safe-area-inset-bottom)+3rem))] rounded-xl bg-red-950/90 px-3 py-2 text-xs text-red-200 text-center">
+          {modelError}
         </div>
       )}
     </div>
