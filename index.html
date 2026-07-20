@@ -158,13 +158,15 @@
 
     <!-- ── Block page-level pinch zoom ──────────────────────────────────────
          Prevent iOS Safari's page-zoom gesture so a stray pinch can't zoom the
-         whole player chrome. This only cancels the pinch GESTURE — it doesn't
-         touch the viewport meta or layout, so header/footer/welcome stay put.
-         The MapLibre map zooms via its own touch handling on the canvas and is
-         unaffected. -->
+         whole player chrome. MapLibre receives desktop trackpad pinch as a
+         Safari gesture on some browsers, so map canvases must be exempt. -->
     <script>
       ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (evt) {
-        document.addEventListener(evt, function (e) { e.preventDefault(); }, { passive: false });
+        document.addEventListener(evt, function (e) {
+          var target = e.target;
+          if (target instanceof Element && target.closest('.maplibregl-canvas')) return;
+          e.preventDefault();
+        }, { passive: false });
       });
     </script>
 

@@ -142,5 +142,6 @@ export function createMap(opts: CreateMapOptions): maplibregl.Map {
   });
   // No 3D tilt gesture; keep pinch-zoom and two-finger rotate.
   map.touchPitch.disable();
+  if (opts.interactive !== false) map.scrollZoom.enable();
   return map;
 }
