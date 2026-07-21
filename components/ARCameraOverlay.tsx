@@ -15,7 +15,7 @@ interface ARCameraOverlayProps {
 
 type Quaternion = [number, number, number, number];
 type Phase = 'intro' | 'calibrating' | 'ready' | 'error';
-type PoseMode = 'legacy' | 'world';
+type PoseMode = 'legacy' | 'world' | 'frozen';
 
 interface MotionSample {
   t: number;
@@ -145,9 +145,8 @@ const VFOV = 95;
 
 export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosition, onClose }) => {
   const labMode = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('ar-lab') === '1';
-  const poseMode: PoseMode = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('ar-pose') === 'world'
-    ? 'world'
-    : 'legacy';
+  const poseParam = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('ar-pose') : null;
+  const poseMode: PoseMode = poseParam === 'world' || poseParam === 'frozen' ? poseParam : 'legacy';
   const configRef = useRef(configFor(zone));
   const videoRef = useRef<HTMLVideoElement>(null);
   const objectRef = useRef<HTMLDivElement>(null);
@@ -159,6 +158,7 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
   const accelerationRef = useRef<MotionSample['acceleration']>(null);
   const samplesRef = useRef<MotionSample[]>([]);
   const recordingRef = useRef(false);
+  const sessionOriginRef = useRef<[number, number] | null>(null);
   const filterRef = useRef<{ value: Quaternion; at: number } | null>(null);
   const calibrationRef = useRef({ sin: 0, cos: 1, samples: 0, locked: false });
   const [phase, setPhase] = useState<Phase>('intro');
@@ -290,6 +290,7 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
       }
+      sessionOriginRef.current = null;
       setPhase('calibrating');
     } catch (cause) {
       stopCamera();
@@ -392,6 +393,10 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
           return;
         }
         calibration.locked = true;
+        // GPS is excellent for finding the experience, but a several-metre
+        // accuracy wobble is very visible in camera space. The fixed-origin
+        // experiment holds a local camera origin after calibration instead.
+        if (poseMode === 'frozen' && userPosition) sessionOriginRef.current = [...userPosition];
         setPhase('ready');
       }
 
@@ -413,7 +418,9 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
         objectFacing = direction;
       }
 
-      const [userLat, userLng] = userPosition;
+      const [userLat, userLng] = poseMode === 'frozen' && sessionOriginRef.current
+        ? sessionOriginRef.current
+        : userPosition;
       const horizontalDistance = getDistance(userLat, userLng, objectLat, objectLng);
       const bearing = horizontalDistance > 1
         ? bearingTo(userLat, userLng, objectLat, objectLng)
@@ -586,7 +593,7 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
 
       {labMode && phase === 'ready' && (
         <div className="absolute top-[max(5.5rem,calc(env(safe-area-inset-top)+4rem))] left-4 rounded-xl bg-black/75 backdrop-blur px-3 py-2 text-[11px] text-zinc-200 space-y-2">
-          <p><span className="text-emerald-300 font-semibold">AR lab</span> {poseMode === 'world' ? 'world-up candidate' : 'baseline pose'}</p>
+          <p><span className="text-emerald-300 font-semibold">AR lab</span> {poseMode === 'world' ? 'world-up candidate' : poseMode === 'frozen' ? 'fixed-origin candidate' : 'baseline pose'}</p>
           <p>heading {orientationRef.current.heading === null ? 'n/a' : `${Math.round(orientationRef.current.heading)} deg`}{orientationRef.current.headingAccuracy !== null ? ` +/-${Math.round(orientationRef.current.headingAccuracy)} deg` : ''}</p>
           <div className="flex gap-2 pointer-events-auto">
             <button onClick={toggleRecording} className="rounded-md bg-zinc-700 px-2 py-1 font-semibold">{isRecording ? 'Stop log' : 'Record log'}</button>
