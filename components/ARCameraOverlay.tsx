@@ -129,10 +129,6 @@ const isGlbAsset = (config: ARObjectConfig) =>
 
 const HFOV = 63;
 const VFOV = 95;
-// Sensor events arrive in discrete, device-dependent bursts. A longer
-// response makes the object glide between readings instead of visibly
-// stepping, while still keeping ordinary camera movement responsive.
-const ORIENTATION_RESPONSE_MS = 420;
 
 export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosition, onClose }) => {
   const configRef = useRef(configFor(zone));
@@ -377,7 +373,7 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
       else {
         const elapsed = Math.min(100, Math.max(0, time - previous.at));
         filterRef.current = {
-          value: slerp(previous.value, rawOrientation, 1 - Math.exp(-elapsed / ORIENTATION_RESPONSE_MS)),
+          value: slerp(previous.value, rawOrientation, 1 - Math.exp(-elapsed / 150)),
           at: time,
         };
       }
@@ -422,20 +418,9 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
             skyVector(((objectFacing - northOffset) % 360 + 360) % 360, 0),
           );
           const forward = new THREE.Vector3(facingDevice[0], facingDevice[1], facingDevice[2]).normalize();
-          // `lookAt` otherwise uses screen-up as its vertical reference. That
-          // makes a static character remain upright while the real horizon
-          // rolls, which is exactly the wrong behavior for a world object.
-          // Transform Earth-up into the same camera space as the model so the
-          // configured facing direction stays fixed relative to gravity.
-          const upDevice = earthToDevice(
-            quaternionToMatrix(filterRef.current.value),
-            [0, 0, 1],
-          );
-          const worldUp = new THREE.Vector3(upDevice[0], upDevice[1], upDevice[2]).normalize();
           three.model.visible = true;
           three.model.position.copy(position);
           three.model.scale.setScalar(Math.max(0.002, virtualDistance * config.scale_m / Math.max(slantDistance, 1)));
-          three.model.up.copy(worldUp);
           three.model.lookAt(position.clone().add(forward));
         }
         three?.renderer.render(three.scene, three.camera);
