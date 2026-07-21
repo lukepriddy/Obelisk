@@ -378,6 +378,30 @@ export const Player: React.FC = () => {
     return true;
   };
 
+  // The audio loop remains the source of truth for activating zones. Keep a
+  // direct render-time check for the optional camera affordance as well: a
+  // fresh GPS position can paint the player dot before the next loop tick has
+  // published `activeARZone`. This prevents a nearby camera object from
+  // appearing to have no entry point during that brief state gap.
+  const nearbyARZone = useMemo(() => {
+    if (!audioStarted || !userPos) return null;
+
+    const positionReliable =
+      simulationMode || (gpsFixRef.current?.accuracy ?? Infinity) <= 100;
+    if (!positionReliable) return null;
+
+    return zones.find(zone => {
+      if (!zone.ar_config?.enabled || !zone.ar_config.asset_url) return false;
+      if (!isZoneAccessible(zone)) return false;
+      return getDistance(userPos[0], userPos[1], zone.lat, zone.lng) < zone.radius;
+    }) || null;
+    // isZoneAccessible reads the current refs for visits, locks, and progress.
+    // Those interactions also update component state, which refreshes this memo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audioStarted, userPos, zones, simulationMode, tour, playerProgress]);
+
+  const visibleARZone = activeARZone || nearbyARZone;
+
   // ── Zone-state persistence ─────────────────────────────────────────────────
   // Mobile browsers reclaim background tabs aggressively; without this, a
   // mid-tour refresh or tab kill re-locks every sequenced and passphrase zone
@@ -1836,7 +1860,7 @@ export const Player: React.FC = () => {
       {/* AR is an optional camera mode, not a bottom-card feature. Keep its
           entry point in a dedicated, persistent position so it remains clear
           when a zone also has audio, images, character chat, or notices. */}
-      {audioStarted && activeARZone && !arCameraZone && (
+      {audioStarted && visibleARZone && !arCameraZone && (
         <div
           className="absolute left-4 right-4 z-[1600] animate-in slide-in-from-top-4 duration-300"
           style={{ top: `calc(${TOP_BAR + (showAudioResume ? 92 : 12)}px + env(safe-area-inset-top, 0px))` }}
@@ -1854,11 +1878,11 @@ export const Player: React.FC = () => {
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-xs font-bold" style={{ color: th.hudText }}>Camera object nearby</p>
-              <p className="text-[11px] leading-snug mt-0.5 truncate" style={{ color: th.barMuted }}>{activeARZone.title}</p>
+              <p className="text-[11px] leading-snug mt-0.5 truncate" style={{ color: th.barMuted }}>{visibleARZone.title}</p>
             </div>
             <button
               type="button"
-              onClick={() => setArCameraZone(activeARZone)}
+              onClick={() => setArCameraZone(visibleARZone)}
               className="h-10 px-3 rounded-xl text-white text-xs font-bold flex items-center gap-1.5 shrink-0 active:scale-95 transition-transform"
               style={{ backgroundColor: accent }}
             >
