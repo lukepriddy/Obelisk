@@ -126,6 +126,87 @@ const AudioPreview: React.FC<{ url: string; volume?: number }> = ({ url, volume 
   );
 };
 
+const compassLabel = (degrees: number) => {
+  const points = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+  return points[Math.round((((degrees % 360) + 360) % 360) / 45) % 8];
+};
+
+/** A direct, map-like bearing control with an exact numeric fallback. */
+const DirectionDial: React.FC<{
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+}> = ({ label, value, onChange }) => {
+  const setBearingFromPointer = (event: React.PointerEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX - rect.left - rect.width / 2;
+    const y = event.clientY - rect.top - rect.height / 2;
+    const degrees = (Math.atan2(x, -y) * 180 / Math.PI + 360) % 360;
+    onChange(Math.round(degrees) % 360);
+  };
+  const adjustBearing = (amount: number) => onChange((value + amount + 360) % 360);
+
+  return (
+    <div className="rounded-xl border border-zinc-800 bg-zinc-950/40 p-3">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <p className="text-xs font-bold text-zinc-400 uppercase">{label}</p>
+        <label className="flex items-center gap-1.5 text-sky-400 text-xs font-bold">
+          <input
+            type="number"
+            min="0"
+            max="359"
+            value={value}
+            onChange={event => onChange(Math.max(0, Math.min(359, Number(event.target.value) || 0)))}
+            className="w-14 bg-zinc-900 border border-zinc-700 rounded-md px-1.5 py-1 text-right outline-none focus:border-sky-500"
+            aria-label={`${label} in degrees`}
+          />
+          <span>degrees</span>
+        </label>
+      </div>
+      <div className="flex items-center gap-4">
+        <div
+          role="slider"
+          aria-label={label}
+          aria-valuemin={0}
+          aria-valuemax={359}
+          aria-valuenow={value}
+          tabIndex={0}
+          onPointerDown={event => {
+            event.currentTarget.setPointerCapture(event.pointerId);
+            setBearingFromPointer(event);
+          }}
+          onPointerMove={event => {
+            if (event.currentTarget.hasPointerCapture(event.pointerId)) setBearingFromPointer(event);
+          }}
+          onKeyDown={event => {
+            if (event.key === 'ArrowRight' || event.key === 'ArrowUp') { event.preventDefault(); adjustBearing(event.shiftKey ? 15 : 1); }
+            if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') { event.preventDefault(); adjustBearing(event.shiftKey ? -15 : -1); }
+          }}
+          className="relative w-28 h-28 shrink-0 rounded-full border-2 border-zinc-700 bg-zinc-900 touch-none cursor-crosshair outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+          title="Drag the marker around the compass"
+        >
+          <span className="absolute left-1/2 top-1.5 -translate-x-1/2 text-[10px] font-bold text-zinc-300">N</span>
+          <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-zinc-500">E</span>
+          <span className="absolute left-1/2 bottom-1.5 -translate-x-1/2 text-[10px] font-bold text-zinc-500">S</span>
+          <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-zinc-500">W</span>
+          <span className="absolute left-1/2 top-1/2 w-2 h-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-zinc-500" />
+          <span
+            className="absolute left-1/2 top-1/2 h-[38px] w-0.5 origin-bottom bg-sky-400"
+            style={{ transform: `translate(-50%, -100%) rotate(${value}deg)`, transformOrigin: '50% 100%' }}
+          />
+          <span
+            className="absolute left-1/2 top-1/2 w-3 h-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-sky-400 shadow"
+            style={{ transform: `translate(-50%, -50%) rotate(${value}deg) translateY(-38px)` }}
+          />
+        </div>
+        <p className="text-[11px] leading-relaxed text-zinc-500">
+          Drag toward the direction the object should face. North is at the top. Currently <span className="font-semibold text-zinc-300">{compassLabel(value)} ({value} degrees)</span>.
+        </p>
+      </div>
+    </div>
+  );
+};
+
 // Interleave male (left col) and female (right col) voices for the 2-col grid
 const _males   = VOICES.filter(v => v.gender === 'M');
 const _females = VOICES.filter(v => v.gender === 'F');
@@ -1518,16 +1599,19 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
                 </label>
               </div>
 
-              <label className="block text-xs font-bold text-zinc-400 uppercase">Facing direction <span className="float-right text-sky-400">{arConfig.facing_degrees}°</span>
-                <input type="range" min="0" max="359" step="1" value={arConfig.facing_degrees} onChange={e => updateArConfig({ facing_degrees: Number(e.target.value) })} className="w-full mt-2 accent-sky-500" />
-                <span className="block text-[10px] normal-case font-normal text-zinc-500 mt-1">0° is north. A directional character is clearest when viewed from the direction it faces.</span>
-              </label>
+              <DirectionDial
+                label="Facing direction"
+                value={arConfig.facing_degrees}
+                onChange={facing_degrees => updateArConfig({ facing_degrees })}
+              />
 
               {arConfig.behavior === 'flyover' && (
-                <div className="grid grid-cols-2 gap-3">
-                  <label className="text-xs font-bold text-zinc-400 uppercase">Travel direction <span className="float-right text-sky-400">{arConfig.flight_bearing_degrees || 0}°</span>
-                    <input type="range" min="0" max="359" step="1" value={arConfig.flight_bearing_degrees || 0} onChange={e => updateArConfig({ flight_bearing_degrees: Number(e.target.value) })} className="w-full mt-2 accent-sky-500" />
-                  </label>
+                <div className="space-y-3">
+                  <DirectionDial
+                    label="Travel direction"
+                    value={arConfig.flight_bearing_degrees || 0}
+                    onChange={flight_bearing_degrees => updateArConfig({ flight_bearing_degrees })}
+                  />
                   <label className="text-xs font-bold text-zinc-400 uppercase">Loop <span className="float-right text-sky-400">{arConfig.flight_duration_seconds || 30}s</span>
                     <input type="range" min="10" max="90" step="5" value={arConfig.flight_duration_seconds || 30} onChange={e => updateArConfig({ flight_duration_seconds: Number(e.target.value) })} className="w-full mt-2 accent-sky-500" />
                   </label>
