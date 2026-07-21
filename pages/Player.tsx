@@ -639,7 +639,12 @@ export const Player: React.FC = () => {
       // happened (backgrounding between zones, Siri, alarm, declined call).
       // Previously the banner only appeared if audio was mid-playback at
       // background time, so the next zone could stay silent with no way out.
-      if (audioService.isInterruptionPaused() && audioUpdates.some(u => u.volume > 0)) {
+      // A zone can be visual-only (for example an AR object) and therefore
+      // contributes a volume update without an actual media element. Only
+      // surface audio recovery when something playable is in Now Playing.
+      // Otherwise the no-audio zone repeatedly shows then immediately hides
+      // the recovery card, which also obscures its camera prompt.
+      if (audioService.isInterruptionPaused() && activeState.length > 0) {
         setShowAudioResume(true);
       }
       // Only push new state when the payload actually changed — volumes are
