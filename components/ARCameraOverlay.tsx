@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Camera, Compass, Loader2, X } from 'lucide-react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { ARObjectConfig, Zone } from '../types';
 import { getDistance } from '../utils/geo';
 
@@ -182,6 +184,15 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
     const state = { renderer, scene, camera, model: null as THREE.Group | null, mixer: null as THREE.AnimationMixer | null, lastFrame: performance.now() };
     threeRef.current = state;
     const loader = new GLTFLoader();
+    // Most creator-exported GLBs are either plain, Draco-compressed, or
+    // Meshopt-compressed. GLTFLoader only handles the latter two after their
+    // decoders are registered. Keep the Draco worker count low because this
+    // runs alongside camera capture on a phone.
+    const dracoLoader = new DRACOLoader();
+    dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
+    dracoLoader.setWorkerLimit(1);
+    loader.setDRACOLoader(dracoLoader);
+    loader.setMeshoptDecoder(MeshoptDecoder);
     loader.load(
       config.asset_url,
       gltf => {
@@ -203,7 +214,15 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
         }
       },
       undefined,
-      () => setModelError('This GLB could not be loaded. Try a smaller .glb with embedded textures.'),
+      cause => {
+        console.error('AR GLB load failed', cause);
+        const detail = cause instanceof Error ? cause.message : '';
+        setModelError(
+          detail
+            ? `This GLB could not be loaded: ${detail}`
+            : 'This GLB could not be loaded. Try a standard GLB with embedded textures.',
+        );
+      },
     );
     const resize = () => {
       camera.aspect = window.innerWidth / window.innerHeight;
@@ -220,6 +239,7 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
         materials.filter(Boolean).forEach(material => material.dispose?.());
       });
       renderer.dispose();
+      dracoLoader.dispose();
       renderer.domElement.remove();
       if (threeRef.current === state) threeRef.current = null;
     };
