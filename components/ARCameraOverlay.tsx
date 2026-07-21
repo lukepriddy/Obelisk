@@ -15,6 +15,19 @@ interface ARCameraOverlayProps {
 
 type Quaternion = [number, number, number, number];
 type Phase = 'intro' | 'calibrating' | 'ready' | 'error';
+type PoseMode = 'legacy' | 'world';
+
+interface MotionSample {
+  t: number;
+  alpha: number;
+  beta: number;
+  gamma: number;
+  heading: number | null;
+  headingAccuracy: number | null;
+  rotationRate: { alpha: number | null; beta: number | null; gamma: number | null } | null;
+  acceleration: { x: number | null; y: number | null; z: number | null } | null;
+  position: [number, number] | null;
+}
 
 const toRad = (degrees: number) => (degrees * Math.PI) / 180;
 const toDeg = (radians: number) => (radians * 180) / Math.PI;
@@ -131,19 +144,29 @@ const HFOV = 63;
 const VFOV = 95;
 
 export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosition, onClose }) => {
+  const labMode = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('ar-lab') === '1';
+  const poseMode: PoseMode = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('ar-pose') === 'world'
+    ? 'world'
+    : 'legacy';
   const configRef = useRef(configFor(zone));
   const videoRef = useRef<HTMLVideoElement>(null);
   const objectRef = useRef<HTMLDivElement>(null);
   const threeHostRef = useRef<HTMLDivElement>(null);
   const threeRef = useRef<{ renderer: THREE.WebGLRenderer; scene: THREE.Scene; camera: THREE.PerspectiveCamera; model: THREE.Group | null; mixer: THREE.AnimationMixer | null; lastFrame: number } | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const orientationRef = useRef({ alpha: 0, beta: 0, gamma: 0, heading: null as number | null });
+  const orientationRef = useRef({ alpha: 0, beta: 0, gamma: 0, heading: null as number | null, headingAccuracy: null as number | null });
+  const motionRef = useRef<MotionSample['rotationRate']>(null);
+  const accelerationRef = useRef<MotionSample['acceleration']>(null);
+  const samplesRef = useRef<MotionSample[]>([]);
+  const recordingRef = useRef(false);
   const filterRef = useRef<{ value: Quaternion; at: number } | null>(null);
   const calibrationRef = useRef({ sin: 0, cos: 1, samples: 0, locked: false });
   const [phase, setPhase] = useState<Phase>('intro');
   const [error, setError] = useState<string | null>(null);
   const [modelError, setModelError] = useState<string | null>(null);
   const [calibrationProgress, setCalibrationProgress] = useState(0);
+  const [isRecording, setIsRecording] = useState(false);
+  const [sampleCount, setSampleCount] = useState(0);
 
   useEffect(() => {
     configRef.current = configFor(zone);
@@ -278,21 +301,51 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
   useEffect(() => {
     if (phase !== 'calibrating' && phase !== 'ready') return;
     const onOrientation = (event: DeviceOrientationEvent) => {
-      const webkit = event as DeviceOrientationEvent & { webkitCompassHeading?: number };
+      const webkit = event as DeviceOrientationEvent & { webkitCompassHeading?: number; webkitCompassAccuracy?: number };
       const current = orientationRef.current;
       if (typeof event.alpha === 'number') current.alpha = event.alpha;
       if (typeof event.beta === 'number') current.beta = event.beta;
       if (typeof event.gamma === 'number') current.gamma = event.gamma;
       if (typeof webkit.webkitCompassHeading === 'number') current.heading = webkit.webkitCompassHeading;
       else if (typeof event.alpha === 'number') current.heading = (360 - event.alpha) % 360;
+      if (typeof webkit.webkitCompassAccuracy === 'number') current.headingAccuracy = webkit.webkitCompassAccuracy;
+      if (recordingRef.current) {
+        samplesRef.current.push({
+          t: performance.now(),
+          alpha: current.alpha,
+          beta: current.beta,
+          gamma: current.gamma,
+          heading: current.heading,
+          headingAccuracy: current.headingAccuracy,
+          rotationRate: motionRef.current,
+          acceleration: accelerationRef.current,
+          position: userPosition,
+        });
+      }
+    };
+    const onMotion = (event: DeviceMotionEvent) => {
+      const rotationRate = event.rotationRate;
+      const acceleration = event.accelerationIncludingGravity;
+      motionRef.current = rotationRate ? {
+        alpha: rotationRate.alpha,
+        beta: rotationRate.beta,
+        gamma: rotationRate.gamma,
+      } : null;
+      accelerationRef.current = acceleration ? {
+        x: acceleration.x,
+        y: acceleration.y,
+        z: acceleration.z,
+      } : null;
     };
     window.addEventListener('deviceorientationabsolute', onOrientation as EventListener);
     window.addEventListener('deviceorientation', onOrientation as EventListener);
+    window.addEventListener('devicemotion', onMotion as EventListener);
     return () => {
       window.removeEventListener('deviceorientationabsolute', onOrientation as EventListener);
       window.removeEventListener('deviceorientation', onOrientation as EventListener);
+      window.removeEventListener('devicemotion', onMotion as EventListener);
     };
-  }, [phase]);
+  }, [phase, userPosition]);
 
   useEffect(() => {
     if (phase !== 'calibrating' && phase !== 'ready') return;
@@ -421,6 +474,14 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
           three.model.visible = true;
           three.model.position.copy(position);
           three.model.scale.setScalar(Math.max(0.002, virtualDistance * config.scale_m / Math.max(slantDistance, 1)));
+          if (poseMode === 'world') {
+            // This candidate carries Earth-up into camera space before setting
+            // the model pose. The existing path uses Three's default up axis;
+            // the lab mode lets us test whether that is the cause of tilt roll.
+            const upDevice = earthToDevice(quaternionToMatrix(filterRef.current.value), [0, 0, 1]);
+            const up = new THREE.Vector3(upDevice[0], upDevice[1], upDevice[2]).normalize();
+            if (Math.abs(up.dot(forward)) < 0.98) three.model.up.copy(up);
+          }
           three.model.lookAt(position.clone().add(forward));
         }
         three?.renderer.render(three.scene, three.camera);
@@ -441,6 +502,34 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
   const close = () => {
     stopCamera();
     onClose();
+  };
+  const toggleRecording = () => {
+    if (recordingRef.current) {
+      recordingRef.current = false;
+      setIsRecording(false);
+      setSampleCount(samplesRef.current.length);
+      return;
+    }
+    samplesRef.current = [];
+    recordingRef.current = true;
+    setSampleCount(0);
+    setIsRecording(true);
+  };
+  const downloadRecording = () => {
+    if (!samplesRef.current.length) return;
+    const payload = {
+      version: 1,
+      capturedAt: new Date().toISOString(),
+      zoneId: zone.id,
+      poseMode,
+      samples: samplesRef.current,
+    };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(payload)], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `obelisk-ar-sensors-${Date.now()}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
   const config = configFor(zone);
 
@@ -492,6 +581,17 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
       {phase === 'ready' && (
         <div className="absolute inset-x-0 bottom-[max(1.25rem,env(safe-area-inset-bottom))] flex justify-center pointer-events-none">
           <div className="rounded-full bg-black/65 backdrop-blur px-3 py-1.5 text-[11px] text-zinc-200">{config.behavior === 'flyover' ? 'Flyover active' : 'Object anchored'}</div>
+        </div>
+      )}
+
+      {labMode && phase === 'ready' && (
+        <div className="absolute top-[max(5.5rem,calc(env(safe-area-inset-top)+4rem))] left-4 rounded-xl bg-black/75 backdrop-blur px-3 py-2 text-[11px] text-zinc-200 space-y-2">
+          <p><span className="text-emerald-300 font-semibold">AR lab</span> {poseMode === 'world' ? 'world-up candidate' : 'baseline pose'}</p>
+          <p>heading {orientationRef.current.heading === null ? 'n/a' : `${Math.round(orientationRef.current.heading)} deg`}{orientationRef.current.headingAccuracy !== null ? ` +/-${Math.round(orientationRef.current.headingAccuracy)} deg` : ''}</p>
+          <div className="flex gap-2 pointer-events-auto">
+            <button onClick={toggleRecording} className="rounded-md bg-zinc-700 px-2 py-1 font-semibold">{isRecording ? 'Stop log' : 'Record log'}</button>
+            <button onClick={downloadRecording} disabled={!sampleCount} className="rounded-md bg-emerald-600 disabled:opacity-40 px-2 py-1 font-semibold">Download {sampleCount || ''}</button>
+          </div>
         </div>
       )}
 
