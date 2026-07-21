@@ -15,7 +15,7 @@ interface ARCameraOverlayProps {
 
 type Quaternion = [number, number, number, number];
 type Phase = 'intro' | 'calibrating' | 'ready' | 'error';
-type PoseMode = 'legacy' | 'world' | 'frozen';
+type PoseMode = 'legacy' | 'world' | 'frozen' | 'calibrated';
 
 interface MotionSample {
   t: number;
@@ -61,6 +61,24 @@ const earthToDevice = (m: number[], v: number[]) => [
   m[0] * v[0] + m[3] * v[1] + m[6] * v[2],
   m[1] * v[0] + m[4] * v[1] + m[7] * v[2],
   m[2] * v[0] + m[5] * v[1] + m[8] * v[2],
+];
+
+const transposeMatrix = (m: number[]) => [
+  m[0], m[3], m[6],
+  m[1], m[4], m[7],
+  m[2], m[5], m[8],
+];
+
+const multiplyMatrices = (a: number[], b: number[]) => [
+  a[0] * b[0] + a[1] * b[3] + a[2] * b[6], a[0] * b[1] + a[1] * b[4] + a[2] * b[7], a[0] * b[2] + a[1] * b[5] + a[2] * b[8],
+  a[3] * b[0] + a[4] * b[3] + a[5] * b[6], a[3] * b[1] + a[4] * b[4] + a[5] * b[7], a[3] * b[2] + a[4] * b[5] + a[5] * b[8],
+  a[6] * b[0] + a[7] * b[3] + a[8] * b[6], a[6] * b[1] + a[7] * b[4] + a[8] * b[7], a[6] * b[2] + a[7] * b[5] + a[8] * b[8],
+];
+
+const transformVector = (m: number[], v: number[]) => [
+  m[0] * v[0] + m[1] * v[1] + m[2] * v[2],
+  m[3] * v[0] + m[4] * v[1] + m[5] * v[2],
+  m[6] * v[0] + m[7] * v[1] + m[8] * v[2],
 ];
 
 const skyVector = (bearingDeg: number, elevationDeg: number) => {
@@ -146,7 +164,7 @@ const VFOV = 95;
 export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosition, onClose }) => {
   const labMode = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('ar-lab') === '1';
   const poseParam = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('ar-pose') : null;
-  const poseMode: PoseMode = poseParam === 'world' || poseParam === 'frozen' ? poseParam : 'legacy';
+  const poseMode: PoseMode = poseParam === 'world' || poseParam === 'frozen' || poseParam === 'calibrated' ? poseParam : 'legacy';
   const configRef = useRef(configFor(zone));
   const videoRef = useRef<HTMLVideoElement>(null);
   const objectRef = useRef<HTMLDivElement>(null);
@@ -159,6 +177,7 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
   const samplesRef = useRef<MotionSample[]>([]);
   const recordingRef = useRef(false);
   const sessionOriginRef = useRef<[number, number] | null>(null);
+  const calibratedFrameRef = useRef<{ deviceToEarth: number[]; origin: [number, number] } | null>(null);
   const filterRef = useRef<{ value: Quaternion; at: number } | null>(null);
   const calibrationRef = useRef({ sin: 0, cos: 1, samples: 0, locked: false });
   const [phase, setPhase] = useState<Phase>('intro');
@@ -291,6 +310,9 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
         await videoRef.current.play();
       }
       sessionOriginRef.current = null;
+      calibratedFrameRef.current = null;
+      calibrationRef.current = { sin: 0, cos: 1, samples: 0, locked: false };
+      filterRef.current = null;
       setPhase('calibrating');
     } catch (cause) {
       stopCamera();
@@ -396,7 +418,10 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
         // GPS is excellent for finding the experience, but a several-metre
         // accuracy wobble is very visible in camera space. The fixed-origin
         // experiment holds a local camera origin after calibration instead.
-        if (poseMode === 'frozen' && userPosition) sessionOriginRef.current = [...userPosition];
+        if ((poseMode === 'frozen' || poseMode === 'calibrated') && userPosition) sessionOriginRef.current = [...userPosition];
+        if (poseMode === 'calibrated' && userPosition) {
+          calibratedFrameRef.current = { deviceToEarth: [...rawMatrix], origin: [...userPosition] };
+        }
         setPhase('ready');
       }
 
@@ -418,7 +443,7 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
         objectFacing = direction;
       }
 
-      const [userLat, userLng] = poseMode === 'frozen' && sessionOriginRef.current
+      const [userLat, userLng] = (poseMode === 'frozen' || poseMode === 'calibrated') && sessionOriginRef.current
         ? sessionOriginRef.current
         : userPosition;
       const horizontalDistance = getDistance(userLat, userLng, objectLat, objectLng);
@@ -439,7 +464,14 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
       }
 
       const objectVector = skyVector(((bearing - northOffset) % 360 + 360) % 360, elevation);
-      const deviceVector = earthToDevice(quaternionToMatrix(filterRef.current.value), objectVector);
+      const filteredMatrix = quaternionToMatrix(filterRef.current.value);
+      const calibratedFrame = calibratedFrameRef.current;
+      const localToDevice = poseMode === 'calibrated' && calibratedFrame
+        ? multiplyMatrices(transposeMatrix(filteredMatrix), calibratedFrame.deviceToEarth)
+        : null;
+      const deviceVector = localToDevice && calibratedFrame
+        ? transformVector(localToDevice, earthToDevice(calibratedFrame.deviceToEarth, objectVector))
+        : earthToDevice(filteredMatrix, objectVector);
       const depth = -deviceVector[2];
       if (depth <= 0.02) {
         if (object) object.style.display = 'none';
@@ -473,19 +505,21 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
           // a stable virtual camera distance.
           const virtualDistance = 10;
           const position = new THREE.Vector3(deviceVector[0], deviceVector[1], deviceVector[2]).normalize().multiplyScalar(virtualDistance);
-          const facingDevice = earthToDevice(
-            quaternionToMatrix(filterRef.current.value),
-            skyVector(((objectFacing - northOffset) % 360 + 360) % 360, 0),
-          );
+          const worldForward = skyVector(((objectFacing - northOffset) % 360 + 360) % 360, 0);
+          const facingDevice = localToDevice && calibratedFrame
+            ? transformVector(localToDevice, earthToDevice(calibratedFrame.deviceToEarth, worldForward))
+            : earthToDevice(filteredMatrix, worldForward);
           const forward = new THREE.Vector3(facingDevice[0], facingDevice[1], facingDevice[2]).normalize();
           three.model.visible = true;
           three.model.position.copy(position);
           three.model.scale.setScalar(Math.max(0.002, virtualDistance * config.scale_m / Math.max(slantDistance, 1)));
-          if (poseMode === 'world') {
+          if (poseMode === 'world' || poseMode === 'calibrated') {
             // This candidate carries Earth-up into camera space before setting
             // the model pose. The existing path uses Three's default up axis;
             // the lab mode lets us test whether that is the cause of tilt roll.
-            const upDevice = earthToDevice(quaternionToMatrix(filterRef.current.value), [0, 0, 1]);
+            const upDevice = localToDevice && calibratedFrame
+              ? transformVector(localToDevice, earthToDevice(calibratedFrame.deviceToEarth, [0, 0, 1]))
+              : earthToDevice(filteredMatrix, [0, 0, 1]);
             const up = new THREE.Vector3(upDevice[0], upDevice[1], upDevice[2]).normalize();
             if (Math.abs(up.dot(forward)) < 0.98) three.model.up.copy(up);
           }
@@ -593,7 +627,7 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
 
       {labMode && phase === 'ready' && (
         <div className="absolute top-[max(5.5rem,calc(env(safe-area-inset-top)+4rem))] left-4 rounded-xl bg-black/75 backdrop-blur px-3 py-2 text-[11px] text-zinc-200 space-y-2">
-          <p><span className="text-emerald-300 font-semibold">AR lab</span> {poseMode === 'world' ? 'world-up candidate' : poseMode === 'frozen' ? 'fixed-origin candidate' : 'baseline pose'}</p>
+          <p><span className="text-emerald-300 font-semibold">AR lab</span> {poseMode === 'calibrated' ? 'calibrated-frame candidate' : poseMode === 'world' ? 'world-up candidate' : poseMode === 'frozen' ? 'fixed-origin candidate' : 'baseline pose'}</p>
           <p>heading {orientationRef.current.heading === null ? 'n/a' : `${Math.round(orientationRef.current.heading)} deg`}{orientationRef.current.headingAccuracy !== null ? ` +/-${Math.round(orientationRef.current.headingAccuracy)} deg` : ''}</p>
           <div className="flex gap-2 pointer-events-auto">
             <button onClick={toggleRecording} className="rounded-md bg-zinc-700 px-2 py-1 font-semibold">{isRecording ? 'Stop log' : 'Record log'}</button>
