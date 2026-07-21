@@ -457,19 +457,8 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
       if (!previous) filterRef.current = { value: rawOrientation, at: time };
       else {
         const elapsed = Math.min(100, Math.max(0, time - previous.at));
-        const rate = motionRef.current;
-        const angularSpeed = rate
-          ? Math.hypot(rate.alpha ?? 0, rate.beta ?? 0, rate.gamma ?? 0)
-          : 0;
-        // Camera video has almost no perceptible lag. A single, heavy filter
-        // makes the object look detached while the phone is in motion. In the
-        // calibrated candidate, react quickly during a pan and settle more
-        // gently once the device is still.
-        const responseMs = poseMode === 'calibrated'
-          ? angularSpeed > 24 ? 42 : angularSpeed > 8 ? 78 : 170
-          : 150;
         filterRef.current = {
-          value: slerp(previous.value, rawOrientation, 1 - Math.exp(-elapsed / responseMs)),
+          value: slerp(previous.value, rawOrientation, 1 - Math.exp(-elapsed / 150)),
           at: time,
         };
       }
