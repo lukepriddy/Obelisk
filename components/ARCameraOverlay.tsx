@@ -10,6 +10,7 @@ import { getDistance } from '../utils/geo';
 interface ARCameraOverlayProps {
   zone: Zone;
   userPosition: [number, number] | null;
+  gpsAccuracy?: number | null;
   onClose: () => void;
 }
 
@@ -161,7 +162,7 @@ const isGlbAsset = (config: ARObjectConfig) =>
 const HFOV = 63;
 const VFOV = 95;
 
-export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosition, onClose }) => {
+export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosition, gpsAccuracy, onClose }) => {
   const labMode = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('ar-lab') === '1';
   const poseParam = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('ar-pose') : null;
   const poseMode: PoseMode = poseParam === 'world' || poseParam === 'frozen' || poseParam === 'calibrated' ? poseParam : 'legacy';
@@ -171,7 +172,11 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
   const threeHostRef = useRef<HTMLDivElement>(null);
   const threeRef = useRef<{ renderer: THREE.WebGLRenderer; scene: THREE.Scene; camera: THREE.PerspectiveCamera; model: THREE.Group | null; mixer: THREE.AnimationMixer | null; lastFrame: number } | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const orientationRef = useRef({ alpha: 0, beta: 0, gamma: 0, heading: null as number | null, headingAccuracy: null as number | null });
+  const orientationRef = useRef({ alpha: 0, beta: 0, gamma: 0, heading: null as number | null, headingAccuracy: null as number | null, jitter: 0 });
+  // Raw-heading ring buffer (last ~1s) used to measure compass jitter — the
+  // angular spread of the heading. A steady compass reads a few degrees; near
+  // metal/magnets it blows past 15°. We only trust calibration when it's calm.
+  const headingSamplesRef = useRef<{ t: number; deg: number }[]>([]);
   const motionRef = useRef<MotionSample['rotationRate']>(null);
   const accelerationRef = useRef<MotionSample['acceleration']>(null);
   const samplesRef = useRef<MotionSample[]>([]);
@@ -179,11 +184,20 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
   const sessionOriginRef = useRef<[number, number] | null>(null);
   const calibratedFrameRef = useRef<{ deviceToEarth: number[]; origin: [number, number] } | null>(null);
   const filterRef = useRef<{ value: Quaternion; at: number } | null>(null);
-  const calibrationRef = useRef({ sin: 0, cos: 1, samples: 0, locked: false });
+  const calibrationRef = useRef({ sin: 0, cos: 1, samples: 0, locked: false, startedAt: 0 });
+  // Last trustworthy bearing to the object. Held while the user is inside the
+  // GPS noise floor, where the raw bearing spins wildly (±90° at 5m on a ±5m
+  // fix) — the object is nearly overhead there anyway, so holding is invisible.
+  const lastBearingRef = useRef<number | null>(null);
+  // gpsAccuracy arrives as a prop that changes without re-running the rAF
+  // effect; mirror it in a ref the loop can read every frame.
+  const gpsAccuracyRef = useRef<number | null | undefined>(gpsAccuracy);
+  gpsAccuracyRef.current = gpsAccuracy;
   const [phase, setPhase] = useState<Phase>('intro');
   const [error, setError] = useState<string | null>(null);
   const [modelError, setModelError] = useState<string | null>(null);
   const [calibrationProgress, setCalibrationProgress] = useState(0);
+  const [calibrationNoisy, setCalibrationNoisy] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [sampleCount, setSampleCount] = useState(0);
 
@@ -311,7 +325,9 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
       }
       sessionOriginRef.current = null;
       calibratedFrameRef.current = null;
-      calibrationRef.current = { sin: 0, cos: 1, samples: 0, locked: false };
+      calibrationRef.current = { sin: 0, cos: 1, samples: 0, locked: false, startedAt: 0 };
+      lastBearingRef.current = null;
+      headingSamplesRef.current = [];
       filterRef.current = null;
       setPhase('calibrating');
     } catch (cause) {
@@ -332,6 +348,28 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
       if (typeof webkit.webkitCompassHeading === 'number') current.heading = webkit.webkitCompassHeading;
       else if (typeof event.alpha === 'number') current.heading = (360 - event.alpha) % 360;
       if (typeof webkit.webkitCompassAccuracy === 'number') current.headingAccuracy = webkit.webkitCompassAccuracy;
+
+      // Measure compass jitter = angular spread of the raw heading over the last
+      // second. Circular math so the 359°→0° seam doesn't register as a spike.
+      if (current.heading !== null) {
+        const now = performance.now();
+        const buffer = headingSamplesRef.current;
+        buffer.push({ t: now, deg: current.heading });
+        while (buffer.length && now - buffer[0].t > 1000) buffer.shift();
+        if (buffer.length > 2) {
+          let sumX = 0;
+          let sumY = 0;
+          for (const sample of buffer) { sumX += Math.cos(toRad(sample.deg)); sumY += Math.sin(toRad(sample.deg)); }
+          const meanDeg = (toDeg(Math.atan2(sumY, sumX)) + 360) % 360;
+          let maxDeviation = 0;
+          for (const sample of buffer) {
+            let deviation = Math.abs(sample.deg - meanDeg) % 360;
+            if (deviation > 180) deviation = 360 - deviation;
+            if (deviation > maxDeviation) maxDeviation = deviation;
+          }
+          current.jitter = maxDeviation;
+        }
+      }
       if (recordingRef.current) {
         samplesRef.current.push({
           t: performance.now(),
@@ -389,7 +427,17 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
       const flat = Math.abs(orientation.beta) < 20 && Math.abs(orientation.gamma) < 20;
 
       if (!calibration.locked) {
-        if (flat && orientation.heading !== null) {
+        if (!calibration.startedAt) calibration.startedAt = time;
+        // north offset is a CONSTANT — measure it only in the well-conditioned
+        // flat pose AND only while the compass is steady, so we never lock in a
+        // heading corrupted by nearby metal. If the environment stays noisy, a
+        // timeout lowers the bar (then finally forces a lock) rather than
+        // stranding the user on the calibrating screen indefinitely.
+        const steady = orientation.jitter < 8;
+        const elapsed = time - calibration.startedAt;
+        const softTimeout = elapsed > 7000;
+        const hardTimeout = elapsed > 11000;
+        if (flat && orientation.heading !== null && (steady || softTimeout)) {
           const frameAzimuth = (toDeg(Math.atan2(rawMatrix[1], rawMatrix[4])) + 360) % 360;
           const offset = ((orientation.heading - frameAzimuth) % 360 + 360) % 360;
           const radians = toRad(offset);
@@ -401,14 +449,18 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
             calibration.cos += (Math.cos(radians) - calibration.cos) * 0.08;
           }
           calibration.samples += 1;
-        } else {
+        } else if (!softTimeout) {
           calibration.samples = Math.max(0, calibration.samples - 3);
         }
+        const needed = softTimeout ? 20 : 75;
         if (time - progressAt > 80) {
           progressAt = time;
           setCalibrationProgress(clamp(calibration.samples / 75, 0, 1));
+          // Surface *why* it's slow: a jittery compass this early means metal or
+          // a magnet nearby. Only flag once we've had a moment to settle.
+          setCalibrationNoisy(elapsed > 2500 && orientation.jitter >= 8);
         }
-        if (calibration.samples < 75) {
+        if (calibration.samples < needed && !hardTimeout) {
           if (object) object.style.display = 'none';
           if (three?.model) three.model.visible = false;
           three?.renderer.render(three.scene, three.camera);
@@ -447,9 +499,18 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
         ? sessionOriginRef.current
         : userPosition;
       const horizontalDistance = getDistance(userLat, userLng, objectLat, objectLng);
-      const bearing = horizontalDistance > 1
-        ? bearingTo(userLat, userLng, objectLat, objectLng)
-        : 0;
+      // Below the GPS noise floor the raw bearing spins on every fix update, so
+      // hold the last trustworthy value (the object is ~overhead there anyway).
+      // Floor tracks the reported accuracy, min 8m — never the old hardcoded 1m.
+      const noiseFloor = Math.max(8, gpsAccuracyRef.current ?? 8);
+      let bearing: number;
+      if (horizontalDistance > noiseFloor) {
+        bearing = bearingTo(userLat, userLng, objectLat, objectLng);
+        lastBearingRef.current = bearing;
+      } else {
+        bearing = lastBearingRef.current
+          ?? (horizontalDistance > 1 ? bearingTo(userLat, userLng, objectLat, objectLng) : 0);
+      }
       const elevation = Math.min(89.5, toDeg(Math.atan2(config.altitude_m, Math.max(horizontalDistance, 0.5))));
       const northOffset = (toDeg(Math.atan2(calibration.sin, calibration.cos)) + 360) % 360;
       const rawOrientation = matrixToQuaternion(rawMatrix);
@@ -513,16 +574,22 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
           three.model.visible = true;
           three.model.position.copy(position);
           three.model.scale.setScalar(Math.max(0.002, virtualDistance * config.scale_m / Math.max(slantDistance, 1)));
-          if (poseMode === 'world' || poseMode === 'calibrated') {
-            // This candidate carries Earth-up into camera space before setting
-            // the model pose. The existing path uses Three's default up axis;
-            // the lab mode lets us test whether that is the cause of tilt roll.
-            const upDevice = localToDevice && calibratedFrame
-              ? transformVector(localToDevice, earthToDevice(calibratedFrame.deviceToEarth, [0, 0, 1]))
-              : earthToDevice(filteredMatrix, [0, 0, 1]);
-            const up = new THREE.Vector3(upDevice[0], upDevice[1], upDevice[2]).normalize();
-            if (Math.abs(up.dot(forward)) < 0.98) three.model.up.copy(up);
-          }
+          // World-up lock (restored). Without this, Three's lookAt uses the
+          // SCREEN's up as the model's vertical reference, so the object rolls
+          // with the phone's tilt — the "tilts wildly with the angle of the
+          // phone" bug. Carrying Earth-up ([0,0,1]) into camera space keeps the
+          // object upright relative to GRAVITY, locked ~90° to the calibration
+          // plane regardless of how the phone is held. This was added in
+          // a6ed660, lost when that commit was reverted (9d49a53), then only
+          // re-added behind the ?ar-pose lab candidates — leaving the default
+          // path rolling again. Now applied in every mode. The dot guard skips
+          // the update when up≈forward (object directly overhead), where the
+          // vertical reference is degenerate.
+          const upDevice = localToDevice && calibratedFrame
+            ? transformVector(localToDevice, earthToDevice(calibratedFrame.deviceToEarth, [0, 0, 1]))
+            : earthToDevice(filteredMatrix, [0, 0, 1]);
+          const up = new THREE.Vector3(upDevice[0], upDevice[1], upDevice[2]).normalize();
+          if (Math.abs(up.dot(forward)) < 0.98) three.model.up.copy(up);
           three.model.lookAt(position.clone().add(forward));
         }
         three?.renderer.render(three.scene, three.camera);
@@ -543,6 +610,17 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
   const close = () => {
     stopCamera();
     onClose();
+  };
+  // Re-run the one-time north measurement. The lock is a constant for the
+  // session, so if it was taken in a bad spot the only recovery is to measure
+  // again — this hands that back to the player instead of forcing a reopen.
+  const recalibrate = () => {
+    calibrationRef.current = { sin: 0, cos: 1, samples: 0, locked: false, startedAt: 0 };
+    lastBearingRef.current = null;
+    headingSamplesRef.current = [];
+    filterRef.current = null;
+    setCalibrationProgress(0);
+    setPhase('calibrating');
   };
   const toggleRecording = () => {
     if (recordingRef.current) {
@@ -607,8 +685,8 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
 
       {phase === 'calibrating' && (
         <div className="absolute inset-x-5 bottom-[max(1.5rem,env(safe-area-inset-bottom))] rounded-2xl bg-zinc-900/95 backdrop-blur p-5 shadow-2xl">
-          <div className="flex items-center gap-3"><Compass className="text-emerald-400" size={22} /><div><h2 className="font-bold">Calibrating view</h2><p className="text-xs text-zinc-400 mt-0.5">Hold your phone flat for a moment.</p></div></div>
-          <div className="h-1.5 rounded-full bg-zinc-700 overflow-hidden mt-4"><div className="h-full bg-emerald-400 transition-[width] duration-100" style={{ width: `${calibrationProgress * 100}%` }} /></div>
+          <div className="flex items-center gap-3"><Compass className={`${calibrationNoisy ? 'text-amber-400' : 'text-emerald-400'}`} size={22} /><div><h2 className="font-bold">Calibrating view</h2><p className="text-xs text-zinc-400 mt-0.5">{calibrationNoisy ? 'Compass is unsteady — step away from metal or magnets.' : 'Hold your phone flat for a moment.'}</p></div></div>
+          <div className="h-1.5 rounded-full bg-zinc-700 overflow-hidden mt-4"><div className={`h-full transition-[width] duration-100 ${calibrationNoisy ? 'bg-amber-400' : 'bg-emerald-400'}`} style={{ width: `${calibrationProgress * 100}%` }} /></div>
         </div>
       )}
 
@@ -620,8 +698,16 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
       )}
 
       {phase === 'ready' && (
-        <div className="absolute inset-x-0 bottom-[max(1.25rem,env(safe-area-inset-bottom))] flex justify-center pointer-events-none">
-          <div className="rounded-full bg-black/65 backdrop-blur px-3 py-1.5 text-[11px] text-zinc-200">{config.behavior === 'flyover' ? 'Flyover active' : 'Object anchored'}</div>
+        <div className="absolute inset-x-0 bottom-[max(1.25rem,env(safe-area-inset-bottom))] flex justify-center items-center gap-2">
+          <div className="rounded-full bg-black/65 backdrop-blur px-3 py-1.5 text-[11px] text-zinc-200 pointer-events-none">{config.behavior === 'flyover' ? 'Flyover active' : 'Object anchored'}</div>
+          <button
+            onClick={recalibrate}
+            className="rounded-full bg-black/65 backdrop-blur px-3 py-1.5 text-[11px] text-zinc-200 flex items-center gap-1.5 active:opacity-70"
+            aria-label="Recalibrate compass"
+          >
+            <Compass size={13} className="text-emerald-300" />
+            Recenter
+          </button>
         </div>
       )}
 

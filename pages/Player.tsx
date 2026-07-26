@@ -1412,6 +1412,30 @@ export const Player: React.FC = () => {
               <span>Accuracy</span><span className="text-right">{gpsAccuracy ? `${Math.round(gpsAccuracy)}m` : '—'}</span>
               <span>Error</span><span className="text-right truncate">{gpsError || 'none'}</span>
             </div>
+            {/* ── AR trigger diagnostic — spells out why (or why not) the
+                 "Camera object nearby" card resolves, so field testing doesn't
+                 devolve into guesswork. Only rendered under ?debug=gps. ── */}
+            {(() => {
+              const arZones = zones.filter(z => z.ar_config?.enabled && z.ar_config.asset_url);
+              const withDist = userPos
+                ? arZones.map(z => ({ z, d: getDistance(userPos[0], userPos[1], z.lat, z.lng) })).sort((a, b) => a.d - b.d)
+                : [];
+              const nearest = withDist[0];
+              const reliable = simulationMode || (gpsFixRef.current?.accuracy ?? Infinity) <= 100;
+              return (
+                <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5 border-t border-amber-500/30 pt-1.5 text-amber-100/80">
+                  <span>Started</span><span className="text-right">{audioStarted ? 'yes' : 'NO — tap Begin'}</span>
+                  <span>AR zones w/ asset</span><span className="text-right">{arZones.length}</span>
+                  {nearest ? (<>
+                    <span>Nearest AR zone</span><span className="text-right truncate">{nearest.z.title || '(untitled)'}</span>
+                    <span>Distance / radius</span><span className={`text-right ${nearest.d < nearest.z.radius ? 'text-emerald-300' : 'text-red-300'}`}>{Math.round(nearest.d)}m / {nearest.z.radius}m</span>
+                    <span>Pos reliable</span><span className={`text-right ${reliable ? '' : 'text-red-300'}`}>{reliable ? 'yes' : 'NO (>100m)'}</span>
+                    <span>Accessible</span><span className={`text-right ${isZoneAccessible(nearest.z) ? '' : 'text-red-300'}`}>{isZoneAccessible(nearest.z) ? 'yes' : 'NO (gated)'}</span>
+                  </>) : (<><span>Nearest AR zone</span><span className="text-right text-red-300">{userPos ? 'none in tour' : 'no fix'}</span></>)}
+                  <span>Card resolves</span><span className={`text-right font-bold ${visibleARZone ? 'text-emerald-300' : 'text-red-300'}`}>{visibleARZone ? 'YES' : 'no'}</span>
+                </div>
+              );
+            })()}
             <div className="mt-1.5 space-y-0.5 font-mono text-[10px] text-amber-100/70">
               {gpsDebugLog.length > 0 ? gpsDebugLog.map((line, index) => <div key={index}>{line}</div>) : <div>waiting for geolocation events</div>}
             </div>
@@ -1775,6 +1799,7 @@ export const Player: React.FC = () => {
         <ARCameraOverlay
           zone={arCameraZone}
           userPosition={userPos}
+          gpsAccuracy={gpsAccuracy}
           onClose={() => setArCameraZone(null)}
         />
       )}
