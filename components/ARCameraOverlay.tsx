@@ -16,7 +16,7 @@ interface ARCameraOverlayProps {
 
 type Quaternion = [number, number, number, number];
 type Phase = 'intro' | 'calibrating' | 'ready' | 'error';
-type PoseMode = 'legacy' | 'world' | 'frozen' | 'calibrated';
+type PoseMode = 'legacy' | 'world' | 'frozen' | 'calibrated' | 'enu';
 
 interface MotionSample {
   t: number;
@@ -165,7 +165,7 @@ const VFOV = 95;
 export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosition, gpsAccuracy, onClose }) => {
   const labMode = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('ar-lab') === '1';
   const poseParam = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('ar-pose') : null;
-  const poseMode: PoseMode = poseParam === 'world' || poseParam === 'frozen' || poseParam === 'calibrated' ? poseParam : 'legacy';
+  const poseMode: PoseMode = poseParam === 'world' || poseParam === 'frozen' || poseParam === 'calibrated' || poseParam === 'enu' ? poseParam : 'legacy';
   const configRef = useRef(configFor(zone));
   const videoRef = useRef<HTMLVideoElement>(null);
   const objectRef = useRef<HTMLDivElement>(null);
@@ -221,7 +221,7 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
 
     setModelError(null);
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(VFOV, window.innerWidth / window.innerHeight, 0.01, 100);
+    const camera = new THREE.PerspectiveCamera(VFOV, window.innerWidth / window.innerHeight, 0.05, 8000);
     const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -479,8 +479,16 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
 
       if (!userPosition) return;
       const config = configRef.current;
-      const anchorLat = config.anchor_lat ?? zone.lat;
-      const anchorLng = config.anchor_lng ?? zone.lng;
+      let anchorLat = config.anchor_lat ?? zone.lat;
+      let anchorLng = config.anchor_lng ?? zone.lng;
+      // Static objects can be nudged off the zone centre so the viewer looks at
+      // them on a slant instead of straight up (relative offset from the zone
+      // coordinate). Flyovers ignore this — they define their own path.
+      if (config.behavior !== 'flyover' && config.ground_distance_m) {
+        const bearing = toRad(config.ground_bearing_degrees ?? 0);
+        anchorLat += Math.cos(bearing) * config.ground_distance_m / 111_320;
+        anchorLng += Math.sin(bearing) * config.ground_distance_m / (111_320 * Math.cos(toRad(anchorLat)) || 1);
+      }
       let objectLat = anchorLat;
       let objectLng = anchorLng;
       let objectFacing = config.facing_degrees;
@@ -504,7 +512,15 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
       // Floor tracks the reported accuracy, min 8m — never the old hardcoded 1m.
       const noiseFloor = Math.max(8, gpsAccuracyRef.current ?? 8);
       let bearing: number;
-      if (horizontalDistance > noiseFloor) {
+      if (poseMode === 'enu') {
+        // True-position mode anchors the object to a metric point, so it must
+        // track the real bearing every frame — no freeze (the freeze is what
+        // makes the sky-dome object appear to ride along at close range).
+        bearing = horizontalDistance > 0.5
+          ? bearingTo(userLat, userLng, objectLat, objectLng)
+          : (lastBearingRef.current ?? 0);
+        lastBearingRef.current = bearing;
+      } else if (horizontalDistance > noiseFloor) {
         bearing = bearingTo(userLat, userLng, objectLat, objectLng);
         lastBearingRef.current = bearing;
       } else {
@@ -512,6 +528,7 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
           ?? (horizontalDistance > 1 ? bearingTo(userLat, userLng, objectLat, objectLng) : 0);
       }
       const elevation = Math.min(89.5, toDeg(Math.atan2(config.altitude_m, Math.max(horizontalDistance, 0.5))));
+      const slantDistance = Math.sqrt(horizontalDistance ** 2 + config.altitude_m ** 2);
       const northOffset = (toDeg(Math.atan2(calibration.sin, calibration.cos)) + 360) % 360;
       const rawOrientation = matrixToQuaternion(rawMatrix);
       const previous = filterRef.current;
@@ -524,7 +541,15 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
         };
       }
 
-      const objectVector = skyVector(((bearing - northOffset) % 360 + 360) % 360, elevation);
+      // In ENU (true-position) mode objectVector carries real METRES from the
+      // viewer, so the perspective camera renders an actual point in space with
+      // genuine parallax. Every other mode keeps the unit-direction sky-dome
+      // placement. Same calibrated frame either way, so the tilt/heading
+      // handling downstream is completely untouched.
+      const bearingCal = ((bearing - northOffset) % 360 + 360) % 360;
+      const objectVector = poseMode === 'enu'
+        ? skyVector(bearingCal, elevation).map(component => component * slantDistance)
+        : skyVector(bearingCal, elevation);
       const filteredMatrix = quaternionToMatrix(filterRef.current.value);
       const calibratedFrame = calibratedFrameRef.current;
       const localToDevice = poseMode === 'calibrated' && calibratedFrame
@@ -545,7 +570,6 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
       const height = window.innerHeight;
       const x = width / 2 + (deviceVector[0] / depth) * ((width / 2) / Math.tan(toRad(HFOV / 2)));
       const y = height / 2 - (deviceVector[1] / depth) * ((height / 2) / Math.tan(toRad(VFOV / 2)));
-      const slantDistance = Math.sqrt(horizontalDistance ** 2 + config.altitude_m ** 2);
       const angularSize = Math.min(40, toDeg(2 * Math.atan(config.scale_m / (2 * Math.max(slantDistance, 1)))));
       const size = Math.max(28, (angularSize / VFOV) * height);
       const playerBearingFromObject = bearingTo(objectLat, objectLng, userLat, userLng);
@@ -561,11 +585,16 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
       if (usingGlb) {
         if (object) object.style.display = 'none';
         if (three?.model) {
-          // Keep the physical scale independent of the camera-space distance.
-          // Models are normalized to one unit when loaded, then projected from
-          // a stable virtual camera distance.
+          // ENU: place the model at its REAL metric position (deviceVector is in
+          // metres) and give it its real-world size — the perspective camera
+          // then produces true parallax, so the object stays rooted to its spot
+          // as the viewer walks. Sky-dome modes instead pin it to a fixed
+          // virtual distance and fake the size (direction-only, no parallax).
+          const usingEnu = poseMode === 'enu';
           const virtualDistance = 10;
-          const position = new THREE.Vector3(deviceVector[0], deviceVector[1], deviceVector[2]).normalize().multiplyScalar(virtualDistance);
+          const position = usingEnu
+            ? new THREE.Vector3(deviceVector[0], deviceVector[1], deviceVector[2])
+            : new THREE.Vector3(deviceVector[0], deviceVector[1], deviceVector[2]).normalize().multiplyScalar(virtualDistance);
           const worldForward = skyVector(((objectFacing - northOffset) % 360 + 360) % 360, 0);
           const facingDevice = localToDevice && calibratedFrame
             ? transformVector(localToDevice, earthToDevice(calibratedFrame.deviceToEarth, worldForward))
@@ -573,7 +602,9 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
           const forward = new THREE.Vector3(facingDevice[0], facingDevice[1], facingDevice[2]).normalize();
           three.model.visible = true;
           three.model.position.copy(position);
-          three.model.scale.setScalar(Math.max(0.002, virtualDistance * config.scale_m / Math.max(slantDistance, 1)));
+          three.model.scale.setScalar(usingEnu
+            ? Math.max(0.01, config.scale_m)
+            : Math.max(0.002, virtualDistance * config.scale_m / Math.max(slantDistance, 1)));
           // World-up lock (restored). Without this, Three's lookAt uses the
           // SCREEN's up as the model's vertical reference, so the object rolls
           // with the phone's tilt — the "tilts wildly with the angle of the

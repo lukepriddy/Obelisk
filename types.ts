@@ -55,6 +55,12 @@ export interface ARObjectConfig {
   altitude_m: number;
   scale_m: number;
   facing_degrees: number;
+  // Static objects can be pushed off the zone centre so the viewer sees them on
+  // a slant rather than directly overhead — where azimuth is unstable and the
+  // object appears to swivel. Stored as a relative offset (distance + bearing
+  // from the zone coordinate) so moving the zone carries the object with it.
+  ground_distance_m?: number;
+  ground_bearing_degrees?: number;
   // Flyovers travel this many metres along `flight_bearing_degrees` over one
   // loop. The midpoint passes directly over the anchor coordinate.
   flight_bearing_degrees?: number;

@@ -5,6 +5,7 @@ import { uploadARAsset, uploadAudio, uploadImage } from '../services/storageServ
 import { supabase } from '../services/supabaseClient';
 import { Music, AlertCircle, Clock, Volume2, EyeOff, Radio, PlayCircle, Upload, Link as LinkIcon, FileAudio, ListMusic, Bot, MessageSquare, Lock, Unlock, GitBranch, Bell, Sparkles, KeySquare, ImageIcon, X, Trash2, Play, Pause, Loader2, Gift, HelpCircle, Camera } from 'lucide-react';
 import { ZoneProgressionSettings } from './ZoneProgressionSettings';
+import { ARPlacementPad } from './ARPlacementPad';
 
 // ── Mini audio preview player ───────────────────────────────────────────────
 const AudioPreview: React.FC<{ url: string; volume?: number }> = ({ url, volume = 1 }) => {
@@ -367,6 +368,10 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
     altitude_m: 25,
     scale_m: 3,
     facing_degrees: 0,
+    // Default the object a comfortable slant off-centre (~15m out at 25m up
+    // → ~59° look-up) so a fresh object isn't parked directly overhead.
+    ground_distance_m: 15,
+    ground_bearing_degrees: 0,
     flight_bearing_degrees: 0,
     flight_distance_m: 180,
     flight_duration_seconds: 30,
@@ -1506,7 +1511,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
                     <button key={behavior} type="button" onClick={() => updateArConfig({ behavior })} className={`flex-1 py-2 rounded text-xs font-bold capitalize ${arConfig.behavior === behavior ? 'bg-sky-600 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}>{behavior}</button>
                   ))}
                 </div>
-                <p className="text-[10px] text-zinc-500 mt-1.5">{arConfig.behavior === 'static' ? 'Fixed above this zone\'s coordinate.' : 'Loops slowly through this zone\'s coordinate on a real geographic path.'}</p>
+                <p className="text-[10px] text-zinc-500 mt-1.5">{arConfig.behavior === 'static' ? 'Floats at a fixed spot near this zone — place it on the pad below.' : 'Loops slowly through this zone\'s coordinate on a real geographic path.'}</p>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1518,10 +1523,15 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
                 </label>
               </div>
 
-              <label className="block text-xs font-bold text-zinc-400 uppercase">Facing direction <span className="float-right text-sky-400">{arConfig.facing_degrees}°</span>
-                <input type="range" min="0" max="359" step="1" value={arConfig.facing_degrees} onChange={e => updateArConfig({ facing_degrees: Number(e.target.value) })} className="w-full mt-2 accent-sky-500" />
-                <span className="block text-[10px] normal-case font-normal text-zinc-500 mt-1">0° is north. A directional character is clearest when viewed from the direction it faces.</span>
-              </label>
+              {arConfig.behavior === 'static' && (
+                <ARPlacementPad
+                  distance={arConfig.ground_distance_m ?? 0}
+                  bearing={arConfig.ground_bearing_degrees ?? 0}
+                  facing={arConfig.facing_degrees}
+                  altitude={arConfig.altitude_m}
+                  onChange={updateArConfig}
+                />
+              )}
 
               {arConfig.behavior === 'flyover' && (
                 <div className="grid grid-cols-2 gap-3">
