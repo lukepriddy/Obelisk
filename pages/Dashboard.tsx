@@ -280,7 +280,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
       owner_id: user.id,
       title: 'Untitled Experience',
       description: 'Describe your experience here.',
-      is_public: true,
+      is_public: false,
       lat: 0,
       lng: 0,
       map_style: 'satellite',
