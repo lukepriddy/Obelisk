@@ -314,6 +314,50 @@ export const getApiKeys = async (userId: string): Promise<{ elevenlabs_key: stri
   return data;
 };
 
+// ── Publishing ───────────────────────────────────────────────────────────────
+/**
+ * Ask the review service to publish a tour.
+ *
+ * Publishing is not a plain `is_public = true` write: a database trigger
+ * rejects that for ordinary creators. Only the `moderate-tour` edge function
+ * (service role) can flip the flag, and only after an automatic content
+ * review passes. Platform admins are exempt and publish immediately.
+ */
+export type PublishResult = {
+  verdict: 'pass' | 'fail' | 'borderline';
+  status: 'approved' | 'rejected' | 'pending_review';
+  is_public: boolean;
+  reason?: string | null;
+  categories?: string[];
+};
+
+export const requestPublish = async (tourId: string): Promise<PublishResult> => {
+  try {
+    const { data, error } = await supabase.functions.invoke('moderate-tour', {
+      body: { tourId },
+    });
+    if (error || !data?.status) {
+      console.error('requestPublish:', error ?? data);
+      // Never report an unknown outcome as published.
+      return {
+        verdict: 'borderline',
+        status: 'pending_review',
+        is_public: false,
+        reason: 'Review could not be completed. Check your connection and try again.',
+      };
+    }
+    return data as PublishResult;
+  } catch (err) {
+    console.error('requestPublish:', err);
+    return {
+      verdict: 'borderline',
+      status: 'pending_review',
+      is_public: false,
+      reason: 'Review could not be completed. Check your connection and try again.',
+    };
+  }
+};
+
 export const saveApiKeys = async (userId: string, keys: { elevenlabs_key?: string | null; gemini_key?: string | null }): Promise<boolean> => {
   const { error } = await supabase
     .from('api_keys')

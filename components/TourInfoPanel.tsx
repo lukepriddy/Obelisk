@@ -388,6 +388,37 @@ export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({ tour, onUpdate }) 
                 <Lock size={12} /> Private
               </button>
             </div>
+            {/* Review feedback. Publishing runs an automatic content check on
+                save; a tour that doesn't pass stays private with a reason. */}
+            {!tour.is_public && tour.moderation_status === 'rejected' && (
+              <div className="mt-2 rounded bg-red-950/70 border border-red-900 px-3 py-2">
+                <p className="text-[11px] font-bold text-red-300">Not approved for publishing</p>
+                <p className="text-[11px] text-red-200/90 leading-snug mt-0.5">
+                  {tour.moderation_reason || 'This experience did not pass review.'}
+                </p>
+                <p className="text-[10px] text-red-200/60 leading-snug mt-1">
+                  Edit the flagged content, then set it to Public and save again.
+                </p>
+              </div>
+            )}
+            {!tour.is_public && tour.moderation_status === 'pending_review' && (
+              <div className="mt-2 rounded bg-amber-950/70 border border-amber-900 px-3 py-2">
+                <p className="text-[11px] font-bold text-amber-300">In review</p>
+                <p className="text-[11px] text-amber-200/90 leading-snug mt-0.5">
+                  {tour.moderation_reason || 'This experience needs a manual check before it can go live.'}
+                </p>
+              </div>
+            )}
+            {tour.is_public && (
+              <p className="text-[10px] text-zinc-500 mt-1.5 leading-snug">
+                Live and playable by anyone with the link.
+              </p>
+            )}
+            {!tour.is_public && tour.moderation_status !== 'rejected' && tour.moderation_status !== 'pending_review' && (
+              <p className="text-[10px] text-zinc-500 mt-1.5 leading-snug">
+                Setting this to Public runs a quick content check when you save.
+              </p>
+            )}
           </div>
 
           {/* Text Color */}
