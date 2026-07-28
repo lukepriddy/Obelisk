@@ -14,22 +14,8 @@ const ACCENT_PRESETS = ['#10b981','#6366f1','#f59e0b','#ef4444','#3b82f6','#ec48
 const BG_PRESETS     = ['#0f172a','#111827','#ffffff','#fafaf9','#1e293b','#18181b'];
 const TEXT_PRESETS   = ['#ffffff','#f1f5f9','#1e293b','#0f172a','#94a3b8','#d1fae5'];
 
-const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
-
-function validateImageFile(file: File): string | null {
-  const name = file.name.toLowerCase();
-  if (name.endsWith('.heic') || name.endsWith('.heif') ||
-      file.type === 'image/heic' || file.type === 'image/heif') {
-    return "iPhone HEIC photos aren't supported. In Photos, tap Share → Options → turn on \"Most Compatible\" to export as JPEG.";
-  }
-  if (file.type && !ALLOWED_IMAGE_TYPES.includes(file.type)) {
-    return `Unsupported format (${file.type}). Please use JPEG, PNG, WebP, or GIF.`;
-  }
-  if (file.size > 10 * 1024 * 1024) {
-    return 'Image is too large (max 10 MB). Please resize it and try again.';
-  }
-  return null;
-}
+// File-type and size validation now lives in services/storageService.ts so
+// every upload path shares one set of rules; it reports failures via onError.
 
 export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({ tour, onUpdate }) => {
   const [tagDraft, setTagDraft] = useState('');
@@ -49,18 +35,11 @@ export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({ tour, onUpdate }) 
     e.target.value = '';
     setImageError(null);
 
-    const validationError = validateImageFile(file);
-    if (validationError) { setImageError(validationError); return; }
-
     setImageUploading(true);
-    const url = await uploadImage(file, tour.id);
+    const url = await uploadImage(file, tour.id, { onError: setImageError });
     setImageUploading(false);
 
-    if (!url) {
-      setImageError('Upload failed — check your connection and try again.');
-      return;
-    }
-    onUpdate({ welcome_image_url: url });
+    if (url) onUpdate({ welcome_image_url: url });
   };
 
   return (

@@ -49,23 +49,17 @@ export const ProgressionSettings: React.FC<ProgressionSettingsProps> = ({ tour, 
     if (!file || !resourceId) return;
 
     setUploadError(null);
+    // An icon is displayed tiny, so keep a tighter ceiling than the shared
+    // image limit; type and quota checks come from storageService.
     if (file.size > 5 * 1024 * 1024) {
       setUploadError('Icon is too large (max 5 MB).');
       return;
     }
-    if (file.type === 'image/heic' || file.type === 'image/heif') {
-      setUploadError('HEIC images are not supported. Use PNG, WebP, or JPEG.');
-      return;
-    }
 
     setUploading(true);
-    const url = await uploadImage(file, `${tour.id}/progression`);
+    const url = await uploadImage(file, `${tour.id}/progression`, { onError: setUploadError });
     setUploading(false);
-    if (!url) {
-      setUploadError('Icon upload failed. Try again.');
-      return;
-    }
-    updateResource(resourceId, { image_url: url });
+    if (url) updateResource(resourceId, { image_url: url });
   };
 
   return (

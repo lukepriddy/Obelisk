@@ -15,6 +15,7 @@
  */
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { checkAndRecordUsage } from '../_shared/usage.ts';
 
 const SUPABASE_URL     = Deno.env.get('SUPABASE_URL') ?? '';
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
@@ -73,6 +74,18 @@ Deno.serve(async (req) => {
 
     const body = await req.json();
     const { type } = body;
+
+    // The audio itself is billed to the creator's own ElevenLabs account, but
+    // each call still costs a function invocation and a storage write.
+    // `voices` is a cheap passthrough listing and is left unlimited.
+    if (type === 'generate') {
+      const usage = await checkAndRecordUsage(
+        admin, 'elevenlabs-tts:generate', userId, { perMinute: 20, perDay: 200 },
+      );
+      if (!usage.allowed) {
+        return json({ error: usage.message ?? 'Rate limit reached.' }, 429);
+      }
+    }
 
     // ── VOICES ──────────────────────────────────────────────────────────────
     if (type === 'voices') {
