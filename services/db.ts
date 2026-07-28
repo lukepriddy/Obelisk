@@ -329,6 +329,33 @@ export type PublishResult = {
   is_public: boolean;
   reason?: string | null;
   categories?: string[];
+  /** Set when publishing was refused because the creator terms aren't accepted. */
+  termsRequired?: boolean;
+  requiredVersion?: string;
+};
+
+/** Which terms version is required, and whether this creator has accepted it. */
+export const getTermsStatus = async (): Promise<{ version: string; accepted: boolean } | null> => {
+  const { data, error } = await supabase.rpc('my_tos_status');
+  const row = Array.isArray(data) ? data[0] : data;
+  if (error || !row) return null;
+  return { version: row.required_version, accepted: !!row.accepted };
+};
+
+/** Record acceptance of a terms version for the signed-in creator. */
+export const acceptTerms = async (version: string): Promise<boolean> => {
+  const { data: auth } = await supabase.auth.getUser();
+  const userId = auth?.user?.id;
+  if (!userId) return false;
+  const { error } = await supabase
+    .from('tos_acceptances')
+    .insert({ user_id: userId, version });
+  // A duplicate means they already accepted it — that's success, not failure.
+  if (error && error.code !== '23505') {
+    console.error('acceptTerms:', error);
+    return false;
+  }
+  return true;
 };
 
 export const requestPublish = async (tourId: string): Promise<PublishResult> => {
@@ -336,6 +363,29 @@ export const requestPublish = async (tourId: string): Promise<PublishResult> => 
     const { data, error } = await supabase.functions.invoke('moderate-tour', {
       body: { tourId },
     });
+
+    // A non-2xx reply arrives as an error with the body on error.context, so
+    // the terms case has to be read from either place.
+    let payload: Record<string, unknown> | null = data ?? null;
+    if (error && (error as { context?: Response }).context) {
+      payload = await (error as unknown as { context: Response }).context
+        .json().catch(() => null);
+    }
+
+    // 412 means the creator terms aren't accepted yet. That isn't a failed
+    // review — it's a prerequisite the UI can resolve, then retry.
+    if (payload?.error === 'terms_required') {
+      return {
+        verdict: 'borderline',
+        status: 'pending_review',
+        is_public: false,
+        termsRequired: true,
+        requiredVersion: typeof payload.requiredVersion === 'string'
+          ? payload.requiredVersion : undefined,
+      };
+    }
+    if (payload?.status) return payload as unknown as PublishResult;
+
     if (error || !data?.status) {
       console.error('requestPublish:', error ?? data);
       // Never report an unknown outcome as published.

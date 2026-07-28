@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getTourById, getZonesByTourId, createZone as dbCreateZone, updateZone as dbUpdateZone, deleteZone as dbDeleteZone, updateTour as dbUpdateTour, requestPublish } from '../services/db';
+import { getTourById, getZonesByTourId, createZone as dbCreateZone, updateZone as dbUpdateZone, deleteZone as dbDeleteZone, updateTour as dbUpdateTour, requestPublish, acceptTerms } from '../services/db';
+import { TermsDialog } from '../components/TermsDialog';
 import { ZoneForm } from '../components/ZoneForm';
 import { TourInfoPanel } from '../components/TourInfoPanel';
 import { EditorMap, EditorMapHandle } from '../components/EditorMap';
@@ -111,6 +112,8 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   // True while the content review runs, so the Save button can say so.
   const [publishing, setPublishing] = useState(false);
+  // Set when publishing is blocked pending acceptance of the creator terms.
+  const [termsPrompt, setTermsPrompt] = useState<{ version: string; tourId: string } | null>(null);
   // The tour's is_public value as last known to the DATABASE — not the local
   // toggle. Publishing is detected as a false -> true change against this.
   const publishedRef = useRef(false);
@@ -380,6 +383,34 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
     setHasUnsavedChanges(true);
   };
 
+  /**
+   * Run the publish gate and fold the outcome back into local state.
+   * Returns whether the tour actually went live.
+   *
+   * Publishing can be refused for three different reasons — terms not
+   * accepted, content rejected, or queued for review — and only the first is
+   * resolvable in-place, so that one raises a dialog and retries.
+   */
+  const runPublish = async (tourId: string): Promise<boolean> => {
+    setPublishing(true);
+    const result = await requestPublish(tourId);
+    setPublishing(false);
+
+    if (result.termsRequired) {
+      setTermsPrompt({ version: result.requiredVersion ?? '', tourId });
+      return false;
+    }
+
+    publishedRef.current = result.is_public;
+    setTour(prev => prev && ({
+      ...prev,
+      is_public: result.is_public,
+      moderation_status: result.status,
+      moderation_reason: result.reason ?? null,
+    }));
+    return result.is_public;
+  };
+
   const saveTour = async () => {
     if (!tour || saving) return; // guard against concurrent saves (e.g. Cmd+S spam)
     setSaving(true);
@@ -424,19 +455,10 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
       if (wantsToPublish) {
         // Content is saved at this point, so the review reads exactly what the
         // creator sees. Admins come back approved immediately.
-        setPublishing(true);
-        const result = await requestPublish(tour.id);
-        setPublishing(false);
-        publishedRef.current = result.is_public;
-        setTour(prev => prev && ({
-          ...prev,
-          is_public: result.is_public,
-          moderation_status: result.status,
-          moderation_reason: result.reason ?? null,
-        }));
-        if (!result.is_public) {
-          // Leave the toggle showing the truth — still private — with the
-          // reason attached so the creator knows what to change.
+        const published = await runPublish(tour.id);
+        if (!published) {
+          // Rejected, queued, or waiting on terms — the toggle stays showing
+          // the truth (still private) with the reason attached.
           setHasUnsavedChanges(false);
           setSaving(false);
           return;
@@ -463,6 +485,34 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
 
   return (
     <div className="flex h-dvh w-full overflow-hidden bg-zinc-950">
+
+      {termsPrompt && (
+        <TermsDialog
+          version={termsPrompt.version}
+          onCancel={() => {
+            // Back out of publishing entirely; the toggle returns to Private
+            // so the editor doesn't claim a state the server never accepted.
+            setTermsPrompt(null);
+            setTour(prev => prev && ({ ...prev, is_public: false }));
+          }}
+          onAccept={async () => {
+            const ok = await acceptTerms(termsPrompt.version);
+            const { tourId } = termsPrompt;
+            setTermsPrompt(null);
+            if (!ok) {
+              setSaveError('Could not record your acceptance. Try again.');
+              setTour(prev => prev && ({ ...prev, is_public: false }));
+              return;
+            }
+            // Terms are on file now, so the publish that was refused can run.
+            const published = await runPublish(tourId);
+            if (published) {
+              setSavedOk(true);
+              setTimeout(() => setSavedOk(false), 2000);
+            }
+          }}
+        />
+      )}
 
       {/* 1. LEFT TOOLBAR */}
       <div className="hidden md:flex w-16 flex-col items-center py-4 gap-3 bg-zinc-950 border-r border-zinc-800 z-30 shrink-0">

@@ -188,6 +188,25 @@ Deno.serve(async (req) => {
     if (!tour) return json({ error: 'Experience not found.' }, 404);
     if (tour.owner_id !== uid) return json({ error: 'Not your experience.' }, 403);
 
+    // ── Terms must be accepted before anything goes live ────────────────────
+    // Checked here rather than only in the UI: publishing is the moment a
+    // creator takes on responsibility for sending real people to a real place,
+    // and a dialog the client could skip would be worthless as a record.
+    const { data: tosRow } = await admin.rpc('current_tos_version');
+    const requiredVersion = typeof tosRow === 'string' ? tosRow : null;
+    if (requiredVersion) {
+      const { data: accepted } = await admin.rpc('has_accepted_tos', {
+        uid, v: requiredVersion,
+      });
+      if (!accepted) {
+        return json({
+          error: 'terms_required',
+          requiredVersion,
+          message: 'Accept the creator terms before publishing.',
+        }, 412);
+      }
+    }
+
     // ── Admin exemption (mirrors the DB trigger) ────────────────────────────
     const { data: adminRow } = await admin
       .from('platform_admins').select('user_id').eq('user_id', uid).maybeSingle();
