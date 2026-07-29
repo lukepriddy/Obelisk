@@ -147,13 +147,32 @@ Deno.serve(async (req) => {
       if (!email || (decision !== 'approve' && decision !== 'decline')) {
         return json({ error: 'Invalid request.' }, 400);
       }
-      // Approving here is what actually lets someone sign up — the trigger on
-      // account creation reads this exact row.
       const { error } = await admin.from('access_allowlist')
         .update({ status: decision === 'approve' ? 'approved' : 'declined' })
         .eq('email', email);
       if (error) return json({ error: 'Could not update that request.' }, 500);
-      return json({ ok: true });
+
+      if (decision !== 'approve') return json({ ok: true });
+
+      // Public signup is disabled at the project level, so an approved person
+      // can't just go and register — they have to be invited. This is the
+      // admin API, which runs on the service role and is therefore allowed to
+      // create the account regardless of that setting.
+      const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(email);
+      if (inviteError) {
+        // The row is already approved; only the email failed. Say so plainly
+        // rather than implying nothing happened.
+        console.error('inviteUserByEmail:', inviteError);
+        const already = /already.*registered|already been registered/i.test(inviteError.message ?? '');
+        return json({
+          ok: true,
+          invited: false,
+          message: already
+            ? 'Approved. That address already has an account, so no invite was sent.'
+            : 'Approved, but the invite email could not be sent. Send them the link yourself.',
+        });
+      }
+      return json({ ok: true, invited: true });
     }
 
     if (action === 'resolve_report') {

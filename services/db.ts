@@ -59,9 +59,19 @@ export const auth = {
     return true;
   },
 
-  /** Sends a 6-digit OTP code to the given email address. */
+  /**
+   * Sends a 6-digit OTP code to the given email address.
+   *
+   * shouldCreateUser: false means this only ever signs in an EXISTING account.
+   * New accounts are created by invitation, not by anyone typing an address —
+   * so an uninvited visitor gets a clean "no account" error here rather than
+   * quietly registering.
+   */
   signInWithEmail: async (email: string): Promise<{ error: string | null }> => {
-    const { error } = await supabase.auth.signInWithOtp({ email });
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: false },
+    });
     return { error: error?.message ?? null };
   },
 

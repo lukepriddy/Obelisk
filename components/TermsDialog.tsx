@@ -56,7 +56,16 @@ export const TermsDialog: React.FC<TermsDialogProps> = ({ version, onAccept, onC
               ))}
             </section>
           ))}
-          <p className="text-[11px] text-zinc-500 pt-1">Version {version}</p>
+          <p className="text-[11px] text-zinc-500 pt-1">
+            Version {version} ·{' '}
+            <a href="/terms" target="_blank" rel="noreferrer" className="underline hover:text-zinc-300">
+              Open in a new tab
+            </a>
+            {' · '}
+            <a href="/privacy" target="_blank" rel="noreferrer" className="underline hover:text-zinc-300">
+              Privacy
+            </a>
+          </p>
         </div>
 
         <div className="px-5 py-4 border-t border-zinc-800 shrink-0 space-y-3">

@@ -51,6 +51,7 @@ export const AdminModeration: React.FC = () => {
   const [accessRequests, setAccessRequests] = useState<AccessRequest[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const call = async (body: Record<string, unknown>) => {
     const { data, error: fnError } = await supabase.functions.invoke('admin-moderation', { body });
@@ -85,8 +86,13 @@ export const AdminModeration: React.FC = () => {
   const act = async (key: string, body: Record<string, unknown>) => {
     setBusy(key);
     setError(null);
+    setNotice(null);
     try {
-      await call(body);
+      const result = await call(body);
+      // Approving can succeed while the invite email fails; that distinction
+      // matters, so don't swallow it behind a generic refresh.
+      if (result?.message) setNotice(result.message);
+      else if (result?.invited) setNotice('Invited — they\'ve been emailed a sign-up link.');
       await load();
     } catch {
       setError('That action failed. Try again.');
@@ -143,6 +149,12 @@ export const AdminModeration: React.FC = () => {
         {error && (
           <div className="mb-4 rounded-lg bg-red-950/70 border border-red-900 px-3 py-2 text-sm text-red-200">
             {error}
+          </div>
+        )}
+
+        {notice && (
+          <div className="mb-4 rounded-lg bg-emerald-950/60 border border-emerald-900 px-3 py-2 text-sm text-emerald-200">
+            {notice}
           </div>
         )}
 

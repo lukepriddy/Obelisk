@@ -266,6 +266,13 @@ export const Auth: React.FC = () => {
             </>
           )}
         </div>
+
+        {/* Readable before signing up, not just at the moment of publishing. */}
+        <div className="flex items-center justify-center gap-3 mt-5 text-[11px] text-zinc-600">
+          <a href="/terms" className="hover:text-zinc-400 transition-colors">Creator terms</a>
+          <span aria-hidden="true">·</span>
+          <a href="/privacy" className="hover:text-zinc-400 transition-colors">Privacy</a>
+        </div>
       </div>
     </div>
   );
