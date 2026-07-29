@@ -19,6 +19,7 @@
  */
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { checkAndRecordUsage, rateLimited } from '../_shared/usage.ts';
 
 const GEMINI_API_KEY   = Deno.env.get('GEMINI_API_KEY') ?? '';
 const SUPABASE_URL     = Deno.env.get('SUPABASE_URL') ?? '';
@@ -41,6 +42,18 @@ async function keyForCaller(req: Request): Promise<string> {
     return keys?.gemini_key || GEMINI_API_KEY;
   } catch {
     return GEMINI_API_KEY;
+  }
+}
+
+/** The signed-in creator's id, used to scope rate limits. */
+async function callerId(req: Request): Promise<string | null> {
+  try {
+    const jwt = (req.headers.get('Authorization') ?? '').replace('Bearer ', '');
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const { data: u } = await admin.auth.getUser(jwt);
+    return u?.user?.id ?? null;
+  } catch {
+    return null;
   }
 }
 
@@ -323,6 +336,25 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json();
     const { type } = body;
+
+    // Generation is the most expensive path in the product (Overpass lookup
+    // plus multiple Gemini calls), so it gets the tightest ceiling.
+    if (type === 'generate' || type === 'refine') {
+      const uid = await callerId(req);
+      if (!uid) {
+        return new Response(JSON.stringify({ error: 'Not signed in.' }), {
+          status: 401, headers: { ...cors, 'Content-Type': 'application/json' },
+        });
+      }
+      const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+      const usage = await checkAndRecordUsage(
+        admin,
+        `generate-experience:${type}`,
+        uid,
+        type === 'generate' ? { perHour: 5, perDay: 20 } : { perHour: 15 },
+      );
+      if (!usage.allowed) return rateLimited(usage, cors);
+    }
 
     // ── GENERATE ────────────────────────────────────────────────────────────
     if (type === 'generate') {

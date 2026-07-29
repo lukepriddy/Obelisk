@@ -13,6 +13,14 @@ export interface Tour {
   lat: number;
   lng: number;
 
+  // Publishing review. Written only by the moderation edge functions (a DB
+  // trigger rejects client writes), and `is_public` cannot be set true until
+  // `moderation_status` is 'approved' — unless the owner is a platform admin.
+  moderation_status?: 'unmoderated' | 'approved' | 'rejected' | 'pending_review';
+  moderation_reason?: string | null;
+  moderation_categories?: string[] | null;
+  moderated_at?: string | null;
+
   // Welcome screen customization
   welcome_subtitle?: string;
   welcome_image_url?: string;

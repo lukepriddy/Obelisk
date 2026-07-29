@@ -14,22 +14,8 @@ const ACCENT_PRESETS = ['#10b981','#6366f1','#f59e0b','#ef4444','#3b82f6','#ec48
 const BG_PRESETS     = ['#0f172a','#111827','#ffffff','#fafaf9','#1e293b','#18181b'];
 const TEXT_PRESETS   = ['#ffffff','#f1f5f9','#1e293b','#0f172a','#94a3b8','#d1fae5'];
 
-const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
-
-function validateImageFile(file: File): string | null {
-  const name = file.name.toLowerCase();
-  if (name.endsWith('.heic') || name.endsWith('.heif') ||
-      file.type === 'image/heic' || file.type === 'image/heif') {
-    return "iPhone HEIC photos aren't supported. In Photos, tap Share → Options → turn on \"Most Compatible\" to export as JPEG.";
-  }
-  if (file.type && !ALLOWED_IMAGE_TYPES.includes(file.type)) {
-    return `Unsupported format (${file.type}). Please use JPEG, PNG, WebP, or GIF.`;
-  }
-  if (file.size > 10 * 1024 * 1024) {
-    return 'Image is too large (max 10 MB). Please resize it and try again.';
-  }
-  return null;
-}
+// File-type and size validation now lives in services/storageService.ts so
+// every upload path shares one set of rules; it reports failures via onError.
 
 export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({ tour, onUpdate }) => {
   const [tagDraft, setTagDraft] = useState('');
@@ -49,18 +35,11 @@ export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({ tour, onUpdate }) 
     e.target.value = '';
     setImageError(null);
 
-    const validationError = validateImageFile(file);
-    if (validationError) { setImageError(validationError); return; }
-
     setImageUploading(true);
-    const url = await uploadImage(file, tour.id);
+    const url = await uploadImage(file, tour.id, { onError: setImageError });
     setImageUploading(false);
 
-    if (!url) {
-      setImageError('Upload failed — check your connection and try again.');
-      return;
-    }
-    onUpdate({ welcome_image_url: url });
+    if (url) onUpdate({ welcome_image_url: url });
   };
 
   return (
@@ -388,6 +367,37 @@ export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({ tour, onUpdate }) 
                 <Lock size={12} /> Private
               </button>
             </div>
+            {/* Review feedback. Publishing runs an automatic content check on
+                save; a tour that doesn't pass stays private with a reason. */}
+            {!tour.is_public && tour.moderation_status === 'rejected' && (
+              <div className="mt-2 rounded bg-red-950/70 border border-red-900 px-3 py-2">
+                <p className="text-[11px] font-bold text-red-300">Not approved for publishing</p>
+                <p className="text-[11px] text-red-200/90 leading-snug mt-0.5">
+                  {tour.moderation_reason || 'This experience did not pass review.'}
+                </p>
+                <p className="text-[10px] text-red-200/60 leading-snug mt-1">
+                  Edit the flagged content, then set it to Public and save again.
+                </p>
+              </div>
+            )}
+            {!tour.is_public && tour.moderation_status === 'pending_review' && (
+              <div className="mt-2 rounded bg-amber-950/70 border border-amber-900 px-3 py-2">
+                <p className="text-[11px] font-bold text-amber-300">In review</p>
+                <p className="text-[11px] text-amber-200/90 leading-snug mt-0.5">
+                  {tour.moderation_reason || 'This experience needs a manual check before it can go live.'}
+                </p>
+              </div>
+            )}
+            {tour.is_public && (
+              <p className="text-[10px] text-zinc-500 mt-1.5 leading-snug">
+                Live and playable by anyone with the link.
+              </p>
+            )}
+            {!tour.is_public && tour.moderation_status !== 'rejected' && tour.moderation_status !== 'pending_review' && (
+              <p className="text-[10px] text-zinc-500 mt-1.5 leading-snug">
+                Setting this to Public runs a quick content check when you save.
+              </p>
+            )}
           </div>
 
           {/* Text Color */}

@@ -4,6 +4,10 @@ import { Dashboard } from './pages/Dashboard';
 import { Editor } from './pages/Editor';
 import { Player } from './pages/Player';
 import { MapLibreLab } from './pages/MapLibreLab';
+import { AdminModeration } from './pages/AdminModeration';
+import { LegalPage } from './pages/LegalPage';
+import { TERMS_SECTIONS, TERMS_VERSION } from './constants/terms';
+import { PRIVACY_SECTIONS, PRIVACY_VERSION } from './constants/privacy';
 import { Auth } from './pages/Auth';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { supabase } from './services/db';
@@ -57,6 +61,33 @@ const AppShell: React.FC<{ user: User | null; onLogout: () => void }> = ({ user,
           <Route path="/" element={user ? <Dashboard user={user} onLogout={onLogout} /> : <Navigate to="/auth" />} />
           <Route path="/editor/:tourId?" element={user ? <Editor user={user} /> : <Navigate to="/auth" />} />
           <Route path="/player/:tourId" element={<ErrorBoundary><Player /></ErrorBoundary>} />
+          {/* Admin membership is enforced by the edge function, not this route. */}
+          <Route path="/admin/moderation" element={user ? <AdminModeration /> : <Navigate to="/auth" />} />
+          {/* Public by design: a creator should be able to read the terms
+              before signing up, and a player needs the privacy policy without
+              ever having an account. */}
+          <Route
+            path="/terms"
+            element={
+              <LegalPage
+                title="Creator terms"
+                intro="These apply when you publish an experience. The first section is the one that matters most."
+                sections={TERMS_SECTIONS}
+                version={TERMS_VERSION}
+              />
+            }
+          />
+          <Route
+            path="/privacy"
+            element={
+              <LegalPage
+                title="Privacy"
+                intro="What Obelisk collects, why, and what you can do about it."
+                sections={PRIVACY_SECTIONS}
+                version={PRIVACY_VERSION}
+              />
+            }
+          />
           <Route path="/maplibre/:tourId?" element={<MapLibreLab />} />
         </Routes>
       </main>
