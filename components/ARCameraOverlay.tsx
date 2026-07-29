@@ -711,6 +711,19 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({ zone, userPosi
           <div className="flex items-center gap-3 mb-3"><Camera className="text-emerald-400" size={22} /><h2 className="font-bold">View in camera</h2></div>
           <p className="text-sm text-zinc-300 leading-relaxed">Open the camera to see this object placed in the world around you.</p>
           <button onClick={startCamera} className="w-full mt-4 py-3 rounded-xl bg-emerald-500 text-white font-bold active:opacity-80">Open camera</button>
+          {/* Attribution is required by the AR engine's licence. It sits on
+              this card rather than in the live camera view: the licence asks
+              for credit in the material where the functionality is used, and
+              this is the last thing read before it starts — putting chrome
+              over the experience itself would cost the moment it exists for.
+              Full copyright, licence reference, and warranty disclaimer are
+              on /licenses. */}
+          <p className="text-[10px] text-zinc-500 text-center mt-3 leading-snug">
+            AR tracking by 8th Wall — Niantic Spatial ·{' '}
+            <a href="/licenses" target="_blank" rel="noreferrer" className="underline hover:text-zinc-400">
+              Notices
+            </a>
+          </p>
         </div>
       )}
 
