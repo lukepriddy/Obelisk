@@ -132,6 +132,12 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
   const [phase, setPhase] = useState<Phase>('intro');
   const [error, setError] = useState<string | null>(null);
   const [modelError, setModelError] = useState<string | null>(null);
+  // Startup has several steps that can each fail for unrelated reasons
+  // (engine download, motion permission, camera permission, WebGL context).
+  // A single "could not start" message hides which one, so the underlying
+  // error is kept and shown — the alternative is guessing from a black screen.
+  const [detail, setDetail] = useState<string | null>(null);
+  const stepRef = useRef<string>('idle');
 
   useEffect(() => { configRef.current = configFor(zone); }, [zone]);
 
@@ -222,22 +228,40 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
 
   const start = async () => {
     setError(null);
+    setDetail(null);
     setPhase('starting');
 
     try {
       // Motion access is gated behind this tap on iOS, so it has to happen
       // inside the gesture rather than on mount.
+      // A refusal here isn't fatal: without a compass reading the object is
+      // placed relative to wherever the camera is pointing instead of true
+      // north, which is a rotation offset rather than a broken experience.
+      stepRef.current = 'motion permission';
       await requestMotionAccess();
-      const [XR8, heading] = await Promise.all([loadArEngine(), readHeading()]);
 
+      stepRef.current = 'loading engine';
+      const XR8 = await loadArEngine();
+
+      stepRef.current = 'reading compass';
+      const heading = await readHeading();
+
+      stepRef.current = 'computing placement';
       placementRef.current = localPlacement(configRef.current, zone, userPosition, heading);
 
+      stepRef.current = 'preparing canvas';
       const canvas = canvasRef.current;
-      if (!canvas) throw new Error('no canvas');
+      if (!canvas) throw new Error('canvas element missing');
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       canvas.width = Math.round(window.innerWidth * dpr);
       canvas.height = Math.round(window.innerHeight * dpr);
 
+      stepRef.current = 'configuring engine';
+      if (!XR8.XrController || !XR8.Threejs || !XR8.GlTextureRenderer) {
+        throw new Error(
+          `engine modules missing (XrController:${!!XR8.XrController} Threejs:${!!XR8.Threejs} GlTextureRenderer:${!!XR8.GlTextureRenderer})`,
+        );
+      }
       XR8.XrController.configure({ disableWorldTracking: false });
       XR8.addCameraPipelineModules([
         XR8.GlTextureRenderer.pipelineModule(),
@@ -273,20 +297,32 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
               base.z - Math.cos(direction) * along,
             );
           },
-          onException: (cause: unknown) => console.error('AR pipeline', cause),
+          // The engine reports camera and tracking failures here rather than by
+          // rejecting run(), so this is the only place some of them surface.
+          onException: (cause: unknown) => {
+            const message = cause instanceof Error ? cause.message : String(cause);
+            console.error('AR pipeline exception', cause);
+            stop();
+            setError('Augmented reality could not start on this device.');
+            setDetail(`pipeline: ${message}`);
+            setPhase('error');
+          },
         },
       ]);
 
+      stepRef.current = 'starting engine';
       runningRef.current = true;
-      XR8.run({ canvas });
+      await XR8.run({ canvas });
     } catch (cause) {
       console.error('AR start failed', cause);
       stop();
+      const message = cause instanceof Error ? cause.message : String(cause);
       setError(
-        cause instanceof Error && /engine/i.test(cause.message)
+        /engine|timed out|could not load/i.test(message)
           ? 'Augmented reality could not load. Check your connection and try again.'
           : 'The camera could not be started. Allow camera access and try again.',
       );
+      setDetail(`${stepRef.current}: ${message}`);
       setPhase('error');
     }
   };
@@ -343,6 +379,9 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
       {phase === 'error' && (
         <div className="absolute inset-x-5 bottom-[max(1.5rem,env(safe-area-inset-bottom))] rounded-2xl bg-zinc-900/95 backdrop-blur p-5 shadow-2xl">
           <p className="text-sm text-zinc-200 leading-relaxed">{error || 'Camera view could not start.'}</p>
+          {detail && (
+            <p className="mt-2 text-[10px] font-mono text-zinc-500 leading-snug break-words">{detail}</p>
+          )}
           <button onClick={() => setPhase('intro')} className="w-full mt-4 py-3 rounded-xl bg-zinc-700 text-white font-bold">Try again</button>
         </div>
       )}
