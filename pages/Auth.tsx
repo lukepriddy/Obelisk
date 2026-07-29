@@ -5,9 +5,10 @@ import { MapPin, Mail, ArrowLeft } from 'lucide-react';
 export const Auth: React.FC = () => {
   const [email, setEmail]     = useState('');
   const [code, setCode]       = useState(['', '', '', '', '', '', '', '']);
-  const [step, setStep]       = useState<'email' | 'code'>('email');
+  const [step, setStep]       = useState<'email' | 'code' | 'invite'>('email');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [requested, setRequested] = useState(false);
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -21,10 +22,30 @@ export const Auth: React.FC = () => {
     if (!email.trim()) return;
     setLoading(true);
     setErrorMsg(null);
+
+    // Check the invite list before sending anything. Account creation is
+    // blocked in the database regardless, but without this the visitor would
+    // receive a code and only then hit a raw server error.
+    const invited = await auth.isInvited(email.trim());
+    if (!invited) {
+      setLoading(false);
+      setStep('invite');
+      return;
+    }
+
     const { error } = await auth.signInWithEmail(email.trim());
     setLoading(false);
     if (error) { setErrorMsg(error); return; }
     setStep('code');
+  };
+
+  const handleRequestAccess = async () => {
+    setLoading(true);
+    const ok = await auth.requestAccess(email.trim());
+    setLoading(false);
+    // Deliberately identical either way — a visitor learns nothing about who
+    // is or isn't already on the list.
+    setRequested(ok || true);
   };
 
   const handleCodeChange = (index: number, value: string) => {
@@ -81,7 +102,39 @@ export const Auth: React.FC = () => {
 
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 shadow-2xl">
 
-          {step === 'email' ? (
+          {step === 'invite' ? (
+            /* ── Not on the invite list ──
+               Obelisk is invite-only until there's an entity behind it. This
+               is a dead end by design, but not an unfriendly one. */
+            <>
+              <h2 className="text-xl font-bold text-white mb-1 text-center">Invite only</h2>
+              <p className="text-zinc-400 text-sm text-center leading-relaxed mb-6">
+                Obelisk isn't open to everyone yet. Leave your email and you'll be
+                contacted when it opens up.
+              </p>
+
+              {requested ? (
+                <p className="text-emerald-300 text-sm text-center bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-3">
+                  Thanks — your email is on the list.
+                </p>
+              ) : (
+                <button
+                  onClick={handleRequestAccess}
+                  disabled={loading}
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold py-2.5 px-4 rounded-xl transition-colors text-sm"
+                >
+                  {loading ? 'Sending…' : 'Request access'}
+                </button>
+              )}
+
+              <button
+                onClick={() => { setStep('email'); setRequested(false); }}
+                className="w-full mt-3 text-zinc-500 hover:text-zinc-300 text-xs font-medium flex items-center justify-center gap-1.5"
+              >
+                <ArrowLeft size={13} /> Use a different email
+              </button>
+            </>
+          ) : step === 'email' ? (
             /* ── Step 1: Email ── */
             <>
               <h2 className="text-xl font-bold text-white mb-1 text-center">Welcome back</h2>

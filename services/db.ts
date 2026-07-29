@@ -23,6 +23,37 @@ const DEFAULT_ZONE_PROPS = {
 // ── Auth helpers ──────────────────────────────────────────────────────────────
 
 export const auth = {
+  /**
+   * Is this address invited?
+   *
+   * Obelisk is invite-only while it's a personal project. A database trigger
+   * on account creation is what actually enforces that; this check exists so a
+   * visitor is told immediately rather than being emailed a code that then
+   * fails with a raw server error. Treat an unreachable check as allowed and
+   * let the trigger decide.
+   */
+  isInvited: async (email: string): Promise<boolean> => {
+    const { data, error } = await supabase.rpc('is_email_allowed', { addr: email });
+    if (error) return true;
+    return data === true;
+  },
+
+  /** Register interest in an invite. Never grants access by itself. */
+  requestAccess: async (email: string): Promise<boolean> => {
+    const { error } = await supabase.from('access_allowlist').insert({
+      email: email.trim().toLowerCase(),
+      status: 'requested',
+      requested_at: new Date().toISOString(),
+    });
+    // Already on the list (approved, declined, or asked before) — from the
+    // visitor's side that's the same outcome: noted, nothing more to do.
+    if (error && error.code !== '23505') {
+      console.error('requestAccess:', error);
+      return false;
+    }
+    return true;
+  },
+
   /** Sends a 6-digit OTP code to the given email address. */
   signInWithEmail: async (email: string): Promise<{ error: string | null }> => {
     const { error } = await supabase.auth.signInWithOtp({ email });
