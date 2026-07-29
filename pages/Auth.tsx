@@ -272,6 +272,8 @@ export const Auth: React.FC = () => {
           <a href="/terms" className="hover:text-zinc-400 transition-colors">Creator terms</a>
           <span aria-hidden="true">·</span>
           <a href="/privacy" className="hover:text-zinc-400 transition-colors">Privacy</a>
+          <span aria-hidden="true">·</span>
+          <a href="/licenses" className="hover:text-zinc-400 transition-colors">Notices</a>
         </div>
       </div>
     </div>

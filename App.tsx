@@ -8,6 +8,7 @@ import { AdminModeration } from './pages/AdminModeration';
 import { LegalPage } from './pages/LegalPage';
 import { TERMS_SECTIONS, TERMS_VERSION } from './constants/terms';
 import { PRIVACY_SECTIONS, PRIVACY_VERSION } from './constants/privacy';
+import { LICENSES_SECTIONS, LICENSES_VERSION } from './constants/licenses';
 import { Auth } from './pages/Auth';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { supabase } from './services/db';
@@ -85,6 +86,17 @@ const AppShell: React.FC<{ user: User | null; onLogout: () => void }> = ({ user,
                 intro="What Obelisk collects, why, and what you can do about it."
                 sections={PRIVACY_SECTIONS}
                 version={PRIVACY_VERSION}
+              />
+            }
+          />
+          <Route
+            path="/licenses"
+            element={
+              <LegalPage
+                title="Third-party notices"
+                intro="Obelisk is built on other people's work. Several of these licences require attribution — this page is where it lives."
+                sections={LICENSES_SECTIONS}
+                version={LICENSES_VERSION}
               />
             }
           />
