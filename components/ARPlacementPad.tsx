@@ -6,8 +6,13 @@ import React, { useRef } from 'react';
  *   • drag the object pin  → sets its ground offset (distance + bearing)
  *   • drag the facing arrow → sets which way it faces
  * Centred on the viewer, because in AR what matters is where the object sits
- * relative to where the player stands. The live "look up ≈ N°" readout warns
- * when the object is near-overhead, where azimuth is unstable and it swivels.
+ * relative to where the player stands.
+ *
+ * The "look up ≈ N°" readout is a framing aid, not a stability warning. It
+ * once warned about near-overhead placements because the old compass pipeline
+ * span there — azimuth is undefined at the zenith. Visual tracking has no such
+ * failure, so the number now only answers "will a player have to crane their
+ * neck to see this?", which is a composition question the creator should own.
  */
 interface ARPlacementPadProps {
   distance: number;   // ground_distance_m
@@ -118,7 +123,7 @@ export const ARPlacementPad: React.FC<ARPlacementPadProps> = ({
           Players look up ≈ <span className="font-bold">{viewAngle}°</span>
         </p>
         {steep && (
-          <p className="text-[11px] text-amber-400 mt-1">Nearly overhead — may swivel. Drag the object farther out.</p>
+          <p className="text-[11px] text-amber-400 mt-1">Almost directly overhead — players will have to look straight up to see it.</p>
         )}
       </div>
     </div>

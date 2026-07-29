@@ -188,17 +188,20 @@ export async function uploadModel(
  * own public bucket because the images bucket intentionally allows image MIME
  * types only.
  */
-export async function uploadARAsset(file: File, tourId: string): Promise<string | null> {
-  const ext = file.name.split('.').pop() ?? 'bin';
-  const path = `${tourId}/ar/${Date.now()}.${ext}`;
-  const isGlb = ext.toLowerCase() === 'glb' || file.type === 'model/gltf-binary';
-  const { error } = await supabase.storage
-    .from(isGlb ? 'models' : 'images')
-    .upload(path, file, { upsert: false, contentType: file.type || (isGlb ? 'model/gltf-binary' : undefined) });
-  if (error) {
-    console.error('AR asset upload failed:', error.message, error);
-    return null;
-  }
-  const { data } = supabase.storage.from(isGlb ? 'models' : 'images').getPublicUrl(path);
-  return data.publicUrl;
+/**
+ * Upload an AR object: a GLB model, or a flat image used as a billboard.
+ *
+ * Dispatches to the shared upload path rather than talking to storage
+ * directly, so AR assets get the same type and size validation as everything
+ * else, count toward the account's storage quota, and land in the `uploads`
+ * ledger. This previously bypassed all three — a creator could store unlimited
+ * 3D models without them registering against any limit.
+ */
+export async function uploadARAsset(
+  file: File, tourId: string, opts?: UploadOptions,
+): Promise<string | null> {
+  const isGlb = file.name.toLowerCase().endsWith('.glb') || file.type === 'model/gltf-binary';
+  return isGlb
+    ? uploadModel(file, tourId, opts)
+    : uploadImage(file, `${tourId}/ar`, opts);
 }

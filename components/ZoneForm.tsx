@@ -377,13 +377,11 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
       return;
     }
     setArAssetUploading(true);
-    const url = await uploadARAsset(file, zone.tour_id);
+    // storageService reports the specific reason (wrong type, too large, over
+    // the account's storage quota) rather than a generic failure.
+    const url = await uploadARAsset(file, zone.tour_id, { onError: setArAssetUploadError });
     setArAssetUploading(false);
-    if (!url) {
-      setArAssetUploadError('Upload failed — check your connection and try again.');
-      return;
-    }
-    updateArConfig({ asset_url: url, asset_type: isGlb ? 'glb' : 'image' });
+    if (url) updateArConfig({ asset_url: url, asset_type: isGlb ? 'glb' : 'image' });
   };
 
   // A discoverable only ever grants a progression reward — it's a dead end
