@@ -9,13 +9,31 @@
  * appears on the camera intro card.
  */
 
+import * as THREE from 'three';
+
 const ENGINE_SRC = 'https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1/dist/xr.js';
 
 declare global {
   interface Window {
     XR8?: any;
     XRExtras?: any;
+    THREE?: unknown;
   }
+}
+
+/**
+ * The engine's ThreeJS pipeline module reads `THREE` off `window` rather than
+ * accepting an injected instance — it predates bundlers being the norm and
+ * expects three.js to have come from a script tag. Our three is an ES import,
+ * so the global has to be set by hand or `XR8.Threejs.pipelineModule()` throws
+ * "window.THREE does not exist".
+ *
+ * Assigning our bundled copy also guarantees the engine and our scene code
+ * share one instance; two copies of three.js would silently fail instanceof
+ * checks between them.
+ */
+function exposeThreeGlobal() {
+  if (!window.THREE) window.THREE = THREE;
 }
 
 let loadPromise: Promise<any> | null = null;
@@ -27,6 +45,7 @@ let loadPromise: Promise<any> | null = null;
  * blocked CDN or an offline device.
  */
 export function loadArEngine(timeoutMs = 20000): Promise<any> {
+  exposeThreeGlobal();
   if (window.XR8) return Promise.resolve(window.XR8);
   if (loadPromise) return loadPromise;
 
