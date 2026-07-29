@@ -12,6 +12,7 @@
  */
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { checkAndRecordUsage, rateLimited } from '../_shared/usage.ts';
 
 const GEMINI_API_KEY   = Deno.env.get('GEMINI_API_KEY') ?? '';
 const SUPABASE_URL     = Deno.env.get('SUPABASE_URL') ?? '';
@@ -76,6 +77,27 @@ Deno.serve(async (req) => {
         status: 503,
         headers: { ...cors, 'Content-Type': 'application/json' },
       });
+    }
+
+    // Players are anonymous, so the budget is per TOUR rather than per person.
+    // Set generously: a genuinely popular tour with many simultaneous players
+    // shares one bucket, and throttling real players is worse than the abuse
+    // this is guarding against.
+    if (type === 'chat' || type === 'tts') {
+      const actorKey = typeof body.tourId === 'string' && UUID_RE.test(body.tourId)
+        ? body.tourId
+        : 'unknown-tour';
+      const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+      const usage = await checkAndRecordUsage(
+        admin,
+        `gemini-chat:${type}`,
+        actorKey,
+        type === 'chat'
+          ? { perMinute: 30, perDay: 500 }
+          : { perMinute: 30, perDay: 300 },
+        actorKey === 'unknown-tour' ? null : actorKey,
+      );
+      if (!usage.allowed) return rateLimited(usage, cors);
     }
 
     // ── TEXT GENERATION ──────────────────────────────────────────────────────

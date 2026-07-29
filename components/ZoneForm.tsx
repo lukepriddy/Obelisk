@@ -321,16 +321,13 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
     e.target.value = '';
 
     setAudioUploading(true);
-    const url = await uploadAudio(file, zone.tour_id);
+    // Do NOT fall back to a blob: URL on failure — blob URLs can't be persisted
+    // to the DB or played back after a reload. storageService reports the
+    // specific reason (wrong type, too large, over quota) via onError.
+    const url = await uploadAudio(file, zone.tour_id, { onError: setUploadError });
     setAudioUploading(false);
 
-    if (url) {
-      onUpdate({ media_url: url });
-    } else {
-      // Do NOT fall back to a blob: URL — blob URLs can't be persisted to the DB
-      // or played back after a page reload. Show an actionable error instead.
-      setUploadError('Upload failed. Check your storage settings or try a different file.');
-    }
+    if (url) onUpdate({ media_url: url });
   };
 
   const handleImageUpload = async (
@@ -341,23 +338,10 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
     if (!file) return;
     e.target.value = '';
     setImageUploadError(null);
-    const name = file.name.toLowerCase();
-    if (name.endsWith('.heic') || name.endsWith('.heif') || file.type === 'image/heic' || file.type === 'image/heif') {
-      setImageUploadError("iPhone HEIC photos aren't supported. In Photos, tap Share → Options → \"Most Compatible\" to export as JPEG.");
-      return;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      setImageUploadError('Image too large (max 10 MB).');
-      return;
-    }
     setImageUploading(true);
-    const url = await uploadImage(file, zone.tour_id);
+    const url = await uploadImage(file, zone.tour_id, { onError: setImageUploadError });
     setImageUploading(false);
-    if (!url) {
-      setImageUploadError('Upload failed — check your connection and try again.');
-      return;
-    }
-    onUpdate({ [field]: url });
+    if (url) onUpdate({ [field]: url });
   };
 
   const arConfig: ARObjectConfig = {

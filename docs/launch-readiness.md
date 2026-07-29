@@ -1,0 +1,144 @@
+# Launch readiness
+
+Where Obelisk stands between "a tool I use" and "a platform other people use,"
+and what's deliberately not done yet.
+
+## Already in place
+
+Publishing runs an automatic content review (`moderate-tour`) before anything
+goes public, enforced by a database trigger rather than the UI — a creator
+calling PostgREST directly gets the same refusal. Accounts have storage,
+experience-count, and AI rate limits. Creators accept terms before their first
+publish, recorded per version in `tos_acceptances`. Players see a real-world
+safety notice and can reach `/privacy` without an account. Signups are gated
+behind `access_allowlist`, with a request form that asks what people want to
+build, reviewed at `/admin/moderation`.
+
+Admins (both of Luke's accounts, seeded in `platform_admins`) are exempt from
+the moderation gate but **not** from the terms.
+
+---
+
+## 1. Finish the auth switch
+
+**Status:** half done. Code shipped; one dashboard toggle outstanding.
+
+Account creation is currently blocked by a custom `BEFORE INSERT` trigger on
+`auth.users` (`enforce_signup_allowlist`). That works, but it puts our code
+inside a Supabase-managed system table — if it ever errors, sign-in breaks for
+everyone, and bypass attempts return a raw HTTP 500.
+
+Supabase has a native equivalent: **Auth → Sign In / Providers → "Allow new
+users to sign up" → off**. Same guarantee, none of our code in the auth path,
+proper error responses.
+
+The client already sends `shouldCreateUser: false`, and approving someone in
+`/admin/moderation` now calls `inviteUserByEmail()` — which uses the service
+role and still works with public signup disabled. That's the whole point: the
+toggle stops strangers, not invitations.
+
+**To finish:** flip the toggle, then drop the trigger:
+
+```sql
+drop trigger if exists enforce_signup_allowlist on auth.users;
+drop function if exists public.enforce_signup_allowlist();
+```
+
+Order matters — flip first, drop second, or there's a window with no gate at
+all. Then verify: an uninvited address is refused, an invite email arrives and
+works, and an existing account can still sign in.
+
+---
+
+## 2. Entity and legal review
+
+**Status:** deferred on cost. This is what gates *public* signups.
+
+Right now there's no legal entity, so liability for anything a creator does
+lands on Luke personally. That's an acceptable risk while the only users are
+his own accounts and possibly one invited friend. It is not acceptable once
+strangers publish tours that send other strangers to physical locations.
+
+The full risk assessment is in the conversation history; the short version:
+
+- **LLC (New York).** $200 filing + ~$350–800 publication + $50 certificate.
+  Ulster County is mid-range — the "use an Albany registered agent" trick saves
+  only ~$150–350 here, not worth the out-of-county public record. Call the
+  Ulster County Clerk on (845) 340-3288 for current designated-paper rates
+  before filing. Biennial statement afterwards is $9 every two years.
+- **Lawyer review** of `constants/terms.ts` and `constants/privacy.ts`. Both
+  are plain-language drafts covering the right ground; neither has been
+  reviewed. Priorities: a player-facing assumption-of-risk agreement (players
+  currently accept nothing, yet they're the ones who can be injured),
+  governing law + venue + arbitration, a real indemnity, and a liability cap.
+- **DMCA agent registration** — ~$6 with the Copyright Office. Without it
+  there's no §512 safe harbor for creator-uploaded material. Cheapest item on
+  this list by far.
+
+Precedent worth showing counsel: the Pokémon GO personal-injury and
+landowner-nuisance litigation. Same core mechanic, weaker controls here.
+
+---
+
+## 3. Invite one real creator
+
+**Status:** not started. Cheapest, highest-information step available.
+
+Approve one email in `/admin/moderation`, hand them the link, and watch them
+build a tour end to end without help.
+
+This is deliberately ahead of billing in priority, because it answers the
+question billing depends on: **how much friction is the BYOK API key step?**
+The Managed tier's entire value proposition is "you don't have to go get a
+Gemini key." If that step turns out to be a mild annoyance, Managed is a minor
+upsell. If most people bounce there, Managed isn't an upsell at all — it's the
+default tier, which changes both the price and the design.
+
+Also worth doing from a non-admin account (`cloudenglish.net@gmail.com`) after
+any change to the moderation path, since admin exemption means Luke's own
+publishing never exercises the gate.
+
+---
+
+## 4. Stripe / Managed tier
+
+**Status:** deliberately deferred. Groundwork laid, nothing built.
+
+`profiles` already has `plan_tier`, `stripe_customer_id`,
+`stripe_subscription_id`, and `stripe_subscription_status`, and every AI
+function resolves keys through one path — so adding billing later is contained
+work, not a refactor.
+
+Not built because there is nobody to bill, the price isn't known yet (see item
+3), and switching on subscriptions creates real obligations from day one —
+failed payments, refunds, cancellations, sales tax — with no revenue against
+them.
+
+When it happens, the shape is: `stripe-checkout`, `stripe-portal`, and a
+signature-verified `stripe-webhook` edge function with an idempotency table,
+plus a shared key resolver where the platform key is only handed out when
+`plan_tier = 'managed'` **and** the subscription is `active` or `trialing`.
+
+**Related gap to close at the same time:** `keyForTour()` and `keyForCaller()`
+currently fall back to the platform Gemini key for *any* creator without their
+own key, not just paying ones. Harmless while the only users are invited, but
+it must become conditional before Managed exists — otherwise the free tier
+silently gets the paid benefit.
+
+---
+
+## Known soft spots
+
+- **Moderation fail-safe is untested live.** A Gemini outage resolves to
+  `pending_review` by design, but breaking the key to prove it would have taken
+  down character chat on live tours. A waterfall of Gemini keys would make this
+  largely moot.
+- **Storage ledger can be bypassed.** `uploads` is written by the client after
+  a successful upload, so a determined caller hitting Supabase Storage directly
+  would undercount their usage. Closing it needs a trigger on `storage.objects`
+  or proxying uploads through an edge function.
+- **No re-moderation after edits.** A tour is reviewed at publish. Editing an
+  already-approved tour doesn't re-check it — covered by reports and
+  fast-unpublish rather than detection.
+- **No discovery.** `is_public` only filters a creator's own dashboard; there
+  is no page listing other people's tours. Deferred on purpose.

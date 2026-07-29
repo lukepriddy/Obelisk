@@ -1394,6 +1394,29 @@ export const Player: React.FC = () => {
                 >
                   <PlayCircle size={22} /> Begin
                 </button>
+
+                {/* Real-world safety notice. This experience is about to walk
+                    someone through physical space while they look at a phone;
+                    the locations are chosen by a creator, not vetted by us. */}
+                <p
+                  className="text-[11px] leading-relaxed text-center px-1"
+                  style={{ color: textColor, opacity: 0.55 }}
+                >
+                  Stay aware of your surroundings — watch for traffic, obey local laws,
+                  and don't enter private property. Locations are chosen by the creator
+                  of this experience. You take part at your own risk.
+                </p>
+                {/* Players never sign up, so this is the only place they can
+                    reach the privacy policy — and the app reads their GPS. */}
+                <a
+                  href="/privacy"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block text-[11px] text-center underline underline-offset-2"
+                  style={{ color: textColor, opacity: 0.4 }}
+                >
+                  How your location is used
+                </a>
               </div>
             </div>
           </div>

@@ -23,9 +23,55 @@ const DEFAULT_ZONE_PROPS = {
 // ── Auth helpers ──────────────────────────────────────────────────────────────
 
 export const auth = {
-  /** Sends a 6-digit OTP code to the given email address. */
+  /**
+   * Is this address invited?
+   *
+   * Obelisk is invite-only while it's a personal project. A database trigger
+   * on account creation is what actually enforces that; this check exists so a
+   * visitor is told immediately rather than being emailed a code that then
+   * fails with a raw server error. Treat an unreachable check as allowed and
+   * let the trigger decide.
+   */
+  isInvited: async (email: string): Promise<boolean> => {
+    const { data, error } = await supabase.rpc('is_email_allowed', { addr: email });
+    if (error) return true;
+    return data === true;
+  },
+
+  /**
+   * Register interest in an invite. Never grants access by itself.
+   * `note` is the applicant's own answer about what they want to build — the
+   * most useful part of the request, and what decides who gets invited first.
+   */
+  requestAccess: async (email: string, note?: string): Promise<boolean> => {
+    const { error } = await supabase.from('access_allowlist').insert({
+      email: email.trim().toLowerCase(),
+      status: 'requested',
+      request_note: note?.trim().slice(0, 1000) || null,
+      requested_at: new Date().toISOString(),
+    });
+    // Already on the list (approved, declined, or asked before) — from the
+    // visitor's side that's the same outcome: noted, nothing more to do.
+    if (error && error.code !== '23505') {
+      console.error('requestAccess:', error);
+      return false;
+    }
+    return true;
+  },
+
+  /**
+   * Sends a 6-digit OTP code to the given email address.
+   *
+   * shouldCreateUser: false means this only ever signs in an EXISTING account.
+   * New accounts are created by invitation, not by anyone typing an address —
+   * so an uninvited visitor gets a clean "no account" error here rather than
+   * quietly registering.
+   */
   signInWithEmail: async (email: string): Promise<{ error: string | null }> => {
-    const { error } = await supabase.auth.signInWithOtp({ email });
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: false },
+    });
     return { error: error?.message ?? null };
   },
 
@@ -312,6 +358,100 @@ export const getApiKeys = async (userId: string): Promise<{ elevenlabs_key: stri
     .maybeSingle();
   if (error) { console.error('getApiKeys:', error); return null; }
   return data;
+};
+
+// ── Publishing ───────────────────────────────────────────────────────────────
+/**
+ * Ask the review service to publish a tour.
+ *
+ * Publishing is not a plain `is_public = true` write: a database trigger
+ * rejects that for ordinary creators. Only the `moderate-tour` edge function
+ * (service role) can flip the flag, and only after an automatic content
+ * review passes. Platform admins are exempt and publish immediately.
+ */
+export type PublishResult = {
+  verdict: 'pass' | 'fail' | 'borderline';
+  status: 'approved' | 'rejected' | 'pending_review';
+  is_public: boolean;
+  reason?: string | null;
+  categories?: string[];
+  /** Set when publishing was refused because the creator terms aren't accepted. */
+  termsRequired?: boolean;
+  requiredVersion?: string;
+};
+
+/** Which terms version is required, and whether this creator has accepted it. */
+export const getTermsStatus = async (): Promise<{ version: string; accepted: boolean } | null> => {
+  const { data, error } = await supabase.rpc('my_tos_status');
+  const row = Array.isArray(data) ? data[0] : data;
+  if (error || !row) return null;
+  return { version: row.required_version, accepted: !!row.accepted };
+};
+
+/** Record acceptance of a terms version for the signed-in creator. */
+export const acceptTerms = async (version: string): Promise<boolean> => {
+  const { data: auth } = await supabase.auth.getUser();
+  const userId = auth?.user?.id;
+  if (!userId) return false;
+  const { error } = await supabase
+    .from('tos_acceptances')
+    .insert({ user_id: userId, version });
+  // A duplicate means they already accepted it — that's success, not failure.
+  if (error && error.code !== '23505') {
+    console.error('acceptTerms:', error);
+    return false;
+  }
+  return true;
+};
+
+export const requestPublish = async (tourId: string): Promise<PublishResult> => {
+  try {
+    const { data, error } = await supabase.functions.invoke('moderate-tour', {
+      body: { tourId },
+    });
+
+    // A non-2xx reply arrives as an error with the body on error.context, so
+    // the terms case has to be read from either place.
+    let payload: Record<string, unknown> | null = data ?? null;
+    if (error && (error as { context?: Response }).context) {
+      payload = await (error as unknown as { context: Response }).context
+        .json().catch(() => null);
+    }
+
+    // 412 means the creator terms aren't accepted yet. That isn't a failed
+    // review — it's a prerequisite the UI can resolve, then retry.
+    if (payload?.error === 'terms_required') {
+      return {
+        verdict: 'borderline',
+        status: 'pending_review',
+        is_public: false,
+        termsRequired: true,
+        requiredVersion: typeof payload.requiredVersion === 'string'
+          ? payload.requiredVersion : undefined,
+      };
+    }
+    if (payload?.status) return payload as unknown as PublishResult;
+
+    if (error || !data?.status) {
+      console.error('requestPublish:', error ?? data);
+      // Never report an unknown outcome as published.
+      return {
+        verdict: 'borderline',
+        status: 'pending_review',
+        is_public: false,
+        reason: 'Review could not be completed. Check your connection and try again.',
+      };
+    }
+    return data as PublishResult;
+  } catch (err) {
+    console.error('requestPublish:', err);
+    return {
+      verdict: 'borderline',
+      status: 'pending_review',
+      is_public: false,
+      reason: 'Review could not be completed. Check your connection and try again.',
+    };
+  }
 };
 
 export const saveApiKeys = async (userId: string, keys: { elevenlabs_key?: string | null; gemini_key?: string | null }): Promise<boolean> => {
