@@ -83,7 +83,20 @@ Deno.serve(async (req) => {
         .order('created_at', { ascending: true })
         .limit(200);
 
-      return json({ queue: queue ?? [], reports: reports ?? [] });
+      // People asking to be let in while Obelisk is invite-only, with what
+      // they said they want to build.
+      const { data: accessRequests } = await admin
+        .from('access_allowlist')
+        .select('email, request_note, requested_at')
+        .eq('status', 'requested')
+        .order('requested_at', { ascending: false })
+        .limit(200);
+
+      return json({
+        queue: queue ?? [],
+        reports: reports ?? [],
+        accessRequests: accessRequests ?? [],
+      });
     }
 
     if (action === 'decide') {
@@ -125,6 +138,21 @@ Deno.serve(async (req) => {
       await admin.from('tour_reports')
         .update({ resolved_at: new Date().toISOString() })
         .eq('tour_id', tourId).is('resolved_at', null);
+      return json({ ok: true });
+    }
+
+    if (action === 'decide_access') {
+      const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
+      const decision = body?.decision;
+      if (!email || (decision !== 'approve' && decision !== 'decline')) {
+        return json({ error: 'Invalid request.' }, 400);
+      }
+      // Approving here is what actually lets someone sign up — the trigger on
+      // account creation reads this exact row.
+      const { error } = await admin.from('access_allowlist')
+        .update({ status: decision === 'approve' ? 'approved' : 'declined' })
+        .eq('email', email);
+      if (error) return json({ error: 'Could not update that request.' }, 500);
       return json({ ok: true });
     }
 

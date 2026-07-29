@@ -38,11 +38,16 @@ export const auth = {
     return data === true;
   },
 
-  /** Register interest in an invite. Never grants access by itself. */
-  requestAccess: async (email: string): Promise<boolean> => {
+  /**
+   * Register interest in an invite. Never grants access by itself.
+   * `note` is the applicant's own answer about what they want to build — the
+   * most useful part of the request, and what decides who gets invited first.
+   */
+  requestAccess: async (email: string, note?: string): Promise<boolean> => {
     const { error } = await supabase.from('access_allowlist').insert({
       email: email.trim().toLowerCase(),
       status: 'requested',
+      request_note: note?.trim().slice(0, 1000) || null,
       requested_at: new Date().toISOString(),
     });
     // Already on the list (approved, declined, or asked before) — from the

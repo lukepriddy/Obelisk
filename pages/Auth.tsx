@@ -9,6 +9,7 @@ export const Auth: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [requested, setRequested] = useState(false);
+  const [intent, setIntent] = useState('');
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -41,7 +42,7 @@ export const Auth: React.FC = () => {
 
   const handleRequestAccess = async () => {
     setLoading(true);
-    const ok = await auth.requestAccess(email.trim());
+    const ok = await auth.requestAccess(email.trim(), intent);
     setLoading(false);
     // Deliberately identical either way — a visitor learns nothing about who
     // is or isn't already on the list.
@@ -118,17 +119,48 @@ export const Auth: React.FC = () => {
                   Thanks — your email is on the list.
                 </p>
               ) : (
-                <button
-                  onClick={handleRequestAccess}
-                  disabled={loading}
-                  className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold py-2.5 px-4 rounded-xl transition-colors text-sm"
-                >
-                  {loading ? 'Sending…' : 'Request access'}
-                </button>
+                <>
+                  <div className="mb-4">
+                    <label className="block text-xs font-medium text-zinc-400 mb-1.5 uppercase tracking-wider">
+                      Email Address
+                    </label>
+                    <p className="text-zinc-300 text-sm px-4 py-2.5 bg-zinc-800/60 border border-zinc-800 rounded-xl truncate">
+                      {email.trim()}
+                    </p>
+                  </div>
+
+                  <div className="mb-4">
+                    <label
+                      htmlFor="intent"
+                      className="block text-xs font-medium text-zinc-400 mb-1.5 uppercase tracking-wider"
+                    >
+                      What would you like to create?
+                    </label>
+                    <textarea
+                      id="intent"
+                      rows={3}
+                      maxLength={1000}
+                      autoFocus
+                      value={intent}
+                      onChange={(e) => setIntent(e.target.value)}
+                      placeholder="A ghost tour of my town, a scavenger hunt for my students, a history walk…"
+                      className="w-full px-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder-zinc-600 text-sm resize-none focus:outline-none focus:border-emerald-500/60 transition-colors"
+                    />
+                    <p className="text-zinc-600 text-[11px] mt-1">Optional, but it helps decide who gets in first.</p>
+                  </div>
+
+                  <button
+                    onClick={handleRequestAccess}
+                    disabled={loading}
+                    className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold py-2.5 px-4 rounded-xl transition-colors text-sm"
+                  >
+                    {loading ? 'Sending…' : 'Request access'}
+                  </button>
+                </>
               )}
 
               <button
-                onClick={() => { setStep('email'); setRequested(false); }}
+                onClick={() => { setStep('email'); setRequested(false); setIntent(''); }}
                 className="w-full mt-3 text-zinc-500 hover:text-zinc-300 text-xs font-medium flex items-center justify-center gap-1.5"
               >
                 <ArrowLeft size={13} /> Use a different email

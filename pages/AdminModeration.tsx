@@ -36,12 +36,19 @@ interface Report {
   tours?: { title: string; owner_id: string; is_public: boolean } | null;
 }
 
+interface AccessRequest {
+  email: string;
+  request_note: string | null;
+  requested_at: string | null;
+}
+
 export const AdminModeration: React.FC = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [denied, setDenied] = useState(false);
   const [queue, setQueue] = useState<QueueTour[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
+  const [accessRequests, setAccessRequests] = useState<AccessRequest[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,6 +71,7 @@ export const AdminModeration: React.FC = () => {
       if (data) {
         setQueue(data.queue ?? []);
         setReports(data.reports ?? []);
+        setAccessRequests(data.accessRequests ?? []);
       }
     } catch {
       setError('Could not load the queue. Check your connection and try again.');
@@ -137,6 +145,59 @@ export const AdminModeration: React.FC = () => {
             {error}
           </div>
         )}
+
+        {/* ── Access requests ──
+            First, because while Obelisk is invite-only this is the section
+            with anything in it. Approving here is what actually lets someone
+            create an account. */}
+        <section className="mb-8">
+          <h2 className="text-xs font-bold uppercase tracking-wide text-zinc-500 mb-3">
+            Access requests ({accessRequests.length})
+          </h2>
+          {accessRequests.length === 0 ? (
+            <p className="text-sm text-zinc-500">Nobody's asked for access yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {accessRequests.map(r => (
+                <article key={r.email} className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <h3 className="font-bold text-sm truncate">{r.email}</h3>
+                    {r.requested_at && (
+                      <span className="text-[11px] text-zinc-500 shrink-0">
+                        {new Date(r.requested_at).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
+                  {r.request_note ? (
+                    <p className="text-xs text-zinc-300 mt-2 leading-relaxed whitespace-pre-wrap">
+                      “{r.request_note}”
+                    </p>
+                  ) : (
+                    <p className="text-xs text-zinc-600 mt-2 italic">No answer given.</p>
+                  )}
+                  <div className="flex gap-2 mt-3">
+                    <button
+                      onClick={() => act(`ia-${r.email}`, { action: 'decide_access', email: r.email, decision: 'approve' })}
+                      disabled={!!busy}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50"
+                    >
+                      {busy === `ia-${r.email}` ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                      Invite
+                    </button>
+                    <button
+                      onClick={() => act(`id-${r.email}`, { action: 'decide_access', email: r.email, decision: 'decline' })}
+                      disabled={!!busy}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold bg-zinc-800 hover:bg-zinc-700 text-zinc-200 disabled:opacity-50"
+                    >
+                      {busy === `id-${r.email}` ? <Loader2 size={13} className="animate-spin" /> : <X size={13} />}
+                      Decline
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
 
         {/* ── Awaiting review ── */}
         <section className="mb-8">
