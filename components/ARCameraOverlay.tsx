@@ -367,8 +367,7 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
               the tracking needs: a slow pan to read the space. */}
           <div className="flex items-center gap-3 mb-3"><Camera style={{ color: accent }} size={22} /><h2 className="font-bold">View in camera</h2></div>
           <p className="text-sm text-zinc-300 leading-relaxed">
-            Hold your phone up and move it slowly — it reads the space around you,
-            then places the object in it.
+            Hold your phone up and move it slowly.
           </p>
           <button
             onClick={start}
