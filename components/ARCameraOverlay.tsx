@@ -252,9 +252,16 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
       stepRef.current = 'preparing canvas';
       const canvas = canvasRef.current;
       if (!canvas) throw new Error('canvas element missing');
+      // Render at the camera's own 3:4 shape rather than stretching to fill a
+      // tall screen. Filling costs a third of the horizontal field of view —
+      // measured at 36° versus 47° — because the engine keeps its vertical FOV
+      // and throws the sides away. The bands this leaves above and below are
+      // where the title and close button sit, so nothing is wasted and the
+      // chrome stops covering the camera image.
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      canvas.width = Math.round(window.innerWidth * dpr);
-      canvas.height = Math.round(window.innerHeight * dpr);
+      const fit = Math.min(window.innerWidth / 3, window.innerHeight / 4);
+      canvas.width = Math.round(fit * 3 * dpr);
+      canvas.height = Math.round(fit * 4 * dpr);
 
       stepRef.current = 'configuring engine';
       if (!XR8.XrController || !XR8.Threejs || !XR8.GlTextureRenderer) {
@@ -331,7 +338,14 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
 
   return (
     <div className="fixed inset-0 z-[5000] bg-black text-white overflow-hidden">
-      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
+      {/* inset-0 + margin auto centres an element with an intrinsic aspect,
+          and the max- constraints make it behave like object-fit: contain on
+          any screen shape. The backing store is sized to match in start(). */}
+      <canvas
+        ref={canvasRef}
+        className="absolute inset-0 m-auto max-w-full max-h-full"
+        style={{ aspectRatio: '3 / 4' }}
+      />
 
       <div className="absolute top-0 inset-x-0 pt-[max(1rem,env(safe-area-inset-top))] px-4 flex items-center justify-between">
         <div className="rounded-xl bg-black/70 backdrop-blur px-3 py-2">
