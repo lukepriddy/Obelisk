@@ -15,8 +15,9 @@ import {
 import { getDistance, calculateAttenuation } from '../utils/geo';
 import { PlayerProgress, ProgressionReward, Tour, Zone } from '../types';
 import { FONT_STYLES, MAP_STYLES, DEFAULT_MAP_STYLE } from '../constants';
-import { Loader2, PlayCircle, Volume2, MessageCircle, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu, Layers, Locate, RotateCcw, ZoomIn, ZoomOut, Backpack, Gem, Trash2, Info, RefreshCw, LogOut, Bug, Navigation, ChevronRight } from 'lucide-react';
+import { Loader2, PlayCircle, Volume2, MessageCircle, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu, Layers, Locate, RotateCcw, ZoomIn, ZoomOut, Backpack, Gem, Trash2, Info, RefreshCw, LogOut, Bug, Navigation, ChevronRight, Camera } from 'lucide-react';
 import { ChatInterface } from '../components/ChatInterface';
+import { ARCameraOverlay } from '../components/ARCameraOverlay';
 
 // Player map style options, in selector order (Satellite HD default first).
 const PLAYER_MAP_STYLE_ORDER = ['satellite-hd', 'satellite', 'voyager', 'dark', 'light', 'streets'] as const;
@@ -112,6 +113,8 @@ export const Player: React.FC = () => {
   const [persistedCharacterZone, setPersistedCharacterZone] = useState<Zone | null>(null);
   const persistedCharZoneRef = useRef<Zone | null>(null);
   const [showChat, setShowChat] = useState(false);
+  const [arCameraZone, setArCameraZone] = useState<Zone | null>(null);
+  const [activeARZone, setActiveARZone] = useState<Zone | null>(null);
   // Incremented only when entering a *different* character zone, so the
   // ChatInterface re-mounts for a fresh session.  Re-entering the same
   // zone keeps history alive.
@@ -153,6 +156,7 @@ export const Player: React.FC = () => {
     closePlayerMenu();
     setShowInventory(false);
     setShowChat(false);
+    setArCameraZone(null);
     setShowDebug(false);
     setActiveZones([]);
     setActiveMediaZone(null);
@@ -374,6 +378,30 @@ export const Player: React.FC = () => {
     return true;
   };
 
+  // The audio loop remains the source of truth for activating zones. Keep a
+  // direct render-time check for the optional camera affordance as well: a
+  // fresh GPS position can paint the player dot before the next loop tick has
+  // published `activeARZone`. This prevents a nearby camera object from
+  // appearing to have no entry point during that brief state gap.
+  const nearbyARZone = useMemo(() => {
+    if (!audioStarted || !userPos) return null;
+
+    const positionReliable =
+      simulationMode || (gpsFixRef.current?.accuracy ?? Infinity) <= 100;
+    if (!positionReliable) return null;
+
+    return zones.find(zone => {
+      if (!zone.ar_config?.enabled || !zone.ar_config.asset_url) return false;
+      if (!isZoneAccessible(zone)) return false;
+      return getDistance(userPos[0], userPos[1], zone.lat, zone.lng) < zone.radius;
+    }) || null;
+    // isZoneAccessible reads the current refs for visits, locks, and progress.
+    // Those interactions also update component state, which refreshes this memo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audioStarted, userPos, zones, simulationMode, tour, playerProgress]);
+
+  const visibleARZone = activeARZone || nearbyARZone;
+
   // ── Zone-state persistence ─────────────────────────────────────────────────
   // Mobile browsers reclaim background tabs aggressively; without this, a
   // mid-tour refresh or tab kill re-locks every sequenced and passphrase zone
@@ -488,6 +516,7 @@ export const Player: React.FC = () => {
       const activeState: { id: string; title: string; volume: number; replayable: boolean }[] = [];
       let foundCharZone: Zone | null = null;
       let foundMediaZone: Zone | null = null;
+      let foundARZone: Zone | null = null;
       const currentZoneIds = new Set<string>();
       const currentCollectZoneIds = new Set<string>();
 
@@ -537,6 +566,9 @@ export const Player: React.FC = () => {
 
           // Only activate zone if it's accessible
           if (isZoneAccessible(zone)) {
+            if (!foundARZone && zone.ar_config?.enabled && zone.ar_config.asset_url) {
+              foundARZone = zone;
+            }
             if (zone.type === 'character') {
               foundCharZone = zone;
             } else if (zone.type !== 'discoverable') {
@@ -631,7 +663,12 @@ export const Player: React.FC = () => {
       // happened (backgrounding between zones, Siri, alarm, declined call).
       // Previously the banner only appeared if audio was mid-playback at
       // background time, so the next zone could stay silent with no way out.
-      if (audioService.isInterruptionPaused() && audioUpdates.some(u => u.volume > 0)) {
+      // A zone can be visual-only (for example an AR object) and therefore
+      // contributes a volume update without an actual media element. Only
+      // surface audio recovery when something playable is in Now Playing.
+      // Otherwise the no-audio zone repeatedly shows then immediately hides
+      // the recovery card, which also obscures its camera prompt.
+      if (audioService.isInterruptionPaused() && activeState.length > 0) {
         setShowAudioResume(true);
       }
       // Only push new state when the payload actually changed — volumes are
@@ -642,6 +679,7 @@ export const Player: React.FC = () => {
         setActiveZones(activeState);
       }
       setActiveMediaZone(foundMediaZone);
+      setActiveARZone(foundARZone);
 
       if (foundCharZone?.id !== activeCharZoneRef.current?.id) {
         if (foundCharZone) {
@@ -1397,6 +1435,30 @@ export const Player: React.FC = () => {
               <span>Accuracy</span><span className="text-right">{gpsAccuracy ? `${Math.round(gpsAccuracy)}m` : '—'}</span>
               <span>Error</span><span className="text-right truncate">{gpsError || 'none'}</span>
             </div>
+            {/* ── AR trigger diagnostic — spells out why (or why not) the
+                 "Camera object nearby" card resolves, so field testing doesn't
+                 devolve into guesswork. Only rendered under ?debug=gps. ── */}
+            {(() => {
+              const arZones = zones.filter(z => z.ar_config?.enabled && z.ar_config.asset_url);
+              const withDist = userPos
+                ? arZones.map(z => ({ z, d: getDistance(userPos[0], userPos[1], z.lat, z.lng) })).sort((a, b) => a.d - b.d)
+                : [];
+              const nearest = withDist[0];
+              const reliable = simulationMode || (gpsFixRef.current?.accuracy ?? Infinity) <= 100;
+              return (
+                <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5 border-t border-amber-500/30 pt-1.5 text-amber-100/80">
+                  <span>Started</span><span className="text-right">{audioStarted ? 'yes' : 'NO — tap Begin'}</span>
+                  <span>AR zones w/ asset</span><span className="text-right">{arZones.length}</span>
+                  {nearest ? (<>
+                    <span>Nearest AR zone</span><span className="text-right truncate">{nearest.z.title || '(untitled)'}</span>
+                    <span>Distance / radius</span><span className={`text-right ${nearest.d < nearest.z.radius ? 'text-emerald-300' : 'text-red-300'}`}>{Math.round(nearest.d)}m / {nearest.z.radius}m</span>
+                    <span>Pos reliable</span><span className={`text-right ${reliable ? '' : 'text-red-300'}`}>{reliable ? 'yes' : 'NO (>100m)'}</span>
+                    <span>Accessible</span><span className={`text-right ${isZoneAccessible(nearest.z) ? '' : 'text-red-300'}`}>{isZoneAccessible(nearest.z) ? 'yes' : 'NO (gated)'}</span>
+                  </>) : (<><span>Nearest AR zone</span><span className="text-right text-red-300">{userPos ? 'none in tour' : 'no fix'}</span></>)}
+                  <span>Card resolves</span><span className={`text-right font-bold ${visibleARZone ? 'text-emerald-300' : 'text-red-300'}`}>{visibleARZone ? 'YES' : 'no'}</span>
+                </div>
+              );
+            })()}
             <div className="mt-1.5 space-y-0.5 font-mono text-[10px] text-amber-100/70">
               {gpsDebugLog.length > 0 ? gpsDebugLog.map((line, index) => <div key={index}>{line}</div>) : <div>waiting for geolocation events</div>}
             </div>
@@ -1599,6 +1661,17 @@ export const Player: React.FC = () => {
                   <MessageCircle size={15} color="white" />
                   <span className="text-white">{activeCharacterZone.title}</span>
                 </button>
+                {activeCharacterZone.ar_config?.enabled && (
+                  <button
+                    onClick={() => setArCameraZone(activeCharacterZone)}
+                    className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-opacity active:opacity-60"
+                    style={{ backgroundColor: `${accent}20`, border: `1px solid ${accent}40` }}
+                    aria-label="View in camera"
+                    title="View in camera"
+                  >
+                    <Camera size={15} color={accent} />
+                  </button>
+                )}
               </div>
             </div>
           ) : null}
@@ -1644,6 +1717,21 @@ export const Player: React.FC = () => {
                   <X size={16} />
                 </button>
               </div>
+              {activeMediaZone.ar_config?.enabled && (
+                <div className="px-3 pb-3">
+                  <button
+                    onClick={() => setArCameraZone(activeMediaZone)}
+                    className="w-full rounded-xl py-2.5 flex items-center justify-center gap-2 text-sm font-bold active:opacity-70 transition-opacity"
+                    style={{
+                      backgroundColor: `${accent}20`,
+                      border: `1px solid ${accent}55`,
+                      color: accent,
+                    }}
+                  >
+                    <Camera size={15} /> View in camera
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -1730,6 +1818,15 @@ export const Player: React.FC = () => {
         />
       )}
 
+      {arCameraZone && (
+        <ARCameraOverlay
+          zone={arCameraZone}
+          userPosition={userPos}
+          gpsAccuracy={gpsAccuracy}
+          onClose={() => setArCameraZone(null)}
+        />
+      )}
+
       {/* ── LOCATE BUTTON — floats over map top-right when user has panned away ── */}
       {audioStarted && !simulationMode && userPos && !followUser && (
         <button
@@ -1803,6 +1900,41 @@ export const Player: React.FC = () => {
             >
               <PlayCircle size={15} />
               {resumingAudio ? 'Starting...' : 'Tap to resume'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* AR is an optional camera mode, not a bottom-card feature. Keep its
+          entry point in a dedicated, persistent position so it remains clear
+          when a zone also has audio, images, character chat, or notices. */}
+      {audioStarted && visibleARZone && !arCameraZone && (
+        <div
+          className="absolute left-4 right-4 z-[1600] animate-in slide-in-from-top-4 duration-300"
+          style={{ top: `calc(${TOP_BAR + (showAudioResume ? 92 : 12)}px + env(safe-area-inset-top, 0px))` }}
+        >
+          <div
+            className="max-w-sm mx-auto rounded-2xl shadow-2xl p-3 flex items-center gap-3 backdrop-blur-xl"
+            style={{
+              backgroundColor: th.hudBg,
+              border: `1px solid ${accent}55`,
+              boxShadow: `0 10px 35px rgba(0,0,0,0.45), 0 0 20px ${accent}18`,
+            }}
+          >
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: `${accent}20` }}>
+              <Camera size={19} color={accent} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold" style={{ color: th.hudText }}>Camera object nearby</p>
+              <p className="text-[11px] leading-snug mt-0.5 truncate" style={{ color: th.barMuted }}>{visibleARZone.title}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setArCameraZone(visibleARZone)}
+              className="h-10 px-3 rounded-xl text-white text-xs font-bold flex items-center gap-1.5 shrink-0 active:scale-95 transition-transform"
+              style={{ backgroundColor: accent }}
+            >
+              <Camera size={15} /> Open camera
             </button>
           </div>
         </div>

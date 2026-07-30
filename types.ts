@@ -49,6 +49,32 @@ export type ZoneEndBehavior = 'loop' | 'stop' | 'destroy';
 export type ZoneType = 'audio' | 'character' | 'discoverable';
 export type ZoneLockType = 'none' | 'passphrase';
 export type ProgressionResourceType = 'currency' | 'item';
+export type ARObjectBehavior = 'static' | 'flyover';
+
+export interface ARObjectConfig {
+  enabled: boolean;
+  asset_url?: string | null;
+  asset_type?: 'image' | 'glb';
+  behavior: ARObjectBehavior;
+  // The object defaults to the zone coordinate. These optional fields leave
+  // room for an independent anchor without creating a second zone model.
+  anchor_lat?: number | null;
+  anchor_lng?: number | null;
+  altitude_m: number;
+  scale_m: number;
+  facing_degrees: number;
+  // Static objects can be pushed off the zone centre so the viewer sees them on
+  // a slant rather than directly overhead — where azimuth is unstable and the
+  // object appears to swivel. Stored as a relative offset (distance + bearing
+  // from the zone coordinate) so moving the zone carries the object with it.
+  ground_distance_m?: number;
+  ground_bearing_degrees?: number;
+  // Flyovers travel this many metres along `flight_bearing_degrees` over one
+  // loop. The midpoint passes directly over the anchor coordinate.
+  flight_bearing_degrees?: number;
+  flight_distance_m?: number;
+  flight_duration_seconds?: number;
+}
 
 export interface ProgressionResource {
   id: string;
@@ -106,6 +132,10 @@ export interface Zone {
   fade_out: number;
   on_exit: ZoneExitBehavior;
   on_end: ZoneEndBehavior;
+
+  // Optional camera-based object for this zone. Normal audio, chat, locking,
+  // and progression mechanics remain the source of truth for activation.
+  ar_config?: ARObjectConfig | null;
 
   // Character Zone Props
   character_prompt?: string;

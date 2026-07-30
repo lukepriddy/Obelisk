@@ -1,10 +1,11 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { ProgressionResource, Zone, ZoneExitBehavior, ZoneEndBehavior } from '../types';
+import { ARObjectConfig, ProgressionResource, Zone, ZoneExitBehavior, ZoneEndBehavior } from '../types';
 import { SAMPLE_AUDIO_FILES, VOICES, CHARACTER_TEMPLATES } from '../constants';
-import { uploadAudio, uploadImage } from '../services/storageService';
+import { uploadARAsset, uploadAudio, uploadImage } from '../services/storageService';
 import { supabase } from '../services/supabaseClient';
-import { Music, AlertCircle, Clock, Volume2, EyeOff, Radio, PlayCircle, Upload, Link as LinkIcon, FileAudio, ListMusic, Bot, MessageSquare, Lock, Unlock, GitBranch, Bell, Sparkles, KeySquare, ImageIcon, X, Trash2, Play, Pause, Loader2, Gift, HelpCircle } from 'lucide-react';
+import { Music, AlertCircle, Clock, Volume2, EyeOff, Radio, PlayCircle, Upload, Link as LinkIcon, FileAudio, ListMusic, Bot, MessageSquare, Lock, Unlock, GitBranch, Bell, Sparkles, KeySquare, ImageIcon, X, Trash2, Play, Pause, Loader2, Gift, HelpCircle, Camera } from 'lucide-react';
 import { ZoneProgressionSettings } from './ZoneProgressionSettings';
+import { ARPlacementPad } from './ARPlacementPad';
 
 // ── Mini audio preview player ───────────────────────────────────────────────
 const AudioPreview: React.FC<{ url: string; volume?: number }> = ({ url, volume = 1 }) => {
@@ -207,6 +208,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const arImageInputRef = useRef<HTMLInputElement>(null);
   const [sourceType, setSourceType] = useState<AudioSourceType>(() => {
     // A saved voiceover script means this zone's audio came from AI Voice —
     // open on that tab so the creator lands where they left off.
@@ -218,9 +220,11 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
   const [fileName, setFileName] = useState<string>('');
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [imageUploadError, setImageUploadError] = useState<string | null>(null);
+  const [arAssetUploadError, setArAssetUploadError] = useState<string | null>(null);
   const [showAllVoices, setShowAllVoices] = useState(false);
   const [audioUploading, setAudioUploading] = useState(false);
   const [imageUploading, setImageUploading] = useState(false);
+  const [arAssetUploading, setArAssetUploading] = useState(false);
   const [playingVoice, setPlayingVoice] = useState<string | null>(null);
   const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -338,6 +342,46 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
     const url = await uploadImage(file, zone.tour_id, { onError: setImageUploadError });
     setImageUploading(false);
     if (url) onUpdate({ [field]: url });
+  };
+
+  const arConfig: ARObjectConfig = {
+    enabled: false,
+    asset_url: zone.type === 'character' ? zone.character_image_url : zone.zone_image_url,
+    asset_type: 'image',
+    behavior: 'static',
+    altitude_m: 25,
+    scale_m: 3,
+    facing_degrees: 0,
+    // Default the object a comfortable slant off-centre (~15m out at 25m up
+    // → ~59° look-up) so a fresh object isn't parked directly overhead.
+    ground_distance_m: 15,
+    ground_bearing_degrees: 0,
+    flight_bearing_degrees: 0,
+    flight_distance_m: 180,
+    flight_duration_seconds: 30,
+    ...(zone.ar_config || {}),
+  };
+  const updateArConfig = (updates: Partial<ARObjectConfig>) => onUpdate({ ar_config: { ...arConfig, ...updates } });
+
+  const handleArImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setArAssetUploadError(null);
+    const isGlb = file.name.toLowerCase().endsWith('.glb') || file.type === 'model/gltf-binary';
+    const maxBytes = isGlb ? 25 * 1024 * 1024 : 10 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      setArAssetUploadError(isGlb
+        ? '3D model too large (max 25 MB). Keep mobile models under 15 MB when possible.'
+        : 'Image too large (max 10 MB).');
+      return;
+    }
+    setArAssetUploading(true);
+    // storageService reports the specific reason (wrong type, too large, over
+    // the account's storage quota) rather than a generic failure.
+    const url = await uploadARAsset(file, zone.tour_id, { onError: setArAssetUploadError });
+    setArAssetUploading(false);
+    if (url) updateArConfig({ asset_url: url, asset_type: isGlb ? 'glb' : 'image' });
   };
 
   // A discoverable only ever grants a progression reward — it's a dead end
@@ -1401,6 +1445,87 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
                 </div>
               </div>
             </>
+          )}
+        </div>
+      )}
+
+      {zone.type !== 'discoverable' && (
+        <div className="border-t border-zinc-800 pt-5 mt-6 space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sky-400 font-bold uppercase tracking-wider text-sm flex items-center gap-2"><Camera size={14} /> Camera Object</h3>
+              <p className="text-[10px] text-zinc-500 mt-1">Optional world-anchored visual for this zone.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => updateArConfig({ enabled: !arConfig.enabled })}
+              className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors ${arConfig.enabled ? 'bg-sky-500' : 'bg-zinc-700'}`}
+              aria-label={arConfig.enabled ? 'Disable camera object' : 'Enable camera object'}
+            >
+              <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${arConfig.enabled ? 'left-5.5' : 'left-0.5'}`} />
+            </button>
+          </div>
+
+          {arConfig.enabled && (
+            <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
+              <input ref={arImageInputRef} type="file" accept="image/png,image/webp,image/jpeg,.glb,model/gltf-binary" className="hidden" onChange={handleArImageUpload} />
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => !arAssetUploading && arImageInputRef.current?.click()}
+                  disabled={arAssetUploading}
+                  className="w-20 h-20 rounded-xl border border-dashed border-sky-500/50 bg-sky-500/5 overflow-hidden flex items-center justify-center shrink-0"
+                >
+                  {arConfig.asset_url && arConfig.asset_type !== 'glb' ? <img src={arConfig.asset_url} alt="AR object" className="w-full h-full object-contain" /> : arConfig.asset_type === 'glb' ? <span className="text-[10px] font-bold text-sky-300">GLB</span> : arAssetUploading ? <Loader2 size={18} className="animate-spin text-sky-400" /> : <Upload size={18} className="text-sky-400" />}
+                </button>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-zinc-200">Object image</p>
+                  <p className="text-[10px] text-zinc-500 mt-1 leading-relaxed">Transparent PNG/WebP for 2D, or a GLB model for 3D. It appears only when a player chooses camera view.</p>
+                  {arConfig.asset_url && <button type="button" onClick={() => updateArConfig({ asset_url: null })} className="mt-1.5 text-[10px] text-zinc-500 hover:text-red-400">Remove image</button>}
+                </div>
+              </div>
+              {arAssetUploadError && <p className="text-xs text-red-400 -mt-2">{arAssetUploadError}</p>}
+
+              <div>
+                <label className="block text-xs font-bold text-zinc-400 uppercase mb-1.5">Behavior</label>
+                <div className="flex gap-1 bg-zinc-800 rounded p-1">
+                  {(['static', 'flyover'] as const).map(behavior => (
+                    <button key={behavior} type="button" onClick={() => updateArConfig({ behavior })} className={`flex-1 py-2 rounded text-xs font-bold capitalize ${arConfig.behavior === behavior ? 'bg-sky-600 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}>{behavior}</button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-zinc-500 mt-1.5">{arConfig.behavior === 'static' ? 'Floats at a fixed spot near this zone — place it on the pad below.' : 'Loops slowly through this zone\'s coordinate on a real geographic path.'}</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <label className="text-xs font-bold text-zinc-400 uppercase">Altitude <span className="float-right text-sky-400">{arConfig.altitude_m}m</span>
+                  <input type="range" min="3" max="200" step="1" value={arConfig.altitude_m} onChange={e => updateArConfig({ altitude_m: Number(e.target.value) })} className="w-full mt-2 accent-sky-500" />
+                </label>
+                <label className="text-xs font-bold text-zinc-400 uppercase">Scale <span className="float-right text-sky-400">{arConfig.scale_m}m</span>
+                  <input type="range" min="0.5" max="30" step="0.5" value={arConfig.scale_m} onChange={e => updateArConfig({ scale_m: Number(e.target.value) })} className="w-full mt-2 accent-sky-500" />
+                </label>
+              </div>
+
+              {arConfig.behavior === 'static' && (
+                <ARPlacementPad
+                  distance={arConfig.ground_distance_m ?? 0}
+                  bearing={arConfig.ground_bearing_degrees ?? 0}
+                  facing={arConfig.facing_degrees}
+                  altitude={arConfig.altitude_m}
+                  onChange={updateArConfig}
+                />
+              )}
+
+              {arConfig.behavior === 'flyover' && (
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="text-xs font-bold text-zinc-400 uppercase">Travel direction <span className="float-right text-sky-400">{arConfig.flight_bearing_degrees || 0}°</span>
+                    <input type="range" min="0" max="359" step="1" value={arConfig.flight_bearing_degrees || 0} onChange={e => updateArConfig({ flight_bearing_degrees: Number(e.target.value) })} className="w-full mt-2 accent-sky-500" />
+                  </label>
+                  <label className="text-xs font-bold text-zinc-400 uppercase">Loop <span className="float-right text-sky-400">{arConfig.flight_duration_seconds || 30}s</span>
+                    <input type="range" min="10" max="90" step="5" value={arConfig.flight_duration_seconds || 30} onChange={e => updateArConfig({ flight_duration_seconds: Number(e.target.value) })} className="w-full mt-2 accent-sky-500" />
+                  </label>
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}

@@ -182,3 +182,26 @@ export async function uploadModel(
   const path = `${tourId}/ar/${Date.now()}.glb`;
   return upload('models', path, file, 'model', tourId, opts);
 }
+
+/**
+ * Camera-object images remain in the public images bucket. GLB models use their
+ * own public bucket because the images bucket intentionally allows image MIME
+ * types only.
+ */
+/**
+ * Upload an AR object: a GLB model, or a flat image used as a billboard.
+ *
+ * Dispatches to the shared upload path rather than talking to storage
+ * directly, so AR assets get the same type and size validation as everything
+ * else, count toward the account's storage quota, and land in the `uploads`
+ * ledger. This previously bypassed all three — a creator could store unlimited
+ * 3D models without them registering against any limit.
+ */
+export async function uploadARAsset(
+  file: File, tourId: string, opts?: UploadOptions,
+): Promise<string | null> {
+  const isGlb = file.name.toLowerCase().endsWith('.glb') || file.type === 'model/gltf-binary';
+  return isGlb
+    ? uploadModel(file, tourId, opts)
+    : uploadImage(file, `${tourId}/ar`, opts);
+}

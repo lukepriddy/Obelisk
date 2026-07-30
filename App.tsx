@@ -3,7 +3,6 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { Dashboard } from './pages/Dashboard';
 import { Editor } from './pages/Editor';
 import { Player } from './pages/Player';
-import { MapLibreLab } from './pages/MapLibreLab';
 import { AdminModeration } from './pages/AdminModeration';
 import { LegalPage } from './pages/LegalPage';
 import { TERMS_SECTIONS, TERMS_VERSION } from './constants/terms';
@@ -100,7 +99,6 @@ const AppShell: React.FC<{ user: User | null; onLogout: () => void }> = ({ user,
               />
             }
           />
-          <Route path="/maplibre/:tourId?" element={<MapLibreLab />} />
         </Routes>
       </main>
     </div>
