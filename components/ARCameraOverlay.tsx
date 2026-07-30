@@ -32,6 +32,8 @@ interface ARCameraOverlayProps {
   zone: Zone;
   userPosition: [number, number] | null;
   gpsAccuracy?: number | null;
+  /** The tour's accent colour, so the camera view matches the rest of it. */
+  accent?: string;
   onClose: () => void;
 }
 
@@ -121,7 +123,7 @@ function localPlacement(
 }
 
 export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
-  zone, userPosition, onClose,
+  zone, userPosition, accent = '#10b981', onClose,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const configRef = useRef(configFor(zone));
@@ -350,7 +352,7 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
       <div className="absolute top-0 inset-x-0 pt-[max(1rem,env(safe-area-inset-top))] px-4 flex items-center justify-between">
         <div className="rounded-xl bg-black/70 backdrop-blur px-3 py-2">
           <p className="text-sm font-bold leading-tight">{zone.title}</p>
-          <p className="text-[11px] text-emerald-300">Camera view</p>
+          <p className="text-[11px]" style={{ color: accent }}>Camera view</p>
         </div>
         <button onClick={close} className="w-11 h-11 rounded-full bg-black/70 backdrop-blur flex items-center justify-center" aria-label="Close camera view">
           <X size={20} />
@@ -359,9 +361,22 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
 
       {phase === 'intro' && (
         <div className="absolute inset-x-5 bottom-[max(1.5rem,env(safe-area-inset-bottom))] rounded-2xl bg-zinc-900/95 backdrop-blur p-5 shadow-2xl">
-          <div className="flex items-center gap-3 mb-3"><Camera className="text-emerald-400" size={22} /><h2 className="font-bold">View in camera</h2></div>
-          <p className="text-sm text-zinc-300 leading-relaxed">Open the camera to see this object placed in the world around you.</p>
-          <button onClick={start} className="w-full mt-4 py-3 rounded-xl bg-emerald-500 text-white font-bold active:opacity-80">Open camera</button>
+          {/* This screen isn't a second confirmation — it's where the camera and
+              motion permissions get requested, which iOS only allows from a tap.
+              So rather than repeat the button that got us here, it explains what
+              the tracking needs: a slow pan to read the space. */}
+          <div className="flex items-center gap-3 mb-3"><Camera style={{ color: accent }} size={22} /><h2 className="font-bold">View in camera</h2></div>
+          <p className="text-sm text-zinc-300 leading-relaxed">
+            Hold your phone up and move it slowly — it reads the space around you,
+            then places the object in it.
+          </p>
+          <button
+            onClick={start}
+            className="w-full mt-4 py-3 rounded-xl text-white font-bold active:opacity-80"
+            style={{ backgroundColor: accent }}
+          >
+            I'm ready
+          </button>
           {/* Attribution is required by the AR engine's licence. It sits on
               this card rather than in the live camera view: the licence asks
               for credit in the material where the functionality is used, and
@@ -381,7 +396,7 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
       {phase === 'starting' && (
         <div className="absolute inset-x-5 bottom-[max(1.5rem,env(safe-area-inset-bottom))] rounded-2xl bg-zinc-900/95 backdrop-blur p-5 shadow-2xl">
           <div className="flex items-center gap-3">
-            <Loader2 className="text-emerald-400 animate-spin" size={20} />
+            <Loader2 className="animate-spin" style={{ color: accent }} size={20} />
             <div>
               <h2 className="font-bold">Starting camera</h2>
               <p className="text-xs text-zinc-400 mt-0.5">Move the phone slowly so it can read the space around you.</p>

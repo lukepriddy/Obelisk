@@ -1823,6 +1823,7 @@ export const Player: React.FC = () => {
           zone={arCameraZone}
           userPosition={userPos}
           gpsAccuracy={gpsAccuracy}
+          accent={accent}
           onClose={() => setArCameraZone(null)}
         />
       )}
