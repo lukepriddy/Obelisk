@@ -174,6 +174,15 @@ export const EditorMap = forwardRef<EditorMapHandle, EditorMapProps>((props, ref
       if (!wanted.has(id)) { m.remove(); zoneMarkersRef.current.delete(id); }
     }
     for (const zone of props.zones) {
+      // A marker given a non-finite coordinate gets transform:translate(NaN,NaN),
+      // which the browser discards — leaving the dot parked in the map's
+      // top-left corner instead of on its zone. Skip it until the coordinate is
+      // real; a zone mid-creation briefly has none.
+      if (!Number.isFinite(zone.lng) || !Number.isFinite(zone.lat)) {
+        const stale = zoneMarkersRef.current.get(zone.id);
+        if (stale) { stale.remove(); zoneMarkersRef.current.delete(zone.id); }
+        continue;
+      }
       const isSelected = props.selectedZoneId === zone.id;
       const isLocked = zone.lock_type === 'passphrase';
       const color = zoneColor(zone.type, isLocked, isSelected);
@@ -204,7 +213,10 @@ export const EditorMap = forwardRef<EditorMapHandle, EditorMapProps>((props, ref
     const map = mapRef.current;
     if (!map) return;
     const { tour } = props;
-    const hasStart = tour.lat !== 0 || tour.lng !== 0;
+    // Same non-finite guard as the zone markers: an unplaced or half-written
+    // start would otherwise park its pin in the map's corner.
+    const hasStart = Number.isFinite(tour.lat) && Number.isFinite(tour.lng)
+      && (tour.lat !== 0 || tour.lng !== 0);
     if (!hasStart) { startMarkerRef.current?.remove(); startMarkerRef.current = null; return; }
     if (!startMarkerRef.current) {
       const el = document.createElement('div');

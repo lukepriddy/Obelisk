@@ -591,7 +591,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
                   {visibleTours.map(tour => (
                     <div
                       key={tour.id}
-                      className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden hover:border-zinc-700 transition-colors group"
+                      className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden hover:border-zinc-700 transition-colors group flex flex-col h-full"
                     >
                       {/* Cover */}
                       <div className="aspect-square relative overflow-hidden bg-zinc-950">
@@ -630,8 +630,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
                         </div>
                       </div>
 
-                      {/* Content */}
-                      <div className="p-4">
+                      {/* Content. Column layout with the action block pushed to
+                          the bottom, so Preview and Edit line up across the row
+                          even when a card has no tags to fill the space. */}
+                      <div className="p-4 flex flex-col flex-1">
                         <h3 className="font-bold text-white text-base leading-tight mb-1.5 truncate">{tour.title}</h3>
                         <div className="flex items-center gap-1 text-zinc-600 text-xs mb-3">
                           <Clock size={11} />
@@ -653,7 +655,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
 
                         {/* Delete confirmation */}
                         {confirmDeleteId === tour.id ? (
-                          <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 rounded-xl px-3 py-2.5">
+                          <div className="mt-auto flex items-center gap-2 bg-red-500/10 border border-red-500/30 rounded-xl px-3 py-2.5">
                             <AlertTriangle size={13} className="text-red-400 shrink-0" />
                             <span className="text-xs text-red-300 flex-1">Delete this experience?</span>
                             <button
@@ -671,7 +673,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
                             </button>
                           </div>
                         ) : (
-                          <div className="flex flex-col gap-2">
+                          <div className="mt-auto flex flex-col gap-2">
                             {/* Primary: Preview */}
                             <Link
                               to={`/player/${tour.id}?preview=1`}
