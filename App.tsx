@@ -3,8 +3,6 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { Dashboard } from './pages/Dashboard';
 import { Editor } from './pages/Editor';
 import { Player } from './pages/Player';
-import { SkyLab } from './pages/SkyLab';
-import { MapLibreLab } from './pages/MapLibreLab';
 import { AdminModeration } from './pages/AdminModeration';
 import { LegalPage } from './pages/LegalPage';
 import { TERMS_SECTIONS, TERMS_VERSION } from './constants/terms';
@@ -20,12 +18,11 @@ import { MapPin, LogOut } from 'lucide-react';
 const AppShell: React.FC<{ user: User | null; onLogout: () => void }> = ({ user, onLogout }) => {
   const location = useLocation();
   const isPlayer    = location.pathname.startsWith('/player/');
-  const isSkyLab    = location.pathname.startsWith('/ar-lab');
   const isEditor    = location.pathname.startsWith('/editor');
   const isDashboard = location.pathname === '/';
 
   // Dashboard owns its own sidebar chrome — don't render the top header there.
-  const showHeader = !isPlayer && !isDashboard && !isSkyLab;
+  const showHeader = !isPlayer && !isDashboard;
 
   return (
     <div className={`flex flex-col h-dvh overflow-hidden ${isEditor ? 'bg-zinc-950' : 'bg-zinc-950'}`}>
@@ -64,9 +61,6 @@ const AppShell: React.FC<{ user: User | null; onLogout: () => void }> = ({ user,
           <Route path="/" element={user ? <Dashboard user={user} onLogout={onLogout} /> : <Navigate to="/auth" />} />
           <Route path="/editor/:tourId?" element={user ? <Editor user={user} /> : <Navigate to="/auth" />} />
           <Route path="/player/:tourId" element={<ErrorBoundary><Player /></ErrorBoundary>} />
-          {/* Sensor lab for AR development. Not linked from anywhere; remove
-              before AR ships publicly. */}
-          <Route path="/ar-lab" element={<ErrorBoundary><SkyLab /></ErrorBoundary>} />
           {/* Admin membership is enforced by the edge function, not this route. */}
           <Route path="/admin/moderation" element={user ? <AdminModeration /> : <Navigate to="/auth" />} />
           {/* Public by design: a creator should be able to read the terms
@@ -105,7 +99,6 @@ const AppShell: React.FC<{ user: User | null; onLogout: () => void }> = ({ user,
               />
             }
           />
-          <Route path="/maplibre/:tourId?" element={<MapLibreLab />} />
         </Routes>
       </main>
     </div>
