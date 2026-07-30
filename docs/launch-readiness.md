@@ -19,34 +19,25 @@ the moderation gate but **not** from the terms.
 
 ---
 
-## 1. Finish the auth switch
+## 1. ~~Finish the auth switch~~ — done
 
-**Status:** half done. Code shipped; one dashboard toggle outstanding.
+Signups are disabled at the project level (**Auth → Sign In / Providers**),
+which is Supabase's own supported control, and the custom
+`enforce_signup_allowlist` trigger on `auth.users` has been dropped. No code of
+ours sits in the authentication path any more.
 
-Account creation is currently blocked by a custom `BEFORE INSERT` trigger on
-`auth.users` (`enforce_signup_allowlist`). That works, but it puts our code
-inside a Supabase-managed system table — if it ever errors, sign-in breaks for
-everyone, and bypass attempts return a raw HTTP 500.
+Verified after the change: a stranger is refused by Supabase itself
+(`signup_disabled`, HTTP 422), an existing owner can still request a login
+code, and the admin invite API still creates accounts — which is what makes
+approving someone work despite public signup being off.
 
-Supabase has a native equivalent: **Auth → Sign In / Providers → "Allow new
-users to sign up" → off**. Same guarantee, none of our code in the auth path,
-proper error responses.
+**How people get in now:** approve them in `/admin/moderation`, which flips
+their `access_allowlist` row and sends an invite email via
+`inviteUserByEmail()`. The allowlist table, the request form, and the admin
+queue are all unchanged; only the enforcement mechanism moved.
 
-The client already sends `shouldCreateUser: false`, and approving someone in
-`/admin/moderation` now calls `inviteUserByEmail()` — which uses the service
-role and still works with public signup disabled. That's the whole point: the
-toggle stops strangers, not invitations.
-
-**To finish:** flip the toggle, then drop the trigger:
-
-```sql
-drop trigger if exists enforce_signup_allowlist on auth.users;
-drop function if exists public.enforce_signup_allowlist();
-```
-
-Order matters — flip first, drop second, or there's a window with no gate at
-all. Then verify: an uninvited address is refused, an invite email arrives and
-works, and an existing account can still sign in.
+Worth knowing if signups ever need reopening: turning that toggle back on is
+all it takes — there is no longer a second, hidden gate to remember.
 
 ---
 
