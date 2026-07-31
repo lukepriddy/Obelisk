@@ -119,21 +119,75 @@ function localPlacement(
     ),
     facing: (config.facing_degrees ?? 0) - (headingAtStart ?? 0),
     groundDistance,
+    // The object's real coordinate, kept so live GPS can be compared against
+    // it later. Only meaningful when we had a fix to derive it from.
+    anchor: userPosition ? { lat: anchorLat, lng: anchorLng } : null,
   };
 }
 
+/**
+ * Where the object should sit in the engine's local frame right now, given a
+ * live fix. Mirrors the rotation done at start, but measured from the camera's
+ * current tracked position rather than the origin.
+ */
+function localTargetFrom(
+  playerLat: number, playerLng: number,
+  anchor: { lat: number; lng: number },
+  headingAtStart: number,
+  cameraPosition: THREE.Vector3,
+  altitude: number,
+): THREE.Vector3 {
+  const north = (anchor.lat - playerLat) * 111_320;
+  const east = (anchor.lng - playerLng) * 111_320 * Math.cos(toRad(playerLat));
+  const h = toRad(headingAtStart);
+  const cos = Math.cos(h);
+  const sin = Math.sin(h);
+  return new THREE.Vector3(
+    cameraPosition.x + (east * cos - north * sin),
+    // Height stays as configured — it's relative to where the camera started,
+    // and shouldn't follow the phone up and down.
+    altitude,
+    cameraPosition.z - (north * cos + east * sin),
+  );
+}
+
 export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
-  zone, userPosition, accent = '#10b981', onClose,
+  zone, userPosition, gpsAccuracy, accent = '#10b981', onClose,
 }) => {
   // ?ar-debug=1 shows the engine's raw tracking status. Not linked anywhere;
   // it's for diagnosing "why isn't it staying put" in the field.
   const arDebug = typeof window !== 'undefined'
     && new URLSearchParams(window.location.search).get('ar-debug') === '1';
+  // On by default; ?ar-converge=0 turns it off so the two behaviours can be
+  // compared in the same spot.
+  const converge = typeof window === 'undefined'
+    || new URLSearchParams(window.location.search).get('ar-converge') !== '0';
+  const driftRef = useRef(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const configRef = useRef(configFor(zone));
   const objectRef = useRef<THREE.Object3D | null>(null);
   const placementRef = useRef<ReturnType<typeof localPlacement> | null>(null);
   const runningRef = useRef(false);
+
+  // ── Slow GPS convergence ──────────────────────────────────────────────────
+  // The object's local position comes from a single GPS + compass reading taken
+  // at start, so it inherits that reading's error (GPS is +/-3-10m) and then
+  // accumulates whatever the tracking drifts by. Recomputing where the object
+  // ought to be from live GPS and easing towards it fixes both: drift gets
+  // corrected, and averaging GPS across a session beats the one sample we
+  // opened with.
+  //
+  // It has to be slow. GPS jitters by metres between fixes, and applying that
+  // directly is exactly the swimming that made the old compass version
+  // unusable. With a ~20s time constant the object never visibly jumps; it
+  // just ends up in a better place than it started.
+  const targetWorldRef = useRef<{ lat: number; lng: number } | null>(null);
+  const headingRef = useRef<number>(0);
+  const livePositionRef = useRef<[number, number] | null>(userPosition);
+  livePositionRef.current = userPosition;
+  const liveAccuracyRef = useRef<number | null | undefined>(gpsAccuracy);
+  liveAccuracyRef.current = gpsAccuracy;
+  const lastFrameRef = useRef<number>(0);
 
   const [phase, setPhase] = useState<Phase>('intro');
   const [error, setError] = useState<string | null>(null);
@@ -259,6 +313,9 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
 
       stepRef.current = 'computing placement';
       placementRef.current = localPlacement(configRef.current, zone, userPosition, heading);
+      targetWorldRef.current = placementRef.current.anchor;
+      headingRef.current = heading ?? 0;
+      lastFrameRef.current = 0;
 
       stepRef.current = 'preparing canvas';
       const canvas = canvasRef.current;
@@ -315,11 +372,42 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
               }
             }
 
-            // Flyovers drift along their configured path. Static objects need
-            // nothing here — the engine holds them in place by itself.
             const object = objectRef.current;
             const config = configRef.current;
-            if (!object || config.behavior !== 'flyover') return;
+            if (!object) return;
+
+            // ── Ease towards where live GPS says the object belongs ──
+            // Only for static objects; a flyover defines its own path below.
+            // Skipped while the fix is poor, since correcting towards a bad
+            // reading is worse than keeping the one we opened with.
+            const anchor = targetWorldRef.current;
+            const here = livePositionRef.current;
+            const accuracy = liveAccuracyRef.current;
+            if (
+              converge && anchor && here && config.behavior !== 'flyover'
+              && (accuracy == null || accuracy <= 25)
+              && trackingRef.current.status === 'NORMAL'
+            ) {
+              const now = performance.now();
+              const dt = lastFrameRef.current ? Math.min(0.5, (now - lastFrameRef.current) / 1000) : 0;
+              lastFrameRef.current = now;
+              if (dt > 0) {
+                const { camera } = window.XR8.Threejs.xrScene();
+                const target = localTargetFrom(
+                  here[0], here[1], anchor, headingRef.current, camera.position, config.altitude_m,
+                );
+                // ~20s time constant: individual GPS fixes barely register, but
+                // their average pulls the object to the right place over a
+                // session. Frame-rate independent so it behaves the same at
+                // 30 and 60fps.
+                object.position.lerp(target, 1 - Math.exp(-dt / 20));
+                if (arDebug) driftRef.current = object.position.distanceTo(target);
+              }
+            }
+
+            // Flyovers drift along their configured path. Static objects need
+            // nothing further — the engine holds them in place by itself.
+            if (config.behavior !== 'flyover') return;
             const duration = Math.max(8, config.flight_duration_seconds || 30);
             const span = Math.max(30, config.flight_distance_m || 180);
             const progress = ((performance.now() / 1000) % duration) / duration;
@@ -461,6 +549,8 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
             {arDebug && (
               <div className="rounded bg-black/80 px-2 py-1 text-[10px] font-mono text-emerald-300">
                 {tracking.status || 'no status'}{tracking.reason ? ` · ${tracking.reason}` : ''}
+                {' · '}conv {converge ? 'on' : 'off'}
+                {converge && ` · off by ${driftRef.current.toFixed(1)}m`}
               </div>
             )}
           </div>
