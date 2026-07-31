@@ -125,6 +125,10 @@ function localPlacement(
 export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
   zone, userPosition, accent = '#10b981', onClose,
 }) => {
+  // ?ar-debug=1 shows the engine's raw tracking status. Not linked anywhere;
+  // it's for diagnosing "why isn't it staying put" in the field.
+  const arDebug = typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('ar-debug') === '1';
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const configRef = useRef(configFor(zone));
   const objectRef = useRef<THREE.Object3D | null>(null);
@@ -140,6 +144,11 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
   // error is kept and shown — the alternative is guessing from a black screen.
   const [detail, setDetail] = useState<string | null>(null);
   const stepRef = useRef<string>('idle');
+  // Live tracking quality from the engine. The ref mirrors the state so the
+  // per-frame handler can tell whether anything actually changed without
+  // reading React state.
+  const [tracking, setTracking] = useState<{ status: string; reason: string }>({ status: '', reason: '' });
+  const trackingRef = useRef<{ status: string; reason: string }>({ status: '', reason: '' });
 
   useEffect(() => { configRef.current = configFor(zone); }, [zone]);
 
@@ -288,7 +297,24 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
               setPhase('error');
             }
           },
-          onUpdate: () => {
+          onUpdate: ({ processCpuResult }: { processCpuResult?: Record<string, any> }) => {
+            // Tracking quality decides whether the object is genuinely anchored
+            // or merely rotating with the phone. Until the engine has enough
+            // visible texture and some sideways movement to establish depth, it
+            // falls back to rotation only — which looks like the object walking
+            // along with you. Surfacing that lets the player fix it by moving,
+            // rather than concluding the feature is broken.
+            const reality = processCpuResult?.reality;
+            if (reality?.trackingStatus) {
+              const status = String(reality.trackingStatus).toUpperCase();
+              const reason = reality.trackingReason ? String(reality.trackingReason).toUpperCase() : '';
+              // onUpdate runs every frame; only touch React when it changes.
+              if (status !== trackingRef.current.status || reason !== trackingRef.current.reason) {
+                trackingRef.current = { status, reason };
+                setTracking({ status, reason });
+              }
+            }
+
             // Flyovers drift along their configured path. Static objects need
             // nothing here — the engine holds them in place by itself.
             const object = objectRef.current;
@@ -414,13 +440,32 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
         </div>
       )}
 
-      {phase === 'ready' && (
-        <div className="absolute inset-x-0 bottom-[max(1.25rem,env(safe-area-inset-bottom))] flex justify-center pointer-events-none">
-          <div className="rounded-full bg-black/65 backdrop-blur px-3 py-1.5 text-[11px] text-zinc-200">
-            {config.behavior === 'flyover' ? 'Flyover active' : 'Look around to find it'}
+      {phase === 'ready' && (() => {
+        // An object only stays put once the engine has real depth. Before that
+        // it rotates with the phone and appears to follow you as you walk, so
+        // the honest thing is to say what would fix it.
+        const degraded = tracking.status && tracking.status !== 'NORMAL';
+        const hint = !degraded ? null
+          : tracking.reason === 'INSUFFICIENT_FEATURES' ? 'Point at something with more detail'
+          : tracking.reason === 'INSUFFICIENT_LIGHT' ? 'Too dark to track — more light will help'
+          : tracking.reason === 'EXCESSIVE_MOTION' || tracking.reason === 'MOTION' ? 'Move a little slower'
+          : tracking.reason === 'RELOCALIZING' ? 'Finding your place again…'
+          : 'Move your phone slowly side to side';
+        return (
+          <div className="absolute inset-x-0 bottom-[max(1.25rem,env(safe-area-inset-bottom))] flex flex-col items-center gap-1.5 pointer-events-none px-5">
+            <div className={`rounded-full backdrop-blur px-3 py-1.5 text-[11px] ${
+              degraded ? 'bg-amber-950/80 text-amber-200' : 'bg-black/65 text-zinc-200'
+            }`}>
+              {hint ?? (config.behavior === 'flyover' ? 'Flyover active' : 'Look around to find it')}
+            </div>
+            {arDebug && (
+              <div className="rounded bg-black/80 px-2 py-1 text-[10px] font-mono text-emerald-300">
+                {tracking.status || 'no status'}{tracking.reason ? ` · ${tracking.reason}` : ''}
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {modelError && phase === 'ready' && (
         <div className="absolute inset-x-5 bottom-[max(4rem,calc(env(safe-area-inset-bottom)+3rem))] rounded-xl bg-red-950/90 px-3 py-2 text-xs text-red-200 text-center">
