@@ -188,6 +188,13 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
   const liveAccuracyRef = useRef<number | null | undefined>(gpsAccuracy);
   liveAccuracyRef.current = gpsAccuracy;
   const lastFrameRef = useRef<number>(0);
+  // Recovering from lost tracking is the one case where slow correction is
+  // wrong. When the engine relocalises it can re-establish its origin in a
+  // different place, so the object reappears offset — and easing back over
+  // twenty seconds means watching it sit in the wrong spot. Detecting the
+  // reset and converging hard for a moment puts it back before it's noticed.
+  const lastCameraRef = useRef<THREE.Vector3 | null>(null);
+  const fastUntilRef = useRef(0);
 
   const [phase, setPhase] = useState<Phase>('intro');
   const [error, setError] = useState<string | null>(null);
@@ -316,6 +323,8 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
       targetWorldRef.current = placementRef.current.anchor;
       headingRef.current = heading ?? 0;
       lastFrameRef.current = 0;
+      lastCameraRef.current = null;
+      fastUntilRef.current = 0;
 
       stepRef.current = 'preparing canvas';
       const canvas = canvasRef.current;
@@ -367,6 +376,11 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
               const reason = reality.trackingReason ? String(reality.trackingReason).toUpperCase() : '';
               // onUpdate runs every frame; only touch React when it changes.
               if (status !== trackingRef.current.status || reason !== trackingRef.current.reason) {
+                // Coming back to NORMAL after a loss is the moment the origin
+                // may have shifted underneath us.
+                if (status === 'NORMAL' && trackingRef.current.status && trackingRef.current.status !== 'NORMAL') {
+                  fastUntilRef.current = performance.now() + 3000;
+                }
                 trackingRef.current = { status, reason };
                 setTracking({ status, reason });
               }
@@ -393,14 +407,26 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
               lastFrameRef.current = now;
               if (dt > 0) {
                 const { camera } = window.XR8.Threejs.xrScene();
+
+                // A tracked camera can't teleport. Anything faster than about
+                // 10 m/s is the engine re-establishing its origin, not the
+                // player sprinting — the other tell that we've relocalised.
+                const previous = lastCameraRef.current;
+                if (previous && previous.distanceTo(camera.position) / dt > 10) {
+                  fastUntilRef.current = performance.now() + 3000;
+                }
+                lastCameraRef.current = camera.position.clone();
+
                 const target = localTargetFrom(
                   here[0], here[1], anchor, headingRef.current, camera.position, config.altitude_m,
                 );
-                // ~20s time constant: individual GPS fixes barely register, but
-                // their average pulls the object to the right place over a
-                // session. Frame-rate independent so it behaves the same at
-                // 30 and 60fps.
-                object.position.lerp(target, 1 - Math.exp(-dt / 20));
+                // Normally ~20s, so individual GPS fixes barely register and
+                // only their average moves the object. Briefly 0.4s after a
+                // reset, to put it back where it belongs before the player
+                // reads the new position as correct. Frame-rate independent
+                // either way.
+                const tau = performance.now() < fastUntilRef.current ? 0.4 : 20;
+                object.position.lerp(target, 1 - Math.exp(-dt / tau));
                 if (arDebug) driftRef.current = object.position.distanceTo(target);
               }
             }
@@ -551,6 +577,7 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
                 {tracking.status || 'no status'}{tracking.reason ? ` · ${tracking.reason}` : ''}
                 {' · '}conv {converge ? 'on' : 'off'}
                 {converge && ` · off by ${driftRef.current.toFixed(1)}m`}
+                {converge && performance.now() < fastUntilRef.current && ' · RESYNC'}
               </div>
             )}
           </div>
