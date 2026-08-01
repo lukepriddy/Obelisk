@@ -91,7 +91,12 @@ function localPlacement(
   zone: Zone,
   userPosition: [number, number] | null,
   headingAtStart: number | null,
-): { position: THREE.Vector3; facing: number; groundDistance: number } {
+): {
+  position: THREE.Vector3;
+  facing: number;
+  groundDistance: number;
+  anchor: { lat: number; lng: number } | null;
+} {
   // The object's real coordinate: the zone, plus any offset the creator set.
   let anchorLat = config.anchor_lat ?? zone.lat;
   let anchorLng = config.anchor_lng ?? zone.lng;
@@ -240,6 +245,9 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
   // corrections can't feed each other.
   const baseTargetRef = useRef<THREE.Vector3 | null>(null);
   const yawFrameRef = useRef(0);
+  // Materials of the placed object, cached so the flyover fade can set opacity
+  // without walking the scene graph every frame.
+  const fadeMaterialsRef = useRef<THREE.Material[]>([]);
 
   const [phase, setPhase] = useState<Phase>('intro');
   const [error, setError] = useState<string | null>(null);
@@ -303,6 +311,16 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
     const place = (object: THREE.Object3D) => {
       object.position.copy(placement.position);
       baseTargetRef.current = placement.position.clone();
+      // Collected once for the flyover fade. Traversing the model every frame
+      // to find its materials would be wasteful, and a GLB can have many.
+      const materials: THREE.Material[] = [];
+      object.traverse(child => {
+        const mesh = child as THREE.Mesh;
+        if (!(mesh as THREE.Mesh).isMesh) return;
+        const list = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        for (const material of list) if (material) materials.push(material);
+      });
+      fadeMaterialsRef.current = materials;
       // Upright by construction: the engine's frame is gravity-aligned, so
       // yaw is the only rotation that needs setting. The old pipeline had to
       // carry an explicit world-up vector to stop objects rolling with the
@@ -582,7 +600,31 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
             const span = Math.max(30, config.flight_distance_m || 180);
             const progress = ((performance.now() / 1000) % duration) / duration;
             const along = (progress - 0.5) * span;
-            const direction = toRad((config.flight_bearing_degrees ?? 0) - (placementRef.current?.facing ?? 0));
+
+            // The path is one-directional, so at the wrap the object would jump
+            // the whole span backwards in a single frame. Fading it out over the
+            // last stretch and back in over the first hides the reset: it flies
+            // away, then arrives again, instead of teleporting mid-air.
+            const FADE = 0.12;
+            const opacity = progress < FADE ? progress / FADE
+              : progress > 1 - FADE ? (1 - progress) / FADE
+              : 1;
+            const fading = opacity < 0.999;
+            for (const material of fadeMaterialsRef.current) {
+              material.transparent = fading;
+              // Transparent materials that still write depth occlude their own
+              // far side, so a model can look hollow mid-fade.
+              material.depthWrite = !fading;
+              material.opacity = opacity;
+            }
+            // Convert the compass bearing into the engine's local frame the same
+            // way the static placement does — by subtracting the session's start
+            // heading. This previously subtracted placement.facing, which is the
+            // object's own rotation (facing_degrees − headingAtStart), so the
+            // start heading ended up added rather than subtracted and the path
+            // pointed somewhere different depending on which way the player
+            // happened to be facing when they opened the camera.
+            const direction = toRad((config.flight_bearing_degrees ?? 0) - headingRef.current);
             const base = placementRef.current!.position;
             object.position.set(
               base.x + Math.sin(direction) * along,

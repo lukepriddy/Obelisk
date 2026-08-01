@@ -1588,16 +1588,38 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
                 </>
               )}
 
-              {arConfig.behavior === 'flyover' && (
-                <div className="grid grid-cols-2 gap-3">
-                  <label className="text-xs font-bold text-zinc-400 uppercase">Travel direction <span className="float-right text-sky-400">{arConfig.flight_bearing_degrees || 0}°</span>
-                    <input type="range" min="0" max="359" step="1" value={arConfig.flight_bearing_degrees || 0} onChange={e => updateArConfig({ flight_bearing_degrees: Number(e.target.value) })} className="w-full mt-2 accent-sky-500" />
-                  </label>
-                  <label className="text-xs font-bold text-zinc-400 uppercase">Loop <span className="float-right text-sky-400">{arConfig.flight_duration_seconds || 30}s</span>
-                    <input type="range" min="10" max="90" step="5" value={arConfig.flight_duration_seconds || 30} onChange={e => updateArConfig({ flight_duration_seconds: Number(e.target.value) })} className="w-full mt-2 accent-sky-500" />
-                  </label>
-                </div>
-              )}
+              {arConfig.behavior === 'flyover' && (() => {
+                const distanceM = arConfig.flight_distance_m || 180;
+                const seconds = arConfig.flight_duration_seconds || 30;
+                // Creators pick a distance and a loop time; the speed that
+                // implies is the thing they actually care about, and it is not
+                // obvious from either slider alone.
+                const mph = (distanceM / seconds) * 2.23694;
+                return (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <label className="text-xs font-bold text-zinc-400 uppercase">Travel direction <span className="float-right text-sky-400">{arConfig.flight_bearing_degrees || 0}°</span>
+                        <input type="range" min="0" max="359" step="1" value={arConfig.flight_bearing_degrees || 0} onChange={e => updateArConfig({ flight_bearing_degrees: Number(e.target.value) })} className="w-full mt-2 accent-sky-500" />
+                      </label>
+                      <label className="text-xs font-bold text-zinc-400 uppercase">Loop <span className="float-right text-sky-400">{seconds}s</span>
+                        <input type="range" min="10" max="90" step="5" value={seconds} onChange={e => updateArConfig({ flight_duration_seconds: Number(e.target.value) })} className="w-full mt-2 accent-sky-500" />
+                      </label>
+                    </div>
+
+                    <label className="text-xs font-bold text-zinc-400 uppercase block">Travel distance <span className="float-right text-sky-400">{toFeet(distanceM)} ft</span>
+                      <input type="range" min="100" max="2000" step="25" value={toFeet(distanceM)} onChange={e => updateArConfig({ flight_distance_m: fromFeet(Number(e.target.value)) })} className="w-full mt-2 accent-sky-500" />
+                    </label>
+
+                    <p className="text-[10px] text-zinc-500 -mt-2">
+                      Crosses {toFeet(distanceM)} ft over {seconds}s — about{' '}
+                      <span className={mph > 25 ? 'text-amber-400 font-bold' : 'font-bold'}>{mph.toFixed(0)} mph</span>.
+                      {mph > 25 && ' Fast enough that players may not catch it before it passes.'}
+                      {' '}It fades out at the end of each pass and back in at the start,
+                      so the loop reads as another flyover rather than a jump.
+                    </p>
+                  </>
+                );
+              })()}
             </div>
           )}
         </div>
