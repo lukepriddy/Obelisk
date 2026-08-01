@@ -45,8 +45,11 @@ and pace are unknowable from data. Offer a computed anchor rather than an empty
 box — "your zones span 1.2 miles and 14 minutes of audio; most people take
 35–50 minutes" — so the number is informed and the field is nearly free to fill.
 
-Store as `duration_minutes` on `tours`. Display as approximate; precision here
-is false.
+**Decision: one integer, `duration_minutes` on `tours`, displayed
+approximately** — "about 40 min", switching to hours past 90. A low/high range
+would be more honest, but it doubles the input friction on a field whose entire
+value depends on creators actually filling it, and precision is false here
+regardless.
 
 **It has to appear before commitment**, which means: welcome screen, share card,
 creator page, place pages. A duration visible only after starting is useless for
@@ -84,8 +87,11 @@ loop" earns its place in the description.
   player for everyone. It must fall through to the untouched static HTML on any
   error, and that fallback needs deliberate testing, not assumption.
 - Tours without `welcome_image_url` get no image, which is most of the value.
-  Needs a fallback: a static branded card cheaply, a generated map-crop card
-  properly.
+  **Decision: solve this in the editor, not the pipeline.** Ship one static
+  branded fallback, and relabel the field so it plainly says this is the image
+  people see when the experience is shared. Most creators fill it once they know
+  what it is for, which turns an image-generation project into a copy change.
+  Build generated map-crop cards only if the field stays empty in practice.
 - Cold starts add first-paint latency where there is none today. Cacheable with
   `s-maxage`, but real.
 
@@ -114,20 +120,58 @@ subscription IDs. A table-wide anonymous read policy would expose billing data.
 This needs a column-scoped policy or a separate public view — not
 `USING (true)`.
 
-### Decisions required (see the discussion in the accompanying notes)
+### Decisions
 
-1. **Handle rules** — claiming, reserved words, whether it can change, allowed
-   characters. Cheap now, painful once links exist.
-2. **What is exposed** — email never; whether `display_name` may default to
-   anything account-derived (it should not); whether avatars and bios exist at
-   all, since both are unmoderated user content.
-3. **Opt-in default** — off is correct for consent, but an off-by-default page
-   most creators never enable is discovery that doesn't happen. Prompting at
-   first publish is the likely resolution.
-4. **Which tours appear** — must be `is_public` **and** approved. Note the trap:
-   admin accounts are exempt from the moderation gate, so Luke's own tours can
-   be public without being `approved`. A naive query makes his own page empty.
-5. **Ordering** — distance from viewer, recency, or manual.
+**Handles — first-come, reserved list, changeable, strict charset.**
+Lowercase `a-z`, digits, hyphen; 3–30 characters; no leading, trailing or
+doubled hyphen; stored and compared lowercase. Changing one tombstones the old
+handle permanently rather than releasing it, and 301s to the new one — the row
+is being kept regardless, so the redirect is nearly free and it stops anyone
+claiming a departed creator's inbound links.
+
+**Reserve the namespace before launch.** Every existing route plus the
+impersonation targets: `admin`, `api`, `app`, `support`, `help`, `settings`,
+`about`, `obelisk`. This is the only decision here that cannot be repaired
+later — once `/c/support` belongs to someone, it belongs to them.
+
+**Exposed fields — `display_name`, `bio`, `handle`. No avatar.**
+`display_name` is required and typed by the creator, **never defaulted from
+anything account-derived**; defaulting it from an email address is how you
+publish someone's real name when they wanted a pseudonym. `bio` optional, 280
+characters. Email never leaves the server, enforced by the RLS policy rather
+than by the UI declining to render it.
+
+Avatars are deliberately out: another unmoderated image upload, another call on
+the storage quota, and close to no contribution to the actual job of helping
+someone decide whether to walk somewhere. A monogram generated from the handle
+covers it. Add them when a creator asks.
+
+**Profile text moderation is deferred, and owed.** `moderate-tour` reads tours,
+not profiles. With invited creators a 280-character cap plus the reports queue
+is proportionate; this becomes mandatory before public signups. Recorded here
+because profiles are easy to forget when thinking about moderation.
+
+**Opt-in — default off, prompted at first successful publish.**
+Off is the right consent default: being invited should not silently publish a
+page carrying your name. The prompt is what stops "default off" becoming
+"nobody ever enables it" — it asks at the point of maximum motivation, just
+after something went live. Claim the handle inline in the same prompt.
+
+**Which tours appear — fix the data rather than the query.**
+Have the moderation trigger stamp admin-owned tours `approved` with
+`moderation_reason = 'owner is platform admin'`, and backfill the existing ones.
+The publish exemption is unchanged; the status column simply stops
+misdescribing what happened.
+
+Every consumer then reads `is_public AND moderation_status = 'approved'`, with
+no knowledge of the exemption. One migration now, against a footgun that
+otherwise has to be re-remembered in every surface built from here on — and
+whose failure mode is Luke's own creator page rendering empty while everyone
+else's works.
+
+**Ordering — distance from the viewer where geolocation allows, newest-first
+otherwise.** The visitor's question is what is near them. Manual ordering serves
+the creator's narrative instead and can be added if one asks for it.
 
 ---
 
@@ -154,14 +198,27 @@ relative to when it is needed* — just not before there is something to index.
 
 ## Sequencing
 
-Trail metadata (0) is a prerequisite: every later surface displays it, and
-retrofitting it into three places is worse than building it once.
+**Two items are cheap now and expensive later. Do them first, out of order.**
 
-The far-away state is the cheapest independent win — worth doing first while the
-rendering change in (1) is tested properly. `api/render.ts` is a hard dependency
-of both (2) and (3), so it comes before either regardless of priority.
+- **Reserve the handle namespace.** Not a feature — a `reserved_handles` table
+  or constant, populated before anyone can claim anything. Once `/c/support`
+  belongs to a stranger it belongs to them, and no amount of later work undoes
+  that.
+- **Stamp admin tours `approved`.** A migration plus a trigger change. Its cost
+  grows with every surface that has to remember the exemption, and its failure
+  mode is silent — Luke's own page renders empty while everyone else's works.
 
-(2) is useful with one creator. (3) waits on density.
+Neither depends on anything else here, and neither is visible when shipped.
+
+Then: trail metadata (0) is a prerequisite for the rest, since every later
+surface displays it and retrofitting it into three places costs more than
+building it once.
+
+The far-away state is the cheapest independent win, worth doing while the
+rendering change in (1) gets tested properly. `api/render.ts` is a hard
+dependency of both (2) and (3), so it precedes either regardless of priority.
+
+(2) is useful from the first creator. (3) waits on density.
 
 ## Not in scope, deliberately
 
