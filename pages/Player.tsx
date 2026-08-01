@@ -53,6 +53,29 @@ const ViewportStats: React.FC<{ labelColor: string; valueColor: string }> = ({ l
   );
 };
 
+/**
+ * The blur behind a bottom sheet, as its own in-viewport layer.
+ *
+ * `backdrop-filter` samples the *backdrop root*, which is the viewport — but
+ * `overlay-edge-bleed` deliberately pushes a surface 16px past both screen
+ * edges, into a region with no backdrop to sample. Putting both on the same
+ * element is undefined territory, and iOS Safari resolves it by leaving the
+ * overhang unpainted on the first composite: a strip of sharp, undimmed map
+ * down the right edge, which then disappears once the layer is warm and never
+ * comes back that session. That "only the first time" signature is the tell.
+ *
+ * So the two jobs are split. The bled wrapper keeps the flat tint, where
+ * overhanging is well-defined, and the blur lives here at a plain `inset-0`
+ * where it always has something to sample. Same split as the AR overlay, for
+ * the same underlying reason. See docs/mobile-player-edge-seams.md.
+ *
+ * Nothing behind this needs to react to it, and it must not swallow the
+ * tap-to-dismiss on the wrapper, hence `pointer-events-none`.
+ */
+const SheetBlur: React.FC = () => (
+  <div className="fixed inset-0 backdrop-blur-sm pointer-events-none" aria-hidden="true" />
+);
+
 export const Player: React.FC = () => {
   const { tourId } = useParams<{ tourId: string }>();
   const navigate = useNavigate();
@@ -2044,9 +2067,10 @@ export const Player: React.FC = () => {
       {/* ── PROGRESSION INVENTORY ── */}
       {showInventory && tour.progression_enabled && playerProgress && (
         <div
-          className="overlay-edge-bleed fixed inset-0 z-[2500] bg-black/60 backdrop-blur-sm flex items-end justify-center"
+          className="overlay-edge-bleed fixed inset-0 z-[2500] bg-black/60 flex items-end justify-center"
           onClick={() => setShowInventory(false)}
         >
+          <SheetBlur />
           <div
             className="-mb-px w-full max-w-lg flex flex-col rounded-t-[40px] shadow-2xl"
             style={{
@@ -2140,9 +2164,10 @@ export const Player: React.FC = () => {
       {/* ── PLAYER MENU ── */}
       {showPlayerMenu && audioStarted && (
         <div
-          className="overlay-edge-bleed fixed inset-0 z-[2600] bg-black/60 backdrop-blur-sm flex items-end justify-center"
+          className="overlay-edge-bleed fixed inset-0 z-[2600] bg-black/60 flex items-end justify-center"
           onClick={closePlayerMenu}
         >
+          <SheetBlur />
           <div
             className="-mb-px w-full max-w-lg rounded-t-[40px] shadow-2xl flex flex-col"
             style={{
@@ -2453,9 +2478,10 @@ export const Player: React.FC = () => {
           // lockNudge). Entrance animations only play on the first mount so
           // the remount is invisible.
           key={`${passphraseChallenge.id}:${lockNudge}`}
-          className={`overlay-edge-bleed fixed inset-0 z-[2500] bg-black/70 backdrop-blur-sm flex items-end justify-center overflow-y-auto ${lockNudge === 0 ? 'animate-in fade-in' : ''}`}
+          className={`overlay-edge-bleed fixed inset-0 z-[2500] bg-black/70 flex items-end justify-center overflow-y-auto ${lockNudge === 0 ? 'animate-in fade-in' : ''}`}
           style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)' }}
         >
+          <SheetBlur />
           {/* Bottom-anchored sheet flush with the screen edge (safe-area padding
               lives inside), matching the other slide-ups — continuous dark grey,
               no gap. Amber accent kept on the TOP edge only (1px, same as the
