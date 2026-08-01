@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/player/:tourId", "destination": "/api/render" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
