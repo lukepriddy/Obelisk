@@ -81,12 +81,19 @@ Keep the bleed on the flat tint, and give the blur its own layer at a plain
 ```tsx
 <div className="overlay-edge-bleed fixed inset-0 bg-black/60 flex items-end justify-center">
   <SheetBlur />          {/* fixed inset-0 backdrop-blur-sm pointer-events-none */}
-  <div className="-mb-px w-full max-w-lg rounded-t-[40px] …">…</div>
+  <div className="relative z-10 -mb-px w-full max-w-lg rounded-t-[40px] …">…</div>
 </div>
 ```
 
 `SheetBlur` in `pages/Player.tsx` is the shared implementation.
 `pointer-events-none` matters — the wrapper carries tap-to-dismiss.
+
+**`relative z-10` on the sheet is not optional.** `SheetBlur` is `position:
+fixed`, which makes it a *positioned* element, and positioned elements paint
+above static in-flow siblings. A sheet with no `position` therefore ends up
+*under* the blur, and the whole card renders blurred — which is exactly what
+shipped on the first attempt at this fix. Verify with `elementFromPoint` at a
+coordinate inside the card: it must return the sheet, not the blur layer.
 
 ## Edge-anchored chrome: split the backdrop off
 

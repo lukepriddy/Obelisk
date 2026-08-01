@@ -2072,7 +2072,11 @@ export const Player: React.FC = () => {
         >
           <SheetBlur />
           <div
-            className="-mb-px w-full max-w-lg flex flex-col rounded-t-[40px] shadow-2xl"
+            // relative z-10 keeps the card above SheetBlur. Without it the card
+            // is a static in-flow box while the blur layer is positioned, and
+            // positioned elements paint above static siblings — so the blur
+            // lands on top of the card instead of behind it.
+            className="relative z-10 -mb-px w-full max-w-lg flex flex-col rounded-t-[40px] shadow-2xl"
             style={{
               backgroundColor: th.sheetBg,
               color: th.sheetText,
@@ -2169,7 +2173,9 @@ export const Player: React.FC = () => {
         >
           <SheetBlur />
           <div
-            className="-mb-px w-full max-w-lg rounded-t-[40px] shadow-2xl flex flex-col"
+            // relative z-10: see the progression sheet above — keeps the card
+            // above SheetBlur rather than under it.
+            className="relative z-10 -mb-px w-full max-w-lg rounded-t-[40px] shadow-2xl flex flex-col"
             style={{
               backgroundColor: th.sheetBg,
               color: th.sheetText,
@@ -2487,7 +2493,7 @@ export const Player: React.FC = () => {
               no gap. Amber accent kept on the TOP edge only (1px, same as the
               input's focus border); no border on the sides/bottom. */}
           <div
-            className={`-mb-px border-t border-amber-500 rounded-t-[40px] w-full max-w-lg px-8 pt-6 max-h-[calc(100dvh-16px)] overflow-y-auto ${lockNudge === 0 ? 'animate-in slide-in-from-bottom-4' : ''}`}
+            className={`relative z-10 -mb-px border-t border-amber-500 rounded-t-[40px] w-full max-w-lg px-8 pt-6 max-h-[calc(100dvh-16px)] overflow-y-auto ${lockNudge === 0 ? 'animate-in slide-in-from-bottom-4' : ''}`}
             style={{ backgroundColor: '#09090b', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }}
           >
             <div className="w-10 h-1 bg-zinc-700 rounded-full mx-auto mb-5" />
