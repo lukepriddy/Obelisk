@@ -6,7 +6,7 @@ import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { ARObjectConfig, Zone } from '../types';
 import { getDistance } from '../utils/geo';
-import { loadArEngine, requestMotionAccess, readHeading } from '../services/arEngine';
+import { loadArEngine, requestMotionAccess, readHeading, watchHeading } from '../services/arEngine';
 
 /**
  * Camera view for a zone's AR object.
@@ -40,6 +40,13 @@ interface ARCameraOverlayProps {
 type Phase = 'intro' | 'starting' | 'ready' | 'error';
 
 const toRad = (degrees: number) => (degrees * Math.PI) / 180;
+/** Shortest signed representation of an angle, in (-pi, pi]. */
+const wrapAngle = (radians: number) => Math.atan2(Math.sin(radians), Math.cos(radians));
+/** Ceiling on compass-referenced yaw correction, so a bad magnetometer can
+ *  misplace the object but never throw it somewhere unrecognisable. */
+const MAX_YAW_CORRECTION = toRad(45);
+/** Reused by the yaw correction; allocating per frame would churn the heap. */
+const WORLD_UP = new THREE.Vector3(0, 1, 0);
 const toDeg = (radians: number) => (radians * 180) / Math.PI;
 
 /** Compass bearing from one coordinate to another, degrees from true north. */
@@ -162,6 +169,18 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
   // compared in the same spot.
   const converge = typeof window === 'undefined'
     || new URLSearchParams(window.location.search).get('ar-converge') !== '0';
+  // ── Compass-referenced yaw correction (?ar-yaw=1) ─────────────────────────
+  // Off by default until it's proven in the field. A distant object is
+  // effectively at infinity: its screen position is set by where the camera
+  // thinks it's pointed, not where it thinks it is. At 220m a 0.2m position
+  // error moves it one pixel, while one degree of yaw moves it four metres —
+  // so past a few tens of metres, drift is a rotation problem and the GPS
+  // convergence above cannot touch it. Worse, tracking sits at LIMITED when
+  // the camera is full of sky (day or night — it's the lack of features, not
+  // the light), which leaves yaw riding on an integrating gyro with nothing
+  // visual to correct it.
+  const yawFix = typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('ar-yaw') === '1';
   const driftRef = useRef(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const configRef = useRef(configFor(zone));
@@ -196,6 +215,22 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
   const lastCameraRef = useRef<THREE.Vector3 | null>(null);
   const fastUntilRef = useRef(0);
 
+  // ── Yaw-correction state ──────────────────────────────────────────────────
+  // The origin pair is captured together on the first usable frame so both
+  // references describe the same instant; measuring drift from the heading
+  // taken before the engine started would fold any movement in between into
+  // the answer. Only the change since that instant is corrected — the initial
+  // placement is left exactly as it is today.
+  const liveHeadingRef = useRef<number | null>(null);
+  const headingAccuracyRef = useRef<number | null>(null);
+  const yawOriginRef = useRef<{ heading: number; slam: number } | null>(null);
+  const yawCorrectionRef = useRef(0);
+  // The object's intended position *before* correction. Kept separate so the
+  // GPS convergence keeps operating on an uncorrected value and the two
+  // corrections can't feed each other.
+  const baseTargetRef = useRef<THREE.Vector3 | null>(null);
+  const yawFrameRef = useRef(0);
+
   const [phase, setPhase] = useState<Phase>('intro');
   const [error, setError] = useState<string | null>(null);
   const [modelError, setModelError] = useState<string | null>(null);
@@ -213,8 +248,23 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
 
   useEffect(() => { configRef.current = configFor(zone); }, [zone]);
 
+  // The debug figures live in refs so the per-frame handler can write them
+  // without re-rendering. That leaves the readout frozen between tracking
+  // changes, which is useless for watching a correction converge — so when the
+  // overlay is on, repaint it twice a second. Off entirely otherwise.
+  const [, setDebugTick] = useState(0);
+  useEffect(() => {
+    if (!arDebug || phase !== 'ready') return;
+    const id = setInterval(() => setDebugTick(t => t + 1), 500);
+    return () => clearInterval(id);
+  }, [arDebug, phase]);
+
   /** Stop the engine and release the camera. Safe to call more than once. */
+  const headingWatchRef = useRef<(() => void) | null>(null);
+
   const stop = () => {
+    headingWatchRef.current?.();
+    headingWatchRef.current = null;
     if (!runningRef.current) return;
     runningRef.current = false;
     try { window.XR8?.stop?.(); } catch { /* already torn down */ }
@@ -242,6 +292,7 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
 
     const place = (object: THREE.Object3D) => {
       object.position.copy(placement.position);
+      baseTargetRef.current = placement.position.clone();
       // Upright by construction: the engine's frame is gravity-aligned, so
       // yaw is the only rotation that needs setting. The old pipeline had to
       // carry an explicit world-up vector to stop objects rolling with the
@@ -325,6 +376,19 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
       lastFrameRef.current = 0;
       lastCameraRef.current = null;
       fastUntilRef.current = 0;
+      yawOriginRef.current = null;
+      yawCorrectionRef.current = 0;
+      yawFrameRef.current = 0;
+      baseTargetRef.current = null;
+      liveHeadingRef.current = null;
+      headingAccuracyRef.current = null;
+      if (yawFix) {
+        headingWatchRef.current?.();
+        headingWatchRef.current = watchHeading(({ heading: h, accuracy }) => {
+          liveHeadingRef.current = h;
+          headingAccuracyRef.current = accuracy;
+        });
+      }
 
       stepRef.current = 'preparing canvas';
       const canvas = canvasRef.current;
@@ -390,6 +454,57 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
             const config = configRef.current;
             if (!object) return;
 
+            // ── Compass-referenced yaw correction ────────────────────────────
+            // Sign convention, derived rather than guessed. three.js rotation
+            // about +Y is counter-clockwise seen from above, so turning right
+            // is a *negative* slam yaw, while compass heading *increases*
+            // turning right. Perfect tracking therefore gives
+            // headingDelta + slamDelta = 0, and whatever is left over is the
+            // accumulated drift. Worked example: turn 90 deg right, engine
+            // registers only 80 deg, so slamDelta = -80 and drift = +10 —
+            // the object is rendered 10 deg further right than it belongs,
+            // and rotating it by +10 about the world vertical puts it back.
+            if (yawFix && baseTargetRef.current) {
+              const { camera } = window.XR8.Threejs.xrScene();
+              const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+              const horizontal = Math.hypot(forward.x, forward.z);
+              const heading = liveHeadingRef.current;
+              const accuracy = headingAccuracyRef.current;
+              const now = performance.now();
+              const dt = yawFrameRef.current ? Math.min(0.5, (now - yawFrameRef.current) / 1000) : 0;
+              yawFrameRef.current = now;
+
+              // Yaw is undefined looking straight up or down, and iOS reports
+              // accuracy -1 when the magnetometer is uncalibrated. In either
+              // case hold the correction where it is rather than feed it junk.
+              const usable = heading != null
+                && horizontal > 0.15
+                && (accuracy == null || (accuracy >= 0 && accuracy <= 25));
+
+              if (usable) {
+                const slamYaw = Math.atan2(-forward.x, -forward.z);
+                if (!yawOriginRef.current) {
+                  yawOriginRef.current = { heading: toRad(heading), slam: slamYaw };
+                } else if (dt > 0) {
+                  const origin = yawOriginRef.current;
+                  const drift = wrapAngle(
+                    wrapAngle(toRad(heading) - origin.heading) + wrapAngle(slamYaw - origin.slam),
+                  );
+                  // Same reasoning as the GPS convergence: the magnetometer
+                  // jitters several degrees between readings, so only its
+                  // average over a long window may move anything. Drift is a
+                  // slow bias, so it survives that averaging; jitter does not.
+                  const eased = wrapAngle(drift - yawCorrectionRef.current) * (1 - Math.exp(-dt / 20));
+                  // A compass that is simply wrong (metal, bad calibration)
+                  // must not be able to fling the object across the sky.
+                  yawCorrectionRef.current = Math.max(
+                    -MAX_YAW_CORRECTION,
+                    Math.min(MAX_YAW_CORRECTION, yawCorrectionRef.current + eased),
+                  );
+                }
+              }
+            }
+
             // ── Ease towards where live GPS says the object belongs ──
             // Only for static objects; a flyover defines its own path below.
             // Skipped while the fix is poor, since correcting towards a bad
@@ -426,9 +541,28 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
                 // reads the new position as correct. Frame-rate independent
                 // either way.
                 const tau = performance.now() < fastUntilRef.current ? 0.4 : 20;
-                object.position.lerp(target, 1 - Math.exp(-dt / tau));
-                if (arDebug) driftRef.current = object.position.distanceTo(target);
+                // With the yaw fix on, converge the *uncorrected* base instead
+                // of the rendered position, so the two corrections stay
+                // independent — otherwise each would keep re-measuring the
+                // other's output and they'd wind each other up.
+                const slot = yawFix && baseTargetRef.current ? baseTargetRef.current : object.position;
+                slot.lerp(target, 1 - Math.exp(-dt / tau));
+                if (arDebug) driftRef.current = slot.distanceTo(target);
               }
+            }
+
+            // Rotate the object about the world vertical through the camera.
+            // This preserves both its distance and its height relative to the
+            // player, and it never touches the object's own orientation — the
+            // upright lock is untouchable by this path.
+            if (yawFix && baseTargetRef.current && config.behavior !== 'flyover') {
+              const { camera } = window.XR8.Threejs.xrScene();
+              object.position
+                .copy(baseTargetRef.current)
+                .sub(camera.position)
+                .applyAxisAngle(WORLD_UP, yawCorrectionRef.current)
+                .add(camera.position);
+              return;
             }
 
             // Flyovers drift along their configured path. Static objects need
@@ -585,6 +719,9 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
                 {' · '}conv {converge ? 'on' : 'off'}
                 {converge && ` · off by ${driftRef.current.toFixed(1)}m`}
                 {converge && performance.now() < fastUntilRef.current && ' · RESYNC'}
+                {yawFix && ` · yaw ${(yawCorrectionRef.current * 180 / Math.PI).toFixed(1)}°`}
+                {yawFix && headingAccuracyRef.current != null
+                  && ` (±${headingAccuracyRef.current.toFixed(0)}°)`}
               </div>
             )}
           </div>

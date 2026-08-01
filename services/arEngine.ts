@@ -109,6 +109,48 @@ export async function requestMotionAccess(): Promise<boolean> {
  * Resolves null if no heading arrives — the caller then places the object
  * relative to whichever way the camera happens to be facing.
  */
+/**
+ * Continuous compass feed, for correcting accumulated SLAM yaw drift.
+ *
+ * Deliberately not used to drive orientation — driving from the compass
+ * directly is what made the pre-SLAM version swim, because the magnetometer
+ * jitters by several degrees between readings. It is used only as an absolute
+ * reference that, unlike an integrated gyro, has no drift to accumulate. Heavy
+ * smoothing downstream turns the jitter into noise around a stable mean while
+ * leaving the slow bias we actually want to remove.
+ *
+ * `accuracy` is iOS's `webkitCompassAccuracy` in degrees; -1 means the
+ * magnetometer is uncalibrated and the heading must not be trusted. Android
+ * exposes no equivalent, hence null.
+ */
+export type HeadingSample = { heading: number; accuracy: number | null };
+
+export function watchHeading(onSample: (sample: HeadingSample) => void): () => void {
+  const handler = (event: DeviceOrientationEvent) => {
+    const webkit = event as DeviceOrientationEvent & {
+      webkitCompassHeading?: number;
+      webkitCompassAccuracy?: number;
+    };
+    if (typeof webkit.webkitCompassHeading === 'number') {
+      onSample({
+        heading: webkit.webkitCompassHeading,
+        accuracy: typeof webkit.webkitCompassAccuracy === 'number' ? webkit.webkitCompassAccuracy : null,
+      });
+      return;
+    }
+    if (event.absolute && typeof event.alpha === 'number') {
+      onSample({ heading: (360 - event.alpha) % 360, accuracy: null });
+    }
+  };
+
+  window.addEventListener('deviceorientationabsolute', handler as EventListener);
+  window.addEventListener('deviceorientation', handler as EventListener);
+  return () => {
+    window.removeEventListener('deviceorientationabsolute', handler as EventListener);
+    window.removeEventListener('deviceorientation', handler as EventListener);
+  };
+}
+
 export function readHeading(timeoutMs = 3000): Promise<number | null> {
   return new Promise(resolve => {
     let done = false;
