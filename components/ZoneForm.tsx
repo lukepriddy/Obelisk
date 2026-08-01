@@ -3,7 +3,7 @@ import { ARObjectConfig, ProgressionResource, Zone, ZoneExitBehavior, ZoneEndBeh
 import { SAMPLE_AUDIO_FILES, VOICES, CHARACTER_TEMPLATES } from '../constants';
 import { uploadARAsset, uploadAudio, uploadImage } from '../services/storageService';
 import { supabase } from '../services/supabaseClient';
-import { Music, AlertCircle, Clock, Volume2, EyeOff, Radio, PlayCircle, Upload, Link as LinkIcon, FileAudio, ListMusic, Bot, MessageSquare, Lock, Unlock, GitBranch, Bell, Sparkles, KeySquare, ImageIcon, X, Trash2, Play, Pause, Loader2, Gift, HelpCircle, Camera } from 'lucide-react';
+import { Music, AlertCircle, Clock, Volume2, EyeOff, Radio, PlayCircle, Upload, Link as LinkIcon, FileAudio, ListMusic, Bot, MessageSquare, Lock, Unlock, GitBranch, Bell, Sparkles, KeySquare, ImageIcon, X, Trash2, Play, Pause, Loader2, Gift, HelpCircle, Camera, MapPin, Copy, Check } from 'lucide-react';
 import { ZoneProgressionSettings } from './ZoneProgressionSettings';
 import { ARPlacementPad } from './ARPlacementPad';
 
@@ -197,6 +197,46 @@ async function fnErrorMessage(error: unknown, data: { message?: string } | null)
   } catch { /* fall through */ }
   return null;
 }
+
+// ── Zone centre coordinates ─────────────────────────────────────────────────
+// The map is the only place a zone's position was visible, and you can't read
+// a number off a dot. Six decimal places is ~11cm — past the point GPS can
+// resolve, and enough to paste straight into Maps or an AR test harness.
+// Order is lat, lng because that's what every mapping tool expects on paste.
+const ZoneCoordinates: React.FC<{ lat: number; lng: number }> = ({ lat, lng }) => {
+  const [copied, setCopied] = useState(false);
+  const placed = Number.isFinite(lat) && Number.isFinite(lng);
+  const text = placed ? `${lat.toFixed(6)}, ${lng.toFixed(6)}` : 'Not placed yet';
+
+  const copy = async () => {
+    if (!placed) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch { /* clipboard blocked; the text is selectable either way */ }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      disabled={!placed}
+      title={placed ? 'Copy coordinates' : undefined}
+      className="w-full flex items-center gap-2 mb-3 px-2.5 py-2 rounded bg-zinc-800/60 border border-zinc-700/60 text-left enabled:hover:border-zinc-600 transition-colors disabled:cursor-default"
+    >
+      <MapPin size={13} className="text-zinc-500 shrink-0" />
+      <span className={`flex-1 font-mono text-[11px] tabular-nums ${placed ? 'text-zinc-300' : 'text-zinc-500 italic'}`}>
+        {text}
+      </span>
+      {placed && (
+        copied
+          ? <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 shrink-0"><Check size={12} /> Copied</span>
+          : <Copy size={12} className="text-zinc-500 shrink-0" />
+      )}
+    </button>
+  );
+};
 
 export const ZoneForm: React.FC<ZoneFormProps> = ({
   zone,
@@ -392,7 +432,9 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
     <div className="text-zinc-200 pb-20">
       <div className="mb-6">
         <h3 className="text-emerald-400 font-bold uppercase tracking-wider text-sm mb-4">Zone Properties</h3>
-        
+
+        <ZoneCoordinates lat={zone.lat} lng={zone.lng} />
+
         {/* Type Selector */}
         <div className="flex bg-zinc-800 rounded p-1 mb-1">
              <button

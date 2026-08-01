@@ -479,7 +479,14 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
   const config = configFor(zone);
 
   return (
-    <div className="fixed inset-0 z-[5000] bg-black text-white overflow-hidden">
+    <>
+      {/* The black backdrop is a separate fixed layer so it can carry
+          overlay-edge-bleed (see docs/mobile-player-edge-seams.md) without
+          dragging the edge-anchored chrome below off-screen with it. The
+          content layer stays at a true inset-0 so `px-4` still means 4 from
+          the real screen edge. Both are position:fixed, as the class requires. */}
+      <div className="fixed inset-0 z-[5000] overlay-edge-bleed bg-black" aria-hidden="true" />
+    <div className="fixed inset-0 z-[5000] text-white overflow-hidden">
       {/* inset-0 + margin auto centres an element with an intrinsic aspect,
           and the max- constraints make it behave like object-fit: contain on
           any screen shape. The backing store is sized to match in start(). */}
@@ -590,5 +597,6 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
         </div>
       )}
     </div>
+    </>
   );
 };

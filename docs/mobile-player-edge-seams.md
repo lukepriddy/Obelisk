@@ -62,18 +62,42 @@ Keep both the `overlay-edge-bleed` and `chat-edge-shield` classes on the chat
 root. The shadow is intentional: it prevents a map hairline from appearing
 during Safari compositing and keyboard transitions.
 
+## Edge-anchored chrome: split the backdrop off
+
+A surface whose children are pinned to the edges (the AR camera view: a title
+chip and close button in a `px-4` top bar) cannot simply take
+`overlay-edge-bleed` on its root. The bleed widens the element by 16px a side,
+so `px-4` starts measuring from 16px off-screen and the chrome slides out past
+the bezel.
+
+Use two fixed siblings instead: a bled backdrop that carries the colour, and a
+plain `inset-0` content layer above it.
+
+```tsx
+<div className="fixed inset-0 z-[5000] overlay-edge-bleed bg-black" aria-hidden="true" />
+<div className="fixed inset-0 z-[5000] text-white overflow-hidden">…</div>
+```
+
+Both must be `position: fixed` — the class requires it, and an absolute child
+would be clipped by the content layer's own `overflow-hidden` anyway.
+`ARCameraOverlay.tsx` is the reference implementation.
+
 ## What broke this before
 
 1. Applying `clip-path` through `player-sheet-edge` to oversized sheets.
 2. Applying `overflow-hidden` to an outer rounded sheet.
 3. Replacing edge overscan with visible page gutters or margins.
 4. Treating the seam as a border-color issue instead of a viewport paint issue.
+5. Shipping a new full-screen `fixed inset-0` surface without any edge
+   treatment at all. The AR camera view went out this way and reintroduced the
+   right-edge sliver; the checklist below only covers surfaces that already
+   exist, so a genuinely new one has to be added to it deliberately.
 
 ## Before changing player surface CSS
 
 1. Test in mobile Safari with the browser chrome visible.
 2. Open and dismiss the keyboard in character chat and a passphrase lock.
-3. Test tour info, Progress, and Player menu.
+3. Test tour info, Progress, Player menu, and the AR camera view.
 4. Confirm no map is visible at either edge and sheet corners remain `40px`.
 5. Test the locked zone separately: its amber border must follow its rounded
    top edge without side borders or slivers.

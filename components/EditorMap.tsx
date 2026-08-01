@@ -203,7 +203,23 @@ export const EditorMap = forwardRef<EditorMapHandle, EditorMapProps>((props, ref
       marker.setLngLat([zone.lng, zone.lat]);
       marker.setDraggable(props.activeTool === 'select');
       const el = marker.getElement();
-      el.style.cssText = `width:${d}px;height:${d}px;border-radius:50%;background:${color};border:2px solid white;box-shadow:0 1px 5px rgba(0,0,0,0.5);opacity:${props.activeTool === 'draw' ? 0.5 : 1};cursor:${props.activeTool === 'select' ? 'grab' : 'pointer'}`;
+      // Assign properties individually — never `cssText`. MapLibre positions a
+      // marker by writing `transform: translate(...)` to this element's inline
+      // style, and cssText replaces the whole declaration, wiping it. The dot
+      // then falls back to its static position: the map's top-left corner. It
+      // looks intermittent because any camera movement makes MapLibre rewrite
+      // the transform, so it only stays visibly stuck when this effect runs
+      // while the map is idle (selecting a zone, switching tools).
+      Object.assign(el.style, {
+        width: `${d}px`,
+        height: `${d}px`,
+        borderRadius: '50%',
+        background: color,
+        border: '2px solid white',
+        boxShadow: '0 1px 5px rgba(0,0,0,0.5)',
+        opacity: props.activeTool === 'draw' ? '0.5' : '1',
+        cursor: props.activeTool === 'select' ? 'grab' : 'pointer',
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.zones, props.selectedZoneId, props.activeTool]);
