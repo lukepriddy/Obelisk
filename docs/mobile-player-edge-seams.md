@@ -62,6 +62,32 @@ Keep both the `overlay-edge-bleed` and `chat-edge-shield` classes on the chat
 root. The shadow is intentional: it prevents a map hairline from appearing
 during Safari compositing and keyboard transitions.
 
+## Never put `backdrop-filter` on a bled element
+
+`backdrop-filter` samples the *backdrop root*, which is the viewport.
+`overlay-edge-bleed` pushes a surface 16px past both screen edges, into a
+region with no backdrop to sample. Both on one element is undefined, and iOS
+Safari resolves it by leaving the overhang unpainted until the compositing
+layer is warm.
+
+The signature is distinctive and worth recognising: the seam appears **only on
+the first open of a session** and never again, and the strip shows the map
+*sharp and undimmed* rather than merely uncovered. A seam that survives
+repeated opens is a geometry problem; a seam that heals itself is this.
+
+Keep the bleed on the flat tint, and give the blur its own layer at a plain
+`inset-0`:
+
+```tsx
+<div className="overlay-edge-bleed fixed inset-0 bg-black/60 flex items-end justify-center">
+  <SheetBlur />          {/* fixed inset-0 backdrop-blur-sm pointer-events-none */}
+  <div className="-mb-px w-full max-w-lg rounded-t-[40px] …">…</div>
+</div>
+```
+
+`SheetBlur` in `pages/Player.tsx` is the shared implementation.
+`pointer-events-none` matters — the wrapper carries tap-to-dismiss.
+
 ## Edge-anchored chrome: split the backdrop off
 
 A surface whose children are pinned to the edges (the AR camera view: a title
@@ -92,6 +118,26 @@ would be clipped by the content layer's own `overflow-hidden` anyway.
    treatment at all. The AR camera view went out this way and reintroduced the
    right-edge sliver; the checklist below only covers surfaces that already
    exist, so a genuinely new one has to be added to it deliberately.
+6. Combining `backdrop-filter` with `overlay-edge-bleed` on one element (see
+   above). Worth calling out separately because **auditing this file's rules
+   does not catch it** — the geometry is correct and every rule passes. Reading
+   the markup for a `backdrop-blur` class on a bled element is what catches it.
+
+## Checking for a regression
+
+Grep, don't just read. Both of these should return nothing:
+
+```bash
+grep -rn "overlay-edge-bleed" --include="*.tsx" pages/ components/ | grep backdrop-blur
+grep -rn "player-sheet-edge\|clip-path" --include="*.tsx" pages/ components/
+```
+
+Then confirm the rules still exist at all, since a passing grep for forbidden
+patterns says nothing about whether the required ones survived:
+
+```bash
+grep -A6 "\.overlay-edge-bleed {" index.html | grep -E "left|right"
+```
 
 ## Before changing player surface CSS
 
