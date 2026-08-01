@@ -1,12 +1,18 @@
 import React, { useState, useRef } from 'react';
-import { Tour } from '../types';
+import { Tour, Zone } from '../types';
 import { MAP_STYLES, FONT_STYLES, DEFAULT_MAP_STYLE } from '../constants';
 import { uploadImage } from '../services/storageService';
-import { Image, Type, Palette, AlignLeft, AlignCenter, Upload, MapPin, Eye, Settings, Globe, Lock, Loader2, Sun, Moon, X, Tag as TagIcon } from 'lucide-react';
+import { Image, Type, Palette, AlignLeft, AlignCenter, Upload, MapPin, Eye, Settings, Globe, Lock, Loader2, Sun, Moon, X, Tag as TagIcon, Clock, Route } from 'lucide-react';
 import { ProgressionSettings } from './ProgressionSettings';
+import { trailStats, formatDistance, suggestDuration } from '../utils/trail';
 
 interface TourInfoPanelProps {
   tour: Tour;
+  /** Used only to derive the route stats that anchor the duration estimate. */
+  zones?: Zone[];
+  /** Measured average from completed sessions, when there are any. */
+  measuredSeconds?: number | null;
+  completedSessions?: number;
   onUpdate: (updates: Partial<Tour>) => void;
 }
 
@@ -17,7 +23,9 @@ const TEXT_PRESETS   = ['#ffffff','#f1f5f9','#1e293b','#0f172a','#94a3b8','#d1fa
 // File-type and size validation now lives in services/storageService.ts so
 // every upload path shares one set of rules; it reports failures via onError.
 
-export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({ tour, onUpdate }) => {
+export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({
+  tour, zones = [], measuredSeconds, completedSessions = 0, onUpdate,
+}) => {
   const [tagDraft, setTagDraft] = useState('');
   const [tab, setTab] = useState<'edit' | 'preview'>('edit');
   const [imageUploading, setImageUploading] = useState(false);
@@ -164,6 +172,68 @@ export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({ tour, onUpdate }) 
             />
           </div>
 
+          {/* How long it takes — planning information, so it has to be here
+              rather than discovered mid-walk. Distance and shape come free from
+              the zone coordinates; only the time needs the creator. */}
+          {(() => {
+            const stats = trailStats(tour, zones);
+            const suggestion = suggestDuration(stats, measuredSeconds, completedSessions);
+            return (
+              <div>
+                <label className="block text-xs font-bold text-zinc-400 uppercase mb-1 flex items-center gap-2">
+                  <Clock size={13} /> How long it takes
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={1}
+                    max={1440}
+                    className="w-24 bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none"
+                    value={tour.duration_minutes ?? ''}
+                    onChange={(e) => {
+                      const raw = e.target.value.trim();
+                      if (!raw) return onUpdate({ duration_minutes: null });
+                      const n = Math.round(Number(raw));
+                      if (Number.isFinite(n)) onUpdate({ duration_minutes: Math.min(1440, Math.max(1, n)) });
+                    }}
+                    placeholder="—"
+                  />
+                  <span className="text-xs text-zinc-400">minutes</span>
+                  {suggestion && tour.duration_minutes !== suggestion.minutes && (
+                    <button
+                      type="button"
+                      onClick={() => onUpdate({ duration_minutes: suggestion.minutes })}
+                      className="ml-auto text-[11px] font-bold text-sky-400 hover:text-sky-300"
+                    >
+                      Use {suggestion.minutes}
+                    </button>
+                  )}
+                </div>
+
+                {stats.zoneCount > 0 && (
+                  <p className="text-[10px] text-zinc-500 mt-1.5 flex items-center gap-1.5">
+                    <Route size={11} className="shrink-0" />
+                    {formatDistance(stats.distanceMeters)} across {stats.zoneCount}{' '}
+                    {stats.zoneCount === 1 ? 'stop' : 'stops'}
+                    {stats.furthestMeters > 0
+                      ? ` · furthest is ${formatDistance(stats.furthestMeters)} from the start`
+                      : ''}
+                  </p>
+                )}
+
+                {suggestion && (
+                  <p className={`text-[10px] mt-1 ${suggestion.basis === 'measured' ? 'text-emerald-500' : 'text-zinc-500'}`}>
+                    {suggestion.note}
+                  </p>
+                )}
+
+                <p className="text-[10px] text-zinc-500 mt-1">
+                  Shown before anyone starts, so they can tell whether they have time for it.
+                </p>
+              </div>
+            );
+          })()}
+
           {/* Description */}
           <div>
             <div className="flex items-center justify-between mb-1">
@@ -221,6 +291,15 @@ export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({ tour, onUpdate }) 
                 placeholder="or paste URL..."
               />
             </div>
+            {/* Says what the field is actually for. Most creators fill it once
+                they know it's the picture that shows up when someone shares the
+                link — which is cheaper than generating fallback cards for the
+                ones who don't. */}
+            <p className={`text-[10px] mt-1.5 ${tour.welcome_image_url ? 'text-zinc-500' : 'text-amber-500/80'}`}>
+              {tour.welcome_image_url
+                ? 'Shown on the welcome screen, and as the preview when this link is shared.'
+                : 'Without one, sharing this link shows no picture — just the title. Worth adding.'}
+            </p>
             {imageError && (
               <p className="mt-1.5 text-xs text-red-400 leading-snug">{imageError}</p>
             )}

@@ -755,7 +755,7 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
             )
           ) : rightPanel === 'tour' && tour ? (
 
-            <TourInfoPanel tour={tour} onUpdate={updateTourFields} />
+            <TourInfoPanel tour={tour} zones={zones} onUpdate={updateTourFields} />
           ) : (
             <div className="text-zinc-500 text-center mt-20">Select a zone</div>
           )}

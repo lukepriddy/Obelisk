@@ -21,6 +21,13 @@ export interface Tour {
   moderation_categories?: string[] | null;
   moderated_at?: string | null;
 
+  // Creator's estimate of typical completion time. Planning information, so it
+  // has to appear before someone commits — twenty minutes and ninety minutes
+  // are different afternoons. Distance and route shape are derived instead
+  // (see utils/trail.ts); only this needs a human, because dwell time and
+  // walking pace aren't inferable. Null means unset.
+  duration_minutes?: number | null;
+
   // Welcome screen customization
   welcome_subtitle?: string;
   welcome_image_url?: string;

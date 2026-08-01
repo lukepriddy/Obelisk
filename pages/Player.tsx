@@ -13,6 +13,7 @@ import {
   unlockProgressionZone,
 } from '../services/progressionService';
 import { getDistance, calculateAttenuation } from '../utils/geo';
+import { trailStats, trailSummary, formatDistance } from '../utils/trail';
 import { PlayerProgress, ProgressionReward, Tour, Zone } from '../types';
 import { FONT_STYLES, MAP_STYLES, DEFAULT_MAP_STYLE } from '../constants';
 import { Loader2, PlayCircle, Volume2, MessageCircle, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu, Layers, Locate, RotateCcw, ZoomIn, ZoomOut, Backpack, Gem, Trash2, Info, RefreshCw, LogOut, Bug, Navigation, ChevronRight, Camera } from 'lucide-react';
@@ -1286,6 +1287,15 @@ export const Player: React.FC = () => {
                 {tour.welcome_subtitle && (
                   <p className="text-base font-medium mt-1.5" style={{ color: accent }}>{tour.welcome_subtitle}</p>
                 )}
+                {/* Distance, shape and time, before anyone commits. Someone
+                    deciding what to do with an afternoon needs this here, not
+                    after they've started walking. */}
+                {(() => {
+                  const summary = trailSummary(trailStats(tour, zones), tour.duration_minutes);
+                  return summary ? (
+                    <p className="text-xs mt-2 opacity-60" style={{ color: textColor }}>{summary}</p>
+                  ) : null;
+                })()}
               </div>
             </div>
 
@@ -1295,6 +1305,38 @@ export const Player: React.FC = () => {
               style={{ scrollbarWidth: 'none', overscrollBehavior: 'none' }}
             >
               <div className="w-full max-w-sm mx-auto px-5 flex flex-col items-center text-center gap-5 py-4">
+
+                {/* Someone who opened a shared link from another town needs to
+                    be told so. Without this the welcome screen looks identical
+                    whether you're standing at the start or three states away,
+                    and the first sign anything is wrong is a map where nothing
+                    ever triggers. The threshold is generous — under a mile is a
+                    walk, and saying "you're 400 ft away" would be noise. */}
+                {(() => {
+                  if (!userPos) return null;
+                  const away = getDistance(userPos[0], userPos[1], tour.lat, tour.lng);
+                  if (!Number.isFinite(away) || away < 1600) return null;
+                  return (
+                    <div className="w-full rounded-xl border border-white/10 p-4 text-left" style={{ backgroundColor: `${textColor}0d` }}>
+                      <p className="text-sm font-semibold" style={{ color: textColor }}>
+                        You're {formatDistance(away)} away
+                      </p>
+                      <p className="text-xs opacity-70 mt-1 leading-relaxed" style={{ color: textColor }}>
+                        This one happens at a specific place — you'll need to be there for it
+                        to play. Keep the link, or get directions to the starting point.
+                      </p>
+                      <a
+                        href={`https://www.google.com/maps/dir/?api=1&destination=${tour.lat},${tour.lng}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 mt-3 text-xs font-bold"
+                        style={{ color: accent }}
+                      >
+                        <Navigation size={13} /> Directions to the start
+                      </a>
+                    </div>
+                  );
+                })()}
 
                 {tour.welcome_image_url && (
                   <img src={tour.welcome_image_url} alt={tour.title} className="w-40 h-40 object-cover rounded-2xl shadow-2xl" />
