@@ -167,8 +167,18 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
     && new URLSearchParams(window.location.search).get('ar-debug') === '1';
   // On by default; ?ar-converge=0 turns it off so the two behaviours can be
   // compared in the same spot.
-  const converge = typeof window === 'undefined'
-    || new URLSearchParams(window.location.search).get('ar-converge') !== '0';
+  // GPS position correction is a per-zone creator setting, off unless enabled.
+  // Measured in the field: at ~16m it made a close object visibly worse (GPS is
+  // accurate to 2-4m, which is ~11 degrees of apparent movement at that range),
+  // while at ~200m the same error is under a degree and invisible. So it only
+  // pays for distant placements, and the creator is the one who knows which.
+  // ?ar-converge=1/0 still overrides it, for A/B testing in the field.
+  const convergeOverride = typeof window === 'undefined'
+    ? null
+    : new URLSearchParams(window.location.search).get('ar-converge');
+  const converge = convergeOverride != null
+    ? convergeOverride !== '0'
+    : configFor(zone).converge === true;
   // ── Compass-referenced yaw correction (?ar-yaw=1) ─────────────────────────
   // Off by default until it's proven in the field. A distant object is
   // effectively at infinity: its screen position is set by where the camera

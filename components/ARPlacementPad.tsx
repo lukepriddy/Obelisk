@@ -23,6 +23,9 @@ interface ARPlacementPadProps {
   onChange: (updates: { ground_distance_m?: number; ground_bearing_degrees?: number; facing_degrees?: number }) => void;
 }
 
+// Distances arrive in metres and are shown in feet, matching the rest of the UI.
+const toFeet = (metres: number) => Math.round(metres / 0.3048);
+
 const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 const cardinal = (deg: number) => COMPASS[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
 const norm = (deg: number) => Math.round(((deg % 360) + 360) % 360);
@@ -55,7 +58,10 @@ export const ARPlacementPad: React.FC<ARPlacementPadProps> = ({
       const dy = my - CY;
       const b = ((Math.atan2(dx, -dy) * 180 / Math.PI) + 360) % 360;
       const d = Math.min(maxDistance, Math.max(0, Math.hypot(dx, dy) / PAD_R * maxDistance));
-      onChange({ ground_distance_m: Math.round(d), ground_bearing_degrees: Math.round(b) });
+      // Snap to whole feet rather than whole metres, so the readout below moves
+      // one foot at a time instead of jumping in threes.
+      const snapped = Number((Math.round(d / 0.3048) * 0.3048).toFixed(3));
+      onChange({ ground_distance_m: snapped, ground_bearing_degrees: Math.round(b) });
     } else {
       const [px, py] = pinXY();
       const f = ((Math.atan2(mx - px, -(my - py)) * 180 / Math.PI) + 360) % 360;
@@ -75,6 +81,10 @@ export const ARPlacementPad: React.FC<ARPlacementPadProps> = ({
   const fy = py - 30 * Math.cos(facing * Math.PI / 180);
   const viewAngle = distance < 0.5 ? 90 : Math.round(Math.atan2(altitude, distance) * 180 / Math.PI);
   const steep = viewAngle >= 80;
+  // Line-of-sight distance, not ground distance — this is how far away the
+  // object actually looks, and it drives both apparent size and how much any
+  // tracking error shows up on screen.
+  const slantRange = Math.hypot(distance, altitude);
 
   return (
     <div>
@@ -117,13 +127,26 @@ export const ARPlacementPad: React.FC<ARPlacementPadProps> = ({
       </svg>
 
       <div className="mt-2 rounded-lg bg-zinc-800/60 px-3 py-2">
-        <p className="text-sm font-semibold text-zinc-100">{Math.round(distance)} m to the {cardinal(bearing)}</p>
+        <p className="text-sm font-semibold text-zinc-100">
+          {distance < 0.5 ? 'Directly overhead' : `${toFeet(distance)} ft to the ${cardinal(bearing)}`}
+        </p>
         <p className="text-xs text-zinc-400">Facing {cardinal(facing)} ({norm(facing)}°)</p>
         <p className={`text-xs mt-1 ${steep ? 'text-amber-400' : 'text-zinc-300'}`}>
           Players look up ≈ <span className="font-bold">{viewAngle}°</span>
+          {' '}from {toFeet(slantRange)} ft away
         </p>
         {steep && (
-          <p className="text-[11px] text-amber-400 mt-1">Almost directly overhead — players will have to look straight up to see it.</p>
+          <p className="text-[11px] text-amber-400 mt-1">
+            Almost directly overhead. Players have to look straight up, and a
+            near-vertical view is the least stable — the camera sees mostly sky,
+            which leaves the tracking with little to hold on to.
+          </p>
+        )}
+        {!steep && viewAngle <= 35 && (
+          <p className="text-[11px] text-zinc-500 mt-1">
+            A shallow angle keeps ground in shot, which is what the tracking
+            uses to stay locked. This is the steadiest kind of placement.
+          </p>
         )}
       </div>
     </div>

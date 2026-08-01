@@ -146,6 +146,13 @@ type AudioSourceType = 'preset' | 'upload' | 'url' | 'ai';
 const RADIUS_MIN_METERS = 2;
 const RADIUS_MAX_METERS = 500;
 const RADIUS_SLIDER_MAX = 1000;
+// The builder speaks feet, matching the rest of the UI; ar_config keeps storing
+// metres. Converting at the input boundary means the player, the placement
+// maths and the stored data are all untouched by the change.
+const M_PER_FT = 0.3048;
+const toFeet = (metres: number) => Math.round(metres / M_PER_FT);
+const fromFeet = (feet: number) => Number((feet * M_PER_FT).toFixed(3));
+
 const radiusToSlider = (radius: number) =>
   Math.round(
     Math.sqrt(
@@ -1539,22 +1546,46 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <label className="text-xs font-bold text-zinc-400 uppercase">Altitude <span className="float-right text-sky-400">{arConfig.altitude_m}m</span>
-                  <input type="range" min="3" max="200" step="1" value={arConfig.altitude_m} onChange={e => updateArConfig({ altitude_m: Number(e.target.value) })} className="w-full mt-2 accent-sky-500" />
+                <label className="text-xs font-bold text-zinc-400 uppercase">Altitude <span className="float-right text-sky-400">{toFeet(arConfig.altitude_m)} ft</span>
+                  <input type="range" min="10" max="650" step="5" value={toFeet(arConfig.altitude_m)} onChange={e => updateArConfig({ altitude_m: fromFeet(Number(e.target.value)) })} className="w-full mt-2 accent-sky-500" />
                 </label>
-                <label className="text-xs font-bold text-zinc-400 uppercase">Scale <span className="float-right text-sky-400">{arConfig.scale_m}m</span>
-                  <input type="range" min="0.5" max="30" step="0.5" value={arConfig.scale_m} onChange={e => updateArConfig({ scale_m: Number(e.target.value) })} className="w-full mt-2 accent-sky-500" />
+                <label className="text-xs font-bold text-zinc-400 uppercase">Scale <span className="float-right text-sky-400">{toFeet(arConfig.scale_m)} ft</span>
+                  <input type="range" min="2" max="100" step="1" value={toFeet(arConfig.scale_m)} onChange={e => updateArConfig({ scale_m: fromFeet(Number(e.target.value)) })} className="w-full mt-2 accent-sky-500" />
                 </label>
               </div>
 
               {arConfig.behavior === 'static' && (
-                <ARPlacementPad
-                  distance={arConfig.ground_distance_m ?? 0}
-                  bearing={arConfig.ground_bearing_degrees ?? 0}
-                  facing={arConfig.facing_degrees}
-                  altitude={arConfig.altitude_m}
-                  onChange={updateArConfig}
-                />
+                <>
+                  <ARPlacementPad
+                    distance={arConfig.ground_distance_m ?? 0}
+                    bearing={arConfig.ground_bearing_degrees ?? 0}
+                    facing={arConfig.facing_degrees}
+                    altitude={arConfig.altitude_m}
+                    onChange={updateArConfig}
+                  />
+
+                  {/* Off by default. Field testing showed live GPS correction
+                      clearly hurting a nearby object and doing little for a
+                      distant one, so it is opt-in per zone rather than global. */}
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={arConfig.converge === true}
+                      onChange={e => updateArConfig({ converge: e.target.checked })}
+                      className="mt-0.5 accent-sky-500 w-4 h-4 shrink-0"
+                    />
+                    <span>
+                      <span className="text-xs font-bold text-zinc-300 uppercase block">Correct position from GPS</span>
+                      <span className="text-[10px] text-zinc-500 block mt-0.5">
+                        Keeps nudging the object towards where GPS says it belongs.
+                        Leave off for anything nearby — GPS is accurate to a few
+                        feet, which is enough to visibly shove a close object
+                        around. Worth turning on only for distant placements,
+                        where tracking drift builds up and GPS error barely shows.
+                      </span>
+                    </span>
+                  </label>
+                </>
               )}
 
               {arConfig.behavior === 'flyover' && (

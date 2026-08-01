@@ -74,6 +74,13 @@ export interface ARObjectConfig {
   flight_bearing_degrees?: number;
   flight_distance_m?: number;
   flight_duration_seconds?: number;
+  // Correct the object's position from live GPS during a session. Off unless
+  // set, because it trades accurate local tracking for metre-accurate GPS:
+  // measured in the field, that is a clear loss for a nearby object (a 3m GPS
+  // error is ~11 degrees of apparent movement at 15m) and near-invisible for a
+  // distant one (~0.9 degrees at 200m). Only worth enabling for far placements,
+  // where accumulated tracking drift can outgrow GPS error.
+  converge?: boolean;
 }
 
 export interface ProgressionResource {
