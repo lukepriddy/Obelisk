@@ -102,8 +102,12 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
   }, [ready, needsHeardConfirm]);
 
   const progress = radiusFor(accuracy);
-  // 1 = wide and uncertain, 0 = locked on.
-  const ringScale = ready ? 0.08 : 0.22 + progress * 0.78;
+  // Wide and uncertain down to tight and confident — but never to nothing.
+  // A previous version settled at 0.08, which collapsed the whole composition
+  // to a dot at exactly the moment it should feel resolved, and left the
+  // screen looking empty. The locked size sits just inside where a good fix
+  // lands, so the contraction still reads as the ring finding its answer.
+  const ringScale = ready ? 0.52 : 0.55 + progress * 0.45;
 
   // Ready has to win over the accuracy wording, or hitting the ceiling leaves
   // the screen saying "Finding your position" while the button is live —
@@ -122,9 +126,45 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
     >
       <div className="flex-1 flex flex-col items-center justify-center px-8 text-center">
 
-        {/* The rings are a picture of the actual wait: radius is driven by live
-            accuracy, so it stalls when the fix stalls. Not a dressed-up bar. */}
-        <div className="relative w-56 h-56 flex items-center justify-center" aria-hidden="true">
+        {/* An instrument coming into focus. Graduated rings counter-rotate
+            while the fix is loose and halt on lock; the accuracy ring's radius
+            tracks live GPS accuracy, so the centre of the image is still a
+            picture of the real wait rather than a dressed-up bar.
+            It deliberately HOLDS at full size when ready — an earlier version
+            collapsed to a dot, which put the dullest frame at the climax. */}
+        <div
+          className="relative flex items-center justify-center"
+          style={{ width: 'min(19rem, 74vw)', aspectRatio: '1 / 1' }}
+          aria-hidden="true"
+        >
+          {/* Outer graduation: sparse, slow, clockwise. */}
+          <span
+            className="absolute rounded-full"
+            style={{
+              width: '100%', height: '100%',
+              border: `1px dashed ${accent}`,
+              opacity: ready ? 0.42 : 0.2,
+              animation: 'calibrate-spin 48s linear infinite',
+              animationPlayState: ready ? 'paused' : 'running',
+              transition: 'opacity 0.9s ease',
+            }}
+          />
+
+          {/* Inner graduation: dense, faster, anticlockwise. The opposed
+              directions are what make it read as an instrument rather than a
+              loading spinner. */}
+          <span
+            className="absolute rounded-full"
+            style={{
+              width: '76%', height: '76%',
+              border: `1px dashed ${accent}`,
+              opacity: ready ? 0.3 : 0.14,
+              animation: 'calibrate-spin-rev 29s linear infinite',
+              animationPlayState: ready ? 'paused' : 'running',
+              transition: 'opacity 0.9s ease',
+            }}
+          />
+
           {!ready && [0, 1, 2].map(i => (
             <span
               key={i}
@@ -132,40 +172,84 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
               style={{
                 width: '100%', height: '100%',
                 borderColor: accent,
-                animation: `calibrate-ripple 3s cubic-bezier(0.2,0.6,0.3,1) ${i * 1}s infinite`,
+                animation: `calibrate-ripple 3.4s cubic-bezier(0.2,0.6,0.3,1) ${i * 1.13}s infinite`,
               }}
             />
           ))}
 
+          {/* The accuracy ring — the honest part. */}
           <span
             className="absolute rounded-full border-2"
             style={{
               width: '100%', height: '100%',
               borderColor: accent,
               transform: `scale(${ringScale})`,
-              opacity: ready ? 0.9 : 0.55,
-              transition: 'transform 1.2s cubic-bezier(0.2,0.6,0.3,1), opacity 0.6s ease',
+              opacity: ready ? 0.85 : 0.5,
+              boxShadow: ready ? `0 0 40px -6px ${accent}` : 'none',
+              transition: 'transform 1.4s cubic-bezier(0.2,0.6,0.3,1), opacity 0.8s ease, box-shadow 0.8s ease',
             }}
           />
+
+          {/* Fires once on lock and travels out past everything. This is the
+              moment the screen exists for; mounting it only when ready is what
+              makes it play exactly once. */}
+          {ready && (
+            <span
+              className="absolute rounded-full border-2"
+              style={{
+                width: '100%', height: '100%',
+                borderColor: accent,
+                animation: 'calibrate-lock 1.1s cubic-bezier(0.15,0.7,0.25,1) forwards',
+              }}
+            />
+          )}
+
+          {/* Soft body inside the ring, so the settled state has weight instead
+              of being an outline around nothing. Two elements because the bloom
+              keyframes animate `transform`, which would otherwise override the
+              inline scale and detach the body from the ring it belongs to —
+              the wrapper carries the radius, the child carries the breathing. */}
+          <span
+            className="absolute"
+            style={{
+              width: '100%', height: '100%',
+              transform: `scale(${ringScale})`,
+              transition: 'transform 1.4s cubic-bezier(0.2,0.6,0.3,1)',
+            }}
+          >
+            <span
+              className="absolute inset-0 rounded-full"
+              style={{
+                background: `radial-gradient(circle, ${accent}38 0%, ${accent}00 70%)`,
+                opacity: ready ? 1 : 0.45,
+                animation: ready ? 'calibrate-bloom 4.5s ease-in-out infinite' : 'none',
+                transition: 'opacity 0.8s ease',
+              }}
+            />
+          </span>
 
           <span
             className="absolute rounded-full"
             style={{
-              width: 14, height: 14,
+              width: 12, height: 12,
               backgroundColor: accent,
-              boxShadow: `0 0 24px ${accent}`,
-              transform: ready ? 'scale(1.25)' : 'scale(1)',
-              transition: 'transform 0.6s cubic-bezier(0.2,0.6,0.3,1)',
+              boxShadow: `0 0 ${ready ? 34 : 20}px ${accent}`,
+              transform: ready ? 'scale(1.15)' : 'scale(1)',
+              transition: 'transform 0.7s cubic-bezier(0.2,0.6,0.3,1), box-shadow 0.8s ease',
             }}
           />
         </div>
 
         <p className="mt-10 text-lg font-semibold">{statusLine}</p>
 
+        {/* "Ready" over "give it a moment" read as the screen contradicting
+            itself, so the line becomes the next instruction once it settles. */}
         <p className="mt-2 text-sm opacity-60 leading-relaxed max-w-xs">
           {tooFar
             ? 'Head to the starting point and open it again from there.'
-            : 'Hold your phone up and give it a moment.'}
+            : ready
+              ? (needsHeardConfirm ? 'Tap below when you want to start.' : 'Here we go.')
+              : 'Hold your phone up and give it a moment.'}
         </p>
 
         {prefetch && prefetch.done < prefetch.total && !tooFar && (
