@@ -1306,6 +1306,10 @@ export const Player: React.FC = () => {
             >
               <div className="w-full max-w-sm mx-auto px-5 flex flex-col items-center text-center gap-5 py-4">
 
+                {tour.welcome_image_url && (
+                  <img src={tour.welcome_image_url} alt={tour.title} className="w-40 h-40 object-cover rounded-2xl shadow-2xl" />
+                )}
+
                 {/* Someone who opened a shared link from another town needs to
                     be told so. Without this the welcome screen looks identical
                     whether you're standing at the start or three states away,
@@ -1337,10 +1341,6 @@ export const Player: React.FC = () => {
                     </div>
                   );
                 })()}
-
-                {tour.welcome_image_url && (
-                  <img src={tour.welcome_image_url} alt={tour.title} className="w-40 h-40 object-cover rounded-2xl shadow-2xl" />
-                )}
 
                 {tour.description && (
                   <p className="text-sm leading-relaxed opacity-80 w-full whitespace-pre-wrap" style={{ color: textColor, textAlign: tour.description_align === 'left' ? 'left' : 'center' }}>{tour.description}</p>
