@@ -1286,6 +1286,7 @@ export const Player: React.FC = () => {
           startLat={tour.lat}
           startLng={tour.lng}
           onReady={() => setCalibrating(false)}
+          onBack={() => { setCalibrating(false); exitExperience(); }}
         />
       )}
 

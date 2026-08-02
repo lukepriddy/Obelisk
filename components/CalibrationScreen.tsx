@@ -45,6 +45,9 @@ export interface CalibrationScreenProps {
   startLat: number;
   startLng: number;
   onReady: () => void;
+  /** Return to the welcome screen. The only escape from the too-far state
+   *  other than overriding it, so this screen is never a dead end. */
+  onBack: () => void;
 }
 
 /** Accuracy spans ~1000m to ~5m, so a linear map sits pinned at the outer edge
@@ -58,7 +61,7 @@ const radiusFor = (accuracy: number | null) => {
 export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
   accent, bg, textColor, fontFamily,
   accuracy, distanceToStart, furthestMeters, prefetch, gpsUnavailable,
-  startLat, startLng, onReady,
+  startLat, startLng, onReady, onBack,
 }) => {
   const [elapsed, setElapsed] = useState(0);
   const [needsHeardConfirm] = useState(() => {
@@ -222,9 +225,33 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
           of this experience. You take part at your own risk.
         </p>
 
-        {/* Only first-timers get a button; returning players are released
-            automatically the moment the fix settles. */}
-        {needsHeardConfirm && (
+        {tooFar ? (
+          // Too far is never a dead end. Going back is the useful action from
+          // ten miles away — the welcome screen has the description, the map and
+          // the coordinates — but "go anyway" always stays available, because
+          // someone about to drive there, or testing their own tour, knows more
+          // about their situation than a radius check does.
+          <div className="space-y-3">
+            <button
+              type="button"
+              onClick={onBack}
+              className="w-full py-4 rounded-2xl font-bold text-white"
+              style={{ backgroundColor: accent }}
+            >
+              Back to the details
+            </button>
+            <button
+              type="button"
+              onClick={release}
+              className="w-full py-2 text-sm font-semibold opacity-50"
+              style={{ color: textColor }}
+            >
+              Go anyway
+            </button>
+          </div>
+        ) : needsHeardConfirm ? (
+          // Only first-timers get a button; returning players are released
+          // automatically the moment the fix settles.
           <button
             type="button"
             onClick={release}
@@ -232,22 +259,9 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
             className="w-full py-4 rounded-2xl font-bold text-white transition-opacity disabled:opacity-30"
             style={{ backgroundColor: accent }}
           >
-            {tooFar ? 'Go anyway' : ready ? 'I’m ready' : 'Just a moment…'}
+            {ready ? 'I’m ready' : 'Just a moment…'}
           </button>
-        )}
-
-        {/* A soft gate: someone 1.1 miles out may be walking towards the start
-            right now, and bouncing them punishes the person doing it right. */}
-        {tooFar && !needsHeardConfirm && (
-          <button
-            type="button"
-            onClick={release}
-            className="w-full py-4 rounded-2xl font-bold border"
-            style={{ borderColor: `${textColor}33`, color: textColor }}
-          >
-            Go anyway
-          </button>
-        )}
+        ) : null}
       </div>
     </div>
   );
