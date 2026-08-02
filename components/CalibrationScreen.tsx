@@ -164,7 +164,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
 
         <p className="mt-2 text-sm opacity-60 leading-relaxed max-w-xs">
           {tooFar
-            ? 'This experience plays at a specific place. Head to the starting point and open it again from there.'
+            ? 'Head to the starting point and open it again from there.'
             : 'Hold your phone up and give it a moment.'}
         </p>
 
