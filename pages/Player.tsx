@@ -19,6 +19,7 @@ import { FONT_STYLES, MAP_STYLES, DEFAULT_MAP_STYLE } from '../constants';
 import { Loader2, PlayCircle, Volume2, MessageCircle, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu, Layers, Locate, RotateCcw, ZoomIn, ZoomOut, Backpack, Gem, Trash2, Info, RefreshCw, LogOut, Bug, Navigation, ChevronRight, Camera } from 'lucide-react';
 import { ChatInterface } from '../components/ChatInterface';
 import { ARCameraOverlay } from '../components/ARCameraOverlay';
+import { CalibrationScreen } from '../components/CalibrationScreen';
 
 // Player map style options, in selector order (Satellite HD default first).
 const PLAYER_MAP_STYLE_ORDER = ['satellite-hd', 'satellite', 'voyager', 'dark', 'light', 'streets'] as const;
@@ -95,6 +96,9 @@ export const Player: React.FC = () => {
   const [showGpsRetry, setShowGpsRetry] = useState(false);
   const [retryingGps, setRetryingGps] = useState(false);
   const [audioStarted, setAudioStarted] = useState(false);
+  // Covers the map between Begin and a settled GPS fix. A layer, never a step
+  // in front of startAudio() — see docs/calibration-screen.md.
+  const [calibrating, setCalibrating] = useState(false);
   const [showAudioResume, setShowAudioResume] = useState(false);
   const [resumingAudio, setResumingAudio] = useState(false);
   // Background audio prefetch progress — null when idle/complete.
@@ -187,6 +191,7 @@ export const Player: React.FC = () => {
     setActiveCharacterZone(null);
     activeCharZoneRef.current = null;
     setAudioStarted(false);
+    setCalibrating(false);
     if (sessionIdRef.current) {
       endSession(sessionIdRef.current);
       sessionIdRef.current = null;
@@ -1118,6 +1123,15 @@ export const Player: React.FC = () => {
 
   const startAudio = async () => {
     setShowAudioResume(false);
+    // Both of these must happen inside the gesture. The tone doubles as the
+    // audio test and as iOS's unlock; deferring it past an await would lose
+    // the grant, which fails silently and only on real phones.
+    setCalibrating(true);
+    try {
+      const tone = new Audio('/calibration-tone.m4a');
+      tone.volume = 0.7;
+      void tone.play().catch(() => { /* a test, not a gate */ });
+    } catch { /* ditto */ }
     // Create and silently prime media elements inside the Begin gesture so the
     // first real zone playback is less likely to be blocked or routed badly.
     zones
@@ -1256,6 +1270,25 @@ export const Player: React.FC = () => {
       </div>
 
       {/* ── WELCOME SCREEN (z-2000, covers map + bars) ── */}
+      {/* Sits above the map but below chat and the AR view, so it covers the
+          lurching dot without ever trapping a player under a later overlay. */}
+      {calibrating && tour && (
+        <CalibrationScreen
+          accent={tour.accent_color || '#10b981'}
+          bg={tour.bg_color || '#09090b'}
+          textColor={tour.text_color || '#ffffff'}
+          fontFamily={FONT_STYLES[tour.font_style || 'sans']?.fontFamily}
+          accuracy={gpsFixRef.current?.accuracy ?? null}
+          distanceToStart={userPos ? getDistance(userPos[0], userPos[1], tour.lat, tour.lng) : null}
+          furthestMeters={trailStats(tour, zones).furthestMeters}
+          prefetch={prefetchStatus}
+          gpsUnavailable={Boolean(gpsError) || simulationMode}
+          startLat={tour.lat}
+          startLng={tour.lng}
+          onReady={() => setCalibrating(false)}
+        />
+      )}
+
       {!audioStarted && tour && (() => {
         const bg         = tour.bg_color    || '#09090b';
         const accent     = tour.accent_color || '#10b981';
@@ -1460,17 +1493,11 @@ export const Player: React.FC = () => {
                   <PlayCircle size={22} /> Begin
                 </button>
 
-                {/* Real-world safety notice. This experience is about to walk
-                    someone through physical space while they look at a phone;
-                    the locations are chosen by a creator, not vetted by us. */}
-                <p
-                  className="text-[11px] leading-relaxed text-center px-1"
-                  style={{ color: textColor, opacity: 0.55 }}
-                >
-                  Stay aware of your surroundings — watch for traffic, obey local laws,
-                  and don't enter private property. Locations are chosen by the creator
-                  of this experience. You take part at your own risk.
-                </p>
+                {/* The real-world safety notice moved to the calibration screen.
+                    As background text here it was wallpaper people scrolled
+                    past; shown at the moment of commitment, after Begin, it is
+                    a beat they actually read — and this screen gets its space
+                    back. Still shown before anyone walks anywhere. */}
                 {/* Players never sign up, so this is the only place they can
                     reach the privacy policy — and the app reads their GPS. */}
                 <a
