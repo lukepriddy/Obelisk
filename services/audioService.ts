@@ -451,9 +451,20 @@ export class AudioService {
   async primeLoadedAudio(): Promise<void> {
     if (!this.isUnlocked) return;
 
+    // Primed one at a time rather than all at once.
+    //
+    // Each play()/pause() pair activates the audio route. Over a speaker that
+    // is silent, but on Bluetooth — AirPods especially — every activation can
+    // produce a physical blip, so firing one per zone simultaneously turns a
+    // warm-up into a burst of clicks. Spacing them lets the route settle
+    // between primes. Nothing else changes: the same elements are primed, in
+    // the same way, just not in the same instant.
+    const STAGGER_MS = 120;
+    const pending = Array.from(this.nodes.entries())
+      .filter(([, nodeData]) => !nodeData.destroyed && !nodeData.hasStarted && !nodeData.played);
+
     const attempts: Promise<void>[] = [];
-    this.nodes.forEach((nodeData, zoneId) => {
-      if (nodeData.destroyed || nodeData.hasStarted || nodeData.played) return;
+    pending.forEach(([zoneId, nodeData], index) => {
       const { audioEl } = nodeData;
       const wasMuted = audioEl.muted;
       const previousVolume = audioEl.volume;
@@ -462,7 +473,13 @@ export class AudioService {
       if (nodeData.gainNode) nodeData.gainNode.gain.value = 0;
 
       attempts.push(
-        audioEl.play()
+        new Promise<void>(resolve => window.setTimeout(resolve, index * STAGGER_MS))
+          .then(() => {
+            // The zone may have been torn down, or genuinely started playing,
+            // during the wait — neither should be primed over.
+            if (nodeData.destroyed || nodeData.hasStarted) return undefined;
+            return audioEl.play();
+          })
           .then(() => {
             // On slow networks this promise can resolve AFTER the zone's real
             // playback legitimately started (player begins inside zone 1).
@@ -483,9 +500,12 @@ export class AudioService {
       );
     });
 
+    // The safety timeout has to outlast the stagger, or it would fire while
+    // later zones are still queued and leave them unprimed.
     await Promise.race([
       Promise.all(attempts).then(() => undefined),
-      new Promise<void>(resolve => window.setTimeout(resolve, 1200)),
+      new Promise<void>(resolve =>
+        window.setTimeout(resolve, Math.min(5000, 1200 + pending.length * STAGGER_MS))),
     ]);
   }
 

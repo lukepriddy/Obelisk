@@ -38,6 +38,59 @@ whether the camera can resolve the texture it needs.
 Keeping ground in the lower half of the shot is the single most effective thing
 a creator can do for stability, which is why the placement pad now says so.
 
+## Parallax before placement
+
+**A single camera recovers depth only from translation.** Rotation gives it
+nothing. Until the phone has physically moved, the engine's depth map is a
+guess, and anything anchored into it is anchored into that guess.
+
+The original code placed the object the instant the scene built — against the
+weakest map of the session. Everything after was the engine correcting that
+decision, which is what produced sudden jumps and visible *rescaling* at close
+range. Rescaling is the diagnostic: only a change in distance resizes an
+object, so a resize means the origin shifted in depth.
+
+This was found from a user observation, not from instrumentation: stability
+correlated with how much the phone had been waved around before the object
+appeared. Worth remembering as a class of clue — "it works better when I do X
+first" usually names the missing precondition.
+
+Placement now waits for the camera's **bounding-box extent** to pass 0.4m.
+Extent, not summed path length: early tracking is noisy, and summing
+frame-to-frame movement lets jitter accumulate until a phone lying on a table
+passes the gate. Simulated against the real thresholds — 13s of ±2cm jitter
+reaches 0.04m and never passes; a 60cm side-step passes at 2.2s; walking 1.5m
+forward passes at 1.1s; rotating in place reaches 0.02m and correctly earns
+nothing. A 10s timeout places regardless so nobody is trapped.
+
+The position is then derived from the camera's pose at that moment
+(`localTargetFrom`), not from the origin as it stood at second zero.
+
+**Why there is no scanning minigame.** One was designed — three fuzzy points
+resolving as parallax accumulates, near ones first, which is physically honest.
+It was not built because the simulation showed anyone who moves at all is
+placed within 1–2 seconds, and that is not long enough to need filling. If the
+gate is ever raised, or real use shows people standing still, it becomes worth
+building. Do not add it without that evidence.
+
+## Close range is the hardest case
+
+The same tracking error is worth far more on screen up close:
+
+| Player distance | A 0.3m origin shift shows as |
+|---|---|
+| 3 m | ~10% size change, ~6° sideways |
+| 20 m | ~1.5% size change, ~0.9° sideways |
+
+Roughly seven times more visible at 3m. Walking right up to an object is
+inherently the hardest thing markerless tracking can be asked to do.
+
+Counterintuitively, **daylight near the ground can be worse than open sky.**
+Grass and pavement are self-similar: plenty of features, all alike, so
+relocalisation can match the wrong ones and land the origin in the wrong place.
+That yields discrete jumps rather than gradual drift. The good case is varied
+structure at mixed depths, not merely "more light" or "more features".
+
 ## GPS convergence — kept, off by default, per zone
 
 Recomputes the object's position from live GPS and eases toward it (20s time

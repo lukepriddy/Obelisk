@@ -42,6 +42,27 @@ type Phase = 'intro' | 'starting' | 'ready' | 'error';
 const toRad = (degrees: number) => (degrees * Math.PI) / 180;
 const toDeg = (radians: number) => (radians * 180) / Math.PI;
 
+/**
+ * How far the camera must actually travel before the object is anchored.
+ *
+ * A single camera recovers depth only from parallax, which requires the phone
+ * to *translate* — rotation gives it nothing. Placing at scene-build time
+ * anchors against the weakest depth map of the session, and everything after
+ * is the engine correcting that guess: the sudden jumps and rescaling that
+ * show up most at close range, where the same error is worth several times
+ * more on screen.
+ *
+ * Measured as the extent of the camera's bounding box, NOT the summed path
+ * length. Early tracking is noisy, and summing frame-to-frame movement lets
+ * jitter accumulate until a phone sitting still on a table "passes". Jitter
+ * rattles around inside a tiny box; a real side-step grows it immediately.
+ */
+const PARALLAX_EXTENT_M = 0.4;
+/** Nobody gets trapped behind a movement requirement — place regardless. */
+const SCAN_TIMEOUT_MS = 10000;
+/** Long enough not to pop, short enough not to read as an effect. */
+const REVEAL_MS = 350;
+
 /** Compass bearing from one coordinate to another, degrees from true north. */
 const bearingTo = (lat1: number, lng1: number, lat2: number, lng2: number) => {
   const phi1 = toRad(lat1);
@@ -213,6 +234,14 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
   // without walking the scene graph every frame.
   const fadeMaterialsRef = useRef<THREE.Material[]>([]);
 
+  // ── Parallax scan ─────────────────────────────────────────────────────────
+  // The object stays hidden until the camera has genuinely moved, so it is
+  // anchored against a depth map the engine actually believes in.
+  const scanBoxRef = useRef<{ min: THREE.Vector3; max: THREE.Vector3 } | null>(null);
+  const scanStartedAtRef = useRef(0);
+  const placedAtRef = useRef(0);
+  const [scanExtent, setScanExtent] = useState(0);
+
   const [phase, setPhase] = useState<Phase>('intro');
   const [error, setError] = useState<string | null>(null);
   const [modelError, setModelError] = useState<string | null>(null);
@@ -285,6 +314,10 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
       // carry an explicit world-up vector to stop objects rolling with the
       // phone; here that cannot happen.
       object.rotation.y = toRad(-placement.facing);
+      // Added to the scene but withheld. Its real position is computed once the
+      // parallax scan passes, against the camera pose at that moment rather
+      // than the origin as it stood at second zero.
+      object.visible = false;
       scene.add(object);
       objectRef.current = object;
     };
@@ -362,6 +395,9 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
       headingRef.current = heading ?? 0;
       lastFrameRef.current = 0;
       lastCameraRef.current = null;
+      scanBoxRef.current = null;
+      scanStartedAtRef.current = 0;
+      placedAtRef.current = 0;
       fastUntilRef.current = 0;
 
       stepRef.current = 'preparing canvas';
@@ -428,6 +464,70 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
             const config = configRef.current;
             if (!object) return;
 
+            // ── Parallax scan, then place ────────────────────────────────────
+            {
+              const { camera } = window.XR8.Threejs.xrScene();
+              const p = camera.position;
+              const box = scanBoxRef.current;
+              if (!box) {
+                scanBoxRef.current = { min: p.clone(), max: p.clone() };
+                scanStartedAtRef.current = performance.now();
+              } else {
+                box.min.min(p);
+                box.max.max(p);
+              }
+
+              if (!object.visible) {
+                const b = scanBoxRef.current!;
+                // Largest single-axis displacement. Walking towards the object
+                // counts as readily as stepping sideways — both give the
+                // triangulation baseline the tracker needs.
+                const extent = Math.max(b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z);
+                if (arDebug) setScanExtent(extent);
+
+                const movedEnough = extent >= PARALLAX_EXTENT_M
+                  && trackingRef.current.status === 'NORMAL';
+                const waitedTooLong = performance.now() - scanStartedAtRef.current > SCAN_TIMEOUT_MS;
+                if (!movedEnough && !waitedTooLong) return;
+
+                // Re-derive the position from the settled frame where possible.
+                // localTargetFrom works from the camera's CURRENT pose, so the
+                // anchor no longer inherits the origin's opening guess.
+                const anchorNow = targetWorldRef.current;
+                const hereNow = livePositionRef.current;
+                if (anchorNow && hereNow && config.behavior !== 'flyover') {
+                  object.position.copy(localTargetFrom(
+                    hereNow[0], hereNow[1], anchorNow, headingRef.current, p, config.altitude_m,
+                  ));
+                }
+                object.visible = true;
+                placedAtRef.current = performance.now();
+              }
+            }
+
+            // Reveal fade. Multiplied into whatever opacity the behaviour wants
+            // rather than assigned, so it composes with the flyover loop fade
+            // instead of being overwritten by it a frame later.
+            const reveal = placedAtRef.current
+              ? Math.min(1, (performance.now() - placedAtRef.current) / REVEAL_MS)
+              : 1;
+            if (reveal < 1 && config.behavior !== 'flyover') {
+              for (const material of fadeMaterialsRef.current) {
+                material.transparent = true;
+                // A transparent material that still writes depth occludes its
+                // own far side, so the model looks hollow mid-fade.
+                material.depthWrite = false;
+                material.opacity = reveal;
+              }
+            } else if (config.behavior !== 'flyover' && placedAtRef.current && reveal >= 1) {
+              for (const material of fadeMaterialsRef.current) {
+                if (!material.transparent) continue;
+                material.transparent = false;
+                material.depthWrite = true;
+                material.opacity = 1;
+              }
+            }
+
 
             // ── Ease towards where live GPS says the object belongs ──
             // Only for static objects; a flyover defines its own path below.
@@ -483,9 +583,13 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
             // last stretch and back in over the first hides the reset: it flies
             // away, then arrives again, instead of teleporting mid-air.
             const FADE = 0.12;
-            const opacity = progress < FADE ? progress / FADE
+            const loopOpacity = progress < FADE ? progress / FADE
               : progress > 1 - FADE ? (1 - progress) / FADE
               : 1;
+            // Composed with the reveal rather than replacing it, so a flyover
+            // arriving mid-loop still fades in instead of snapping to whatever
+            // the loop position happens to imply.
+            const opacity = loopOpacity * reveal;
             const fading = opacity < 0.999;
             for (const material of fadeMaterialsRef.current) {
               material.transparent = fading;
@@ -629,7 +733,11 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
         // it rotates with the phone and appears to follow you as you walk, so
         // the honest thing is to say what would fix it.
         const degraded = tracking.status && tracking.status !== 'NORMAL';
-        const hint = !degraded ? null
+        // Until the object is anchored, the guidance IS the task rather than a
+        // warning — the movement it asks for is what earns the placement.
+        const scanning = !placedAtRef.current;
+        const hint = scanning ? 'Move your phone slowly side to side to read the space'
+          : !degraded ? null
           : tracking.reason === 'INSUFFICIENT_FEATURES' ? 'Point at something with more detail'
           : tracking.reason === 'INSUFFICIENT_LIGHT' ? 'Too dark to track — more light will help'
           : tracking.reason === 'EXCESSIVE_MOTION' || tracking.reason === 'MOTION' ? 'Move a little slower'
@@ -646,6 +754,7 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
               <div className="rounded bg-black/80 px-2 py-1 text-[10px] font-mono text-emerald-300">
                 {tracking.status || 'no status'}{tracking.reason ? ` · ${tracking.reason}` : ''}
                 {' · '}conv {converge ? 'on' : 'off'}
+                {' · '}scan {scanExtent.toFixed(2)}m{placedAtRef.current ? ' ✓' : ''}
                 {converge && ` · off by ${driftRef.current.toFixed(1)}m`}
                 {converge && performance.now() < fastUntilRef.current && ' · RESYNC'}
               </div>

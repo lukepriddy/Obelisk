@@ -130,6 +130,28 @@ would be clipped by the content layer's own `overflow-hidden` anyway.
    does not catch it** — the geometry is correct and every rule passes. Reading
    the markup for a `backdrop-blur` class on a bled element is what catches it.
 
+## Check Safari's page zoom before anything else
+
+**A sliver reported alongside "the text looks smaller" or "everything is
+narrower" is a page-zoom problem, not a layout bug.** Tap `aA` in the Safari
+address bar and read Page Zoom. iOS remembers it *per site*, so once it is
+knocked off 100% it stays that way across every visit, on every page.
+
+The mechanism: `overlay-edge-bleed` overhangs by 16 **CSS** pixels. Page zoom
+scales CSS pixels, so at 85% that overhang covers fewer real pixels — while
+Safari's visible-edge-versus-layout-box mismatch does not shrink with it. The
+overscan stops being enough and the map reappears at the edge.
+
+Confirmed in the field on 2026-08-02: a welcome-screen sliver plus small text,
+both gone the moment zoom was set back to 100%. No code changed.
+
+Known fragility worth remembering: the zoom clamp in `index.html` stops *pinch*
+zoom inside the page, but Safari's per-site Page Zoom is a browser-level
+setting the page cannot override. A player who has ever set it on this domain
+will see seams that nobody can reproduce. If that turns out to matter, the
+lever is a wider overhang — the lost strip is invisible anyway, since sheets
+carry 24px corner radii and 24px of content padding.
+
 ## Checking for a regression
 
 Grep, don't just read. Both of these should return nothing:

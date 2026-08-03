@@ -135,6 +135,42 @@
       @media screen and (orientation: landscape) and (max-height: 500px) {
         #landscape-lock { display: flex; }
       }
+
+      /* ── Calibration screen ────────────────────────────────────────────────
+         An instrument coming into focus, not a spinner. Counter-rotating
+         graduated rings while the fix is loose; on lock they halt, a single
+         wave travels outward, and the composition HOLDS at full size. The
+         earlier version collapsed to a dot, which put the least interesting
+         frame at the climax and left the screen empty.
+         Transform and opacity only — this runs while the audio engine and map
+         are warming up underneath, so it has to stay on the compositor. */
+      @keyframes calibrate-ripple {
+        0%   { transform: scale(0.28); opacity: 0; }
+        18%  { opacity: 0.42; }
+        100% { transform: scale(1.05); opacity: 0; }
+      }
+      @keyframes calibrate-spin      { to { transform: rotate(360deg); } }
+      @keyframes calibrate-spin-rev  { to { transform: rotate(-360deg); } }
+      /* The lock. Fires once, travels past the rings, and is the moment the
+         whole screen exists for. */
+      @keyframes calibrate-lock {
+        0%   { transform: scale(0.34); opacity: 0.9; }
+        100% { transform: scale(1.9);  opacity: 0; }
+      }
+      @keyframes calibrate-bloom {
+        0%   { transform: scale(1);    opacity: 0.55; }
+        55%  { transform: scale(1.14); opacity: 0.22; }
+        100% { transform: scale(1);    opacity: 0.55; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        /* Travelling and spinning are exactly what this setting is for. The
+           accuracy ring still moves — that one is information, not decoration. */
+        @keyframes calibrate-ripple { 0%, 100% { transform: scale(0.7); opacity: 0.16; } }
+        @keyframes calibrate-spin     { to { transform: rotate(0deg); } }
+        @keyframes calibrate-spin-rev { to { transform: rotate(0deg); } }
+        @keyframes calibrate-lock   { 0%, 100% { transform: scale(1); opacity: 0; } }
+        @keyframes calibrate-bloom  { 0%, 100% { transform: scale(1); opacity: 0.5; } }
+      }
     </style>
   </head>
 
