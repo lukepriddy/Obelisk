@@ -179,49 +179,72 @@ function buildTags(tour: TourRow, zones: { lat: number; lng: number }[], url: st
   return tags.join('\n    ');
 }
 
-export default async function handler(request: Request): Promise<Response> {
-  const url = new URL(request.url);
+/**
+ * Node request/response, structurally typed so this needs no @vercel/node
+ * dependency. Vercel's default runtime is Node (Fluid Compute), which calls
+ * handler(req, res) — NOT the Web `Request`/`Response` signature. An earlier
+ * version used the Web form, and since `req.url` is a bare path there rather
+ * than an absolute URL, `new URL(req.url)` threw on the first line and every
+ * player page 500'd. Switching runtimes would also work; staying on Node is
+ * the currently recommended default.
+ */
+type NodeReq = { url?: string; headers: Record<string, string | string[] | undefined> };
+type NodeRes = {
+  statusCode: number;
+  setHeader: (name: string, value: string) => void;
+  end: (body?: string) => void;
+};
+
+const sendHtml = (res: NodeRes, body: string) => {
+  res.statusCode = 200;
+  res.setHeader('content-type', 'text/html; charset=utf-8');
+  // Cached at the edge so the extra hop isn't paid per visitor, and
+  // revalidated in the background so an edited tour updates quickly.
+  res.setHeader('cache-control', 'public, s-maxage=300, stale-while-revalidate=86400');
+  res.end(body);
+};
+
+const firstHeader = (value: string | string[] | undefined) =>
+  (Array.isArray(value) ? value[0] : value || '').split(',')[0].trim();
+
+export default async function handler(req: NodeReq, res: NodeRes): Promise<void> {
+  // Reconstruct the absolute URL the proxy received; behind Vercel the
+  // forwarded headers are the reliable source, and req.url is path-only.
+  const proto = firstHeader(req.headers['x-forwarded-proto']) || 'https';
+  const host = firstHeader(req.headers['x-forwarded-host']) || firstHeader(req.headers.host);
+  const origin = `${proto}://${host}`;
+  const pathname = (req.url || '/').split('?')[0];
+
   // The built shell, served by the same deployment. Requesting it over HTTP
   // rather than reading from disk keeps this agnostic to Vercel's output
   // layout, which is not a stable contract.
-  const shellUrl = `${url.origin}/index.html`;
-
   let shell: string;
   try {
-    const res = await fetch(shellUrl, { headers: { 'x-obelisk-shell': '1' } });
-    if (!res.ok) throw new Error(`shell ${res.status}`);
-    shell = await res.text();
+    const shellRes = await fetch(`${origin}/index.html`, { headers: { 'x-obelisk-shell': '1' } });
+    if (!shellRes.ok) throw new Error(`shell ${shellRes.status}`);
+    shell = await shellRes.text();
   } catch {
     // Nothing sensible to serve. Redirecting would loop; a bare 500 at least
     // surfaces the problem rather than silently serving a blank page.
-    return new Response('Unavailable', { status: 500 });
+    res.statusCode = 500;
+    res.end('Unavailable');
+    return;
   }
 
   try {
-    const match = url.pathname.match(/^\/player\/([^/?#]+)/);
-    const tourId = match?.[1];
-    if (!tourId) return html(shell);
+    const tourId = pathname.match(/^\/player\/([^/?#]+)/)?.[1];
+    if (!tourId) return sendHtml(res, shell);
 
     const data = await fetchTour(tourId);
-    if (!data) return html(shell);
+    if (!data) return sendHtml(res, shell);
 
-    const canonical = `${url.origin}/player/${tourId}`;
-    const injected = shell.replace('</head>', `  ${buildTags(data.tour, data.zones, canonical)}\n  </head>`);
-    return html(injected);
+    const canonical = `${origin}/player/${tourId}`;
+    return sendHtml(res, shell.replace(
+      '</head>',
+      `  ${buildTags(data.tour, data.zones, canonical)}\n  </head>`,
+    ));
   } catch {
     // Any unforeseen failure past this point still serves a working player.
-    return html(shell);
+    return sendHtml(res, shell);
   }
-}
-
-function html(body: string) {
-  return new Response(body, {
-    status: 200,
-    headers: {
-      'content-type': 'text/html; charset=utf-8',
-      // Cached at the edge so the extra hop isn't paid per visitor, and
-      // revalidated in the background so an edited tour updates quickly.
-      'cache-control': 'public, s-maxage=300, stale-while-revalidate=86400',
-    },
-  });
 }
