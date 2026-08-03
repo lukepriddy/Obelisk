@@ -25,7 +25,8 @@ const GOOD_ACCURACY_M = 25;
 const DISTANCE_MARGIN_M = 400;
 const MIN_DISTANCE_GATE_M = 1600;
 
-const HEARD_KEY = 'obelisk.audio.confirmed.v1';
+/** Same file the Begin gesture plays, replayed on demand from here. */
+const TONE_SRC = '/calibration-tone.m4a';
 
 export interface CalibrationScreenProps {
   accent: string;
@@ -64,12 +65,25 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
   startLat, startLng, onReady, onBack,
 }) => {
   const [elapsed, setElapsed] = useState(0);
-  const [needsHeardConfirm] = useState(() => {
-    try { return localStorage.getItem(HEARD_KEY) !== '1'; } catch { return false; }
-  });
   const [showAudioHelp, setShowAudioHelp] = useState(false);
+  const [replaying, setReplaying] = useState(false);
   const mountedAt = useRef(Date.now());
   const releasedRef = useRef(false);
+  const toneRef = useRef<HTMLAudioElement | null>(null);
+
+  // A tap is its own gesture, so a fresh element is allowed to play even on
+  // iOS. Reused across taps so rapid presses restart rather than overlap.
+  const replayTone = () => {
+    try {
+      const tone = toneRef.current ?? new Audio(TONE_SRC);
+      toneRef.current = tone;
+      tone.volume = 0.7;
+      tone.currentTime = 0;
+      setReplaying(true);
+      window.setTimeout(() => setReplaying(false), 1200);
+      void tone.play().catch(() => setReplaying(false));
+    } catch { setReplaying(false); }
+  };
 
   useEffect(() => {
     const id = window.setInterval(() => setElapsed(Date.now() - mountedAt.current), 200);
@@ -90,16 +104,13 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
   const release = () => {
     if (releasedRef.current) return;
     releasedRef.current = true;
-    try { localStorage.setItem(HEARD_KEY, '1'); } catch { /* private mode */ }
     onReady();
   };
 
-  // Auto-release only for returning players. First-timers confirm the tone by
-  // hand, which is both the audio test and a deliberate start.
-  useEffect(() => {
-    if (ready && !needsHeardConfirm) release();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, needsHeardConfirm]);
+  // Deliberately no auto-release. An earlier version let returning players
+  // straight through, which made the screen flash open and shut on a second
+  // visit while zones were still downloading — and zones reload every time, so
+  // "returning" buys nothing. Everyone gets the same beat and taps to start.
 
   const progress = radiusFor(accuracy);
   // Wide and uncertain down to tight and confident — but never to nothing.
@@ -248,7 +259,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
           {tooFar
             ? 'Head to the starting point and open it again from there.'
             : ready
-              ? (needsHeardConfirm ? 'Tap below when you want to start.' : 'Here we go.')
+              ? 'Tap below when you want to start.'
               : 'Hold your phone up and give it a moment.'}
         </p>
 
@@ -277,25 +288,32 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
       >
         {/* The audio check. No API can answer this — on iOS the silent switch
             and system volume are both invisible to the page — so the only way
-            to know is to ask, and the only reasonable time is once. */}
-        {needsHeardConfirm && !tooFar && (
+            to know is to ask. Being able to hear it again on demand is what
+            turns that from a claim into something the player can verify. */}
+        {!tooFar && (
           <div className="mb-6 text-center">
-            {showAudioHelp ? (
-              <div className="text-sm leading-relaxed opacity-70">
-                <p className="font-semibold mb-1" style={{ color: textColor }}>No sound?</p>
-                <p>Check the switch on the side of your phone — it silences audio
-                   even when the volume is up. Then turn the volume up and tap below.</p>
-              </div>
-            ) : (
-              <p className="text-sm opacity-70 flex items-center justify-center gap-2">
-                <Volume2 size={15} /> You should have heard a soft chime
+            {showAudioHelp && (
+              <p className="text-sm leading-relaxed opacity-70 mb-3">
+                Check the switch on the side of your phone — it silences audio even
+                when the volume is up. Turn the volume up, then play it again.
               </p>
             )}
+
+            <button
+              type="button"
+              onClick={replayTone}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full border text-sm transition-opacity active:opacity-60"
+              style={{ borderColor: `${textColor}26`, color: textColor, opacity: replaying ? 1 : 0.75 }}
+            >
+              <Volume2 size={15} style={{ color: replaying ? accent : undefined }} />
+              {replaying ? 'Playing…' : 'Play the chime again'}
+            </button>
+
             {!showAudioHelp && (
               <button
                 type="button"
                 onClick={() => setShowAudioHelp(true)}
-                className="mt-1 text-xs underline opacity-50"
+                className="block mx-auto mt-2 text-xs underline opacity-45"
               >
                 I didn’t hear anything
               </button>
@@ -333,9 +351,10 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
               Go anyway
             </button>
           </div>
-        ) : needsHeardConfirm ? (
-          // Only first-timers get a button; returning players are released
-          // automatically the moment the fix settles.
+        ) : (
+          // Everyone taps to start, every time. The zones reload on each open,
+          // so releasing returning players automatically only meant the screen
+          // flashed past while audio was still downloading behind it.
           <button
             type="button"
             onClick={release}
@@ -345,7 +364,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
           >
             {ready ? 'I’m ready' : 'Just a moment…'}
           </button>
-        ) : null}
+        )}
       </div>
     </div>
   );
