@@ -74,6 +74,10 @@ const ViewportStats: React.FC<{ labelColor: string; valueColor: string }> = ({ l
  * Nothing behind this needs to react to it, and it must not swallow the
  * tap-to-dismiss on the wrapper, hence `pointer-events-none`.
  */
+/** Length of public/calibration-tone.m4a, rounded up. Used to keep heavy
+ *  background work off the audio path while the tone is still sounding. */
+const TONE_DURATION_MS = 5000;
+
 const SheetBlur: React.FC = () => (
   <div className="fixed inset-0 backdrop-blur-sm pointer-events-none" aria-hidden="true" />
 );
@@ -1159,9 +1163,18 @@ export const Player: React.FC = () => {
         .sort((a, b) =>
           getDistance(tour.lat, tour.lng, a.lat, a.lng) - getDistance(tour.lat, tour.lng, b.lat, b.lng))
         .map(z => z.id);
-      void audioService.prefetchAll(ordered, (done, total) => {
-        setPrefetchStatus(total > 0 && done < total ? { done, total } : null);
-      });
+      // Held back until the calibration tone has finished. Downloading and
+      // decoding every zone's audio at once is heavy enough to make a
+      // concurrently playing element stutter, which is why the blips were
+      // audible on a first open and never on a replay — by then this has
+      // already run. Nothing depends on prefetch starting promptly: zones
+      // reached before their download finishes simply stream, exactly as they
+      // did before prefetch existed.
+      window.setTimeout(() => {
+        void audioService.prefetchAll(ordered, (done, total) => {
+          setPrefetchStatus(total > 0 && done < total ? { done, total } : null);
+        });
+      }, TONE_DURATION_MS);
     }
 
     // Start analytics session — skip in preview mode so creator test-runs don't pollute data.
