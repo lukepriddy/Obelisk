@@ -239,7 +239,13 @@ export default async function handler(req: NodeReq, res: NodeRes): Promise<void>
     if (!data) return sendHtml(res, shell);
 
     const canonical = `${origin}/player/${tourId}`;
-    return sendHtml(res, shell.replace(
+    // The shell already carries <title>Obelisk</title>. Appending a second one
+    // does not override it — browsers and most crawlers take the FIRST — so the
+    // tab and the preview would both still read "Obelisk". Strip it, and only
+    // when we are actually replacing it: the early returns above deliberately
+    // leave the shell untouched, default title included.
+    const shellWithoutTitle = shell.replace(/[ \t]*<title>[\s\S]*?<\/title>\s*\n?/i, '');
+    return sendHtml(res, shellWithoutTitle.replace(
       '</head>',
       `  ${buildTags(data.tour, data.zones, canonical)}\n  </head>`,
     ));
