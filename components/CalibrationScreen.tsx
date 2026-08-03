@@ -251,23 +251,31 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
           />
         </div>
 
-        <p className="mt-10 text-lg font-semibold">{statusLine}</p>
+        {/* Fixed height, because everything here sits in a justify-center
+            column: any line appearing or disappearing below re-centres the
+            stack and nudges the rings. The prefetch counter is the worst
+            offender — it arrives partway through and leaves again — but the
+            status wording can rewrap too. Reserving the space means the
+            instrument stays welded in place through every transition. */}
+        <div className="mt-10 w-full max-w-xs flex flex-col items-center" style={{ minHeight: '7rem' }}>
+          <p className="text-lg font-semibold">{statusLine}</p>
 
-        {/* "Ready" over "give it a moment" read as the screen contradicting
-            itself, so the line becomes the next instruction once it settles. */}
-        <p className="mt-2 text-sm opacity-60 leading-relaxed max-w-xs">
-          {tooFar
-            ? 'Head to the starting point and open it again from there.'
-            : ready
-              ? 'Tap below when you want to start.'
-              : 'Hold your phone up and give it a moment.'}
-        </p>
-
-        {prefetch && prefetch.done < prefetch.total && !tooFar && (
-          <p className="mt-3 text-xs opacity-40 tabular-nums">
-            Preparing audio {prefetch.done}/{prefetch.total}
+          {/* "Ready" over "give it a moment" read as the screen contradicting
+              itself, so the line becomes the next instruction once it settles. */}
+          <p className="mt-2 text-sm opacity-60 leading-relaxed">
+            {tooFar
+              ? 'Head to the starting point and open it again from there.'
+              : ready
+                ? 'Tap below when you want to start.'
+                : 'Hold your phone up and give it a moment.'}
           </p>
-        )}
+
+          {prefetch && prefetch.done < prefetch.total && !tooFar && (
+            <p className="mt-3 text-xs opacity-40 tabular-nums">
+              Preparing audio {prefetch.done}/{prefetch.total}
+            </p>
+          )}
+        </div>
 
         {tooFar && (
           <a
