@@ -74,6 +74,19 @@ export const PLAYER_TERMS_SECTIONS: TermsSection[] = [
     ],
   },
   {
+    // Niantic's terms disclaim liability for property damage, personal injury
+    // and death explicitly. Ours only implied it via "as-is", which is the
+    // weaker form. Stated plainly here so there is something in place if this
+    // ships before counsel review — but this is precisely the clause a lawyer
+    // should rewrite, along with the cap and carve-outs that belong with it.
+    heading: 'Limits on our responsibility',
+    body: [
+      'To the fullest extent the law allows, we are not responsible for injury, death, property damage, loss or other harm arising from taking part in an experience, travelling to one, or being at a location an experience directed you to.',
+      'That includes harm caused by a creator, by another person, by the condition of a place, or by the app failing to work as expected.',
+      'Some places do not allow certain limits on liability, and nothing here removes rights you have that cannot be waived.',
+    ],
+  },
+  {
     heading: 'Reporting something',
     body: [
       'If an experience puts people at risk, sends them somewhere they should not go, or contains something that should not be there, report it from the player menu.',
