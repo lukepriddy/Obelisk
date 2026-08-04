@@ -6,6 +6,7 @@ import { Player } from './pages/Player';
 import { AdminModeration } from './pages/AdminModeration';
 import { LegalPage } from './pages/LegalPage';
 import { TERMS_SECTIONS, TERMS_VERSION } from './constants/terms';
+import { PLAYER_TERMS_SECTIONS, PLAYER_TERMS_VERSION } from './constants/playerTerms';
 import { PRIVACY_SECTIONS, PRIVACY_VERSION } from './constants/privacy';
 import { LICENSES_SECTIONS, LICENSES_VERSION } from './constants/licenses';
 import { Auth } from './pages/Auth';
@@ -74,6 +75,17 @@ const AppShell: React.FC<{ user: User | null; onLogout: () => void }> = ({ user,
                 intro="These apply when you publish an experience. The first section is the one that matters most."
                 sections={TERMS_SECTIONS}
                 version={TERMS_VERSION}
+              />
+            }
+          />
+          <Route
+            path="/player-terms"
+            element={
+              <LegalPage
+                title="Playing an experience"
+                intro="These apply when you take part in an experience. The first section is the one that matters most."
+                sections={PLAYER_TERMS_SECTIONS}
+                version={PLAYER_TERMS_VERSION}
               />
             }
           />

@@ -271,8 +271,16 @@ export const duplicateTour = async (tourId: string, ownerId: string): Promise<To
  *  Goes through an RPC: a direct INSERT ... RETURNING can't work for anonymous
  *  players, because RETURNING requires the row to pass the owner-only SELECT
  *  policy on player_sessions. */
-export const startSession = async (tourId: string): Promise<string | null> => {
-  const { data, error } = await supabase.rpc('start_player_session', { p_tour_id: tourId });
+export const startSession = async (
+  tourId: string,
+  termsVersion?: string,
+): Promise<string | null> => {
+  // The terms version travels with the session because players have no account
+  // to hang an acceptance on — the play IS the acceptance record.
+  const { data, error } = await supabase.rpc('start_player_session', {
+    p_tour_id: tourId,
+    p_terms_version: termsVersion ?? null,
+  });
   if (error) { console.error('startSession:', error); return null; }
   return (data as string | null);
 };

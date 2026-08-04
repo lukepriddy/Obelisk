@@ -14,6 +14,7 @@ import {
 } from '../services/progressionService';
 import { getDistance, calculateAttenuation } from '../utils/geo';
 import { trailStats, trailSummary, formatDistance } from '../utils/trail';
+import { PLAYER_TERMS_VERSION } from '../constants/playerTerms';
 import { PlayerProgress, ProgressionReward, Tour, Zone } from '../types';
 import { FONT_STYLES, MAP_STYLES, DEFAULT_MAP_STYLE } from '../constants';
 import { Loader2, PlayCircle, Volume2, MessageCircle, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu, Layers, Locate, RotateCcw, ZoomIn, ZoomOut, Backpack, Gem, Trash2, Info, RefreshCw, LogOut, Bug, Navigation, ChevronRight, Camera } from 'lucide-react';
@@ -1184,7 +1185,7 @@ export const Player: React.FC = () => {
 
     // Start analytics session — skip in preview mode so creator test-runs don't pollute data.
     if (!isPreview && tour?.id) {
-      startSession(tour.id).then(id => { sessionIdRef.current = id; });
+      startSession(tour.id, PLAYER_TERMS_VERSION).then(id => { sessionIdRef.current = id; });
     }
   };
 
@@ -1526,6 +1527,28 @@ export const Player: React.FC = () => {
                 >
                   <PlayCircle size={22} /> Begin
                 </button>
+
+                {/* Assent sits directly against Begin, because that is the
+                    action it refers to and proximity is what makes a clickwrap
+                    notice count for anything. Kept to one line: the full safety
+                    text is on the calibration screen a moment later, and a wall
+                    of text here would be scrolled past rather than read. */}
+                <p
+                  className="text-[11px] leading-relaxed text-center px-1"
+                  style={{ color: textColor, opacity: 0.5 }}
+                >
+                  By tapping Begin you agree to the{' '}
+                  <a
+                    href="/player-terms"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline underline-offset-2"
+                    style={{ color: accent, opacity: 0.9 }}
+                  >
+                    terms for playing
+                  </a>
+                  , including that you take part at your own risk.
+                </p>
 
                 {/* The real-world safety notice moved to the calibration screen.
                     As background text here it was wallpaper people scrolled
