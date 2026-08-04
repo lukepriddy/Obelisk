@@ -1226,6 +1226,14 @@ export const Player: React.FC = () => {
   // light theme changed the chrome and left those two screens black. An accent
   // would apply while the theme appeared to do nothing. Explicit colours still
   // win; only the fallback follows the theme.
+  // Scrim behind the bottom sheets. Stays dark in both themes deliberately:
+  // its contrast partner is the sheet, not the page, and what sits behind is
+  // map imagery — dimming makes bright imagery recede, lightening it would
+  // raise its luminance and pull attention forward. Only the weight changes,
+  // because the eye is adapted brighter on a light page and 60% reads as a
+  // blackout there.
+  const scrim = isDark ? 'bg-black/60' : 'bg-black/40';
+  const scrimStrong = isDark ? 'bg-black/70' : 'bg-black/50';
   const themedBg   = tour.bg_color   || (isDark ? '#09090b' : '#fafaf9');
   const themedText = tour.text_color || (isDark ? '#ffffff' : '#0f172a');
   const th = {
@@ -2162,7 +2170,7 @@ export const Player: React.FC = () => {
       {/* ── PROGRESSION INVENTORY ── */}
       {showInventory && tour.progression_enabled && playerProgress && (
         <div
-          className="overlay-edge-bleed fixed inset-0 z-[2500] bg-black/60 flex items-end justify-center"
+          className={`overlay-edge-bleed fixed inset-0 z-[2500] ${scrim} flex items-end justify-center`}
           onClick={() => setShowInventory(false)}
         >
           <SheetBlur />
@@ -2263,7 +2271,7 @@ export const Player: React.FC = () => {
       {/* ── PLAYER MENU ── */}
       {showPlayerMenu && audioStarted && (
         <div
-          className="overlay-edge-bleed fixed inset-0 z-[2600] bg-black/60 flex items-end justify-center"
+          className={`overlay-edge-bleed fixed inset-0 z-[2600] ${scrim} flex items-end justify-center`}
           onClick={closePlayerMenu}
         >
           <SheetBlur />
@@ -2579,7 +2587,7 @@ export const Player: React.FC = () => {
           // lockNudge). Entrance animations only play on the first mount so
           // the remount is invisible.
           key={`${passphraseChallenge.id}:${lockNudge}`}
-          className={`overlay-edge-bleed fixed inset-0 z-[2500] bg-black/70 flex items-end justify-center overflow-y-auto ${lockNudge === 0 ? 'animate-in fade-in' : ''}`}
+          className={`overlay-edge-bleed fixed inset-0 z-[2500] ${scrimStrong} flex items-end justify-center overflow-y-auto ${lockNudge === 0 ? 'animate-in fade-in' : ''}`}
           style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)' }}
         >
           <SheetBlur />
