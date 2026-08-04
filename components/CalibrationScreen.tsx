@@ -68,6 +68,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
   const [showAudioHelp, setShowAudioHelp] = useState(false);
   const [replaying, setReplaying] = useState(false);
   const mountedAt = useRef(Date.now());
+  const [prefetchVisible, setPrefetchVisible] = useState(false);
   const releasedRef = useRef(false);
   const toneRef = useRef<HTMLAudioElement | null>(null);
 
@@ -89,6 +90,20 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
     const id = window.setInterval(() => setElapsed(Date.now() - mountedAt.current), 200);
     return () => window.clearInterval(id);
   }, []);
+
+  const prefetchPending = Boolean(prefetch && prefetch.done < prefetch.total);
+
+  // Only surface the counter once downloading has genuinely been pending for a
+  // moment. Prefetch starts after the tone, and on a small tour it finishes
+  // almost instantly, so the line flashed on and off too fast to read.
+  // Depends on the boolean, NOT the prefetch object: the object's identity
+  // changes on every progress tick, which would restart the timer forever and
+  // mean the line never appeared at all on a slow download.
+  useEffect(() => {
+    if (!prefetchPending) { setPrefetchVisible(false); return; }
+    const id = window.setTimeout(() => setPrefetchVisible(true), 600);
+    return () => window.clearTimeout(id);
+  }, [prefetchPending]);
 
   const gate = Math.max(MIN_DISTANCE_GATE_M, furthestMeters + DISTANCE_MARGIN_M);
   const tooFar = distanceToStart != null && distanceToStart > gate;
@@ -270,7 +285,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
                 : 'Hold your phone up and give it a moment.'}
           </p>
 
-          {prefetch && prefetch.done < prefetch.total && !tooFar && (
+          {prefetchVisible && prefetch && !tooFar && (
             <p className="mt-3 text-xs opacity-40 tabular-nums">
               Preparing audio {prefetch.done}/{prefetch.total}
             </p>
@@ -291,7 +306,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
       </div>
 
       <div
-        className="shrink-0 px-8 w-full max-w-sm mx-auto"
+        className="shrink-0 px-8 pt-8 w-full max-w-sm mx-auto"
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 28px)' }}
       >
         {/* The audio check. No API can answer this — on iOS the silent switch

@@ -1366,7 +1366,7 @@ export const Player: React.FC = () => {
               <div className="w-full max-w-sm mx-auto px-5 flex flex-col items-center text-center gap-5 py-4">
 
                 {tour.welcome_image_url && (
-                  <img src={tour.welcome_image_url} alt={tour.title} className="w-40 h-40 object-cover rounded-2xl shadow-2xl" />
+                  <img src={tour.welcome_image_url} alt={tour.title} className="w-40 h-40 object-cover rounded-2xl" />
                 )}
 
                 {/* Someone who opened a shared link from another town needs to
@@ -1405,7 +1405,7 @@ export const Player: React.FC = () => {
                   <p className="text-sm leading-relaxed opacity-80 w-full whitespace-pre-wrap" style={{ color: textColor, textAlign: tour.description_align === 'left' ? 'left' : 'center' }}>{tour.description}</p>
                 )}
 
-                <div className="relative w-full aspect-[4/3] max-h-[240px] rounded-xl overflow-hidden border border-white/10 shadow-lg">
+                <div className="relative w-full aspect-[4/3] max-h-[240px] rounded-xl overflow-hidden border border-white/10">
                   <WelcomePreviewMap
                     ref={welcomeMapRef}
                     lat={tour.lat}
@@ -1513,7 +1513,7 @@ export const Player: React.FC = () => {
                 <button
                   onClick={startAudio}
                   disabled={!isPreview && !userPos}
-                  className="flex items-center justify-center gap-2 text-white w-full py-4 rounded-2xl text-lg font-bold shadow-xl disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="flex items-center justify-center gap-2 text-white w-full py-4 rounded-2xl text-lg font-bold disabled:opacity-40 disabled:cursor-not-allowed"
                   style={{ backgroundColor: accent }}
                 >
                   <PlayCircle size={22} /> Begin
