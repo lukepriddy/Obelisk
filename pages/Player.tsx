@@ -525,6 +525,11 @@ export const Player: React.FC = () => {
 
   // Audio Engine Loop
   useEffect(() => {
+    // Held while the calibration screen is up. audioStarted flips inside the
+    // Begin tap — it has to, for iOS's audio grant — so without this a player
+    // standing inside a zone hears it start behind the calibration screen and
+    // then walks into an experience already mid-sentence.
+    if (calibrating) return;
     if (!audioStarted || !userPos || zones.length === 0) return;
 
     const interval = setInterval(() => {
@@ -767,7 +772,7 @@ export const Player: React.FC = () => {
     // activeCharacterZone intentionally excluded — we read it via activeCharZoneRef
     // so the interval doesn't restart on every zone entry/exit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [audioStarted, userPos, zones, tour, simulationMode]);
+  }, [audioStarted, calibrating, userPos, zones, tour, simulationMode]);
 
   // Safari audio remains intentionally paused after backgrounding or locking.
   // When the player returns, wait for an explicit tap before rebuilding and
@@ -1216,6 +1221,13 @@ export const Player: React.FC = () => {
   // a bad tour color choice can never break the player chrome.
   const isDark  = (tour.player_theme || 'dark') === 'dark';
   const accent  = tour.accent_color || '#10b981';
+  // The welcome and calibration screens use the tour's own colours, but until
+  // now they fell back to a hardcoded dark when none were set — so choosing the
+  // light theme changed the chrome and left those two screens black. An accent
+  // would apply while the theme appeared to do nothing. Explicit colours still
+  // win; only the fallback follows the theme.
+  const themedBg   = tour.bg_color   || (isDark ? '#09090b' : '#fafaf9');
+  const themedText = tour.text_color || (isDark ? '#ffffff' : '#0f172a');
   const th = {
     // Top / bottom bars + all slide-up sheets share this dark surface (#09090b),
     // so header, footer, and every sheet are one seamless colour. Only the small
@@ -1288,8 +1300,8 @@ export const Player: React.FC = () => {
       {calibrating && tour && (
         <CalibrationScreen
           accent={tour.accent_color || '#10b981'}
-          bg={tour.bg_color || '#09090b'}
-          textColor={tour.text_color || '#ffffff'}
+          bg={themedBg}
+          textColor={themedText}
           fontFamily={FONT_STYLES[tour.font_style || 'sans']?.fontFamily}
           accuracy={gpsFixRef.current?.accuracy ?? null}
           distanceToStart={userPos ? getDistance(userPos[0], userPos[1], tour.lat, tour.lng) : null}
@@ -1304,9 +1316,9 @@ export const Player: React.FC = () => {
       )}
 
       {!audioStarted && tour && (() => {
-        const bg         = tour.bg_color    || '#09090b';
+        const bg         = themedBg;
         const accent     = tour.accent_color || '#10b981';
-        const textColor  = tour.text_color   || '#ffffff';
+        const textColor  = themedText;
         const fontFamily = FONT_STYLES[tour.font_style || 'sans']?.fontFamily;
 
         const copyCoords = () => {

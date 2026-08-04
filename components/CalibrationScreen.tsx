@@ -135,7 +135,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
       className="overlay-edge-bleed fixed inset-0 z-[2200] flex flex-col"
       style={{ backgroundColor: bg, color: textColor, fontFamily }}
     >
-      <div className="flex-1 flex flex-col items-center justify-center px-8 text-center">
+      <div className="flex-1 flex flex-col items-center justify-center px-8 text-center w-full max-w-sm mx-auto">
 
         {/* An instrument coming into focus. Graduated rings counter-rotate
             while the fix is loose and halt on lock; the accuracy ring's radius
@@ -291,7 +291,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
       </div>
 
       <div
-        className="shrink-0 px-8"
+        className="shrink-0 px-8 w-full max-w-sm mx-auto"
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 28px)' }}
       >
         {/* The audio check. No API can answer this — on iOS the silent switch

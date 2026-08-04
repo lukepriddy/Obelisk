@@ -149,6 +149,19 @@ const RADIUS_SLIDER_MAX = 1000;
 // The builder speaks feet, matching the rest of the UI; ar_config keeps storing
 // metres. Converting at the input boundary means the player, the placement
 // maths and the stored data are all untouched by the change.
+/**
+ * Voiceover for AI characters is built but not launching: it carries real
+ * per-reply cost and the public player already treats chat as text-only. The
+ * voice picker, the speaking-style prompt and the accent field all belong to
+ * it, so they are hidden together rather than left visible and inert —
+ * settings that appear to do something and don't are worse than absent ones.
+ *
+ * Nothing is deleted. zone.voice_style / voice_instructions / voice_enabled
+ * still round-trip through the database untouched, so flipping this back to
+ * true restores every existing choice.
+ */
+const CHARACTER_VOICE_UI = false;
+
 const M_PER_FT = 0.3048;
 const toFeet = (metres: number) => Math.round(metres / M_PER_FT);
 const fromFeet = (feet: number) => Number((feet * M_PER_FT).toFixed(3));
@@ -643,6 +656,8 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
             <p className="text-[10px] text-zinc-500 mt-1">Script the character's exact first words. Leave blank for an auto-generated greeting.</p>
           </div>
 
+          {CHARACTER_VOICE_UI && (
+            <>
           {/* Voice Picker */}
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -735,6 +750,8 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
               </p>
             </div>
           </div>
+            </>
+          )}
 
           {/* After Conversation — Avatar Unlock */}
           <div className="border-t border-zinc-800 pt-5">

@@ -434,6 +434,10 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
           description: tour.description,
           welcome_subtitle: tour.welcome_subtitle,
           welcome_image_url: tour.welcome_image_url,
+          // This list is explicit, so a new Tour field is silently dropped on
+          // save until it is added here — which is exactly what happened to
+          // duration_minutes: it edited fine and never persisted.
+          duration_minutes: tour.duration_minutes ?? null,
           accent_color: tour.accent_color,
           bg_color: tour.bg_color,
           text_color: tour.text_color,
