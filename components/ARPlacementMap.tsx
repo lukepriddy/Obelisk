@@ -80,9 +80,12 @@ export const ARPlacementMap: React.FC<Props> = ({
   const objectMarkerRef = useRef<maplibregl.Marker | null>(null);
   const handleMarkerRef = useRef<maplibregl.Marker | null>(null);
   const [zoom, setZoom] = useState(18);
-  // Props flow into the map except while the creator is dragging, otherwise the
-  // re-render fights their finger.
-  const draggingRef = useRef(false);
+  // Which marker is under the finger, so the re-render can leave that one alone
+  // and still update the other. Tracking this as a boolean was a bug: the
+  // handle was repositioned to its fixed arm length on every frame of its own
+  // drag, fighting the finger, which showed up as the arm flickering long and
+  // short. It only needs to snap back when the drag ends.
+  const draggingRef = useRef<'object' | 'handle' | null>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
@@ -110,7 +113,15 @@ export const ARPlacementMap: React.FC<Props> = ({
     const resize = new ResizeObserver(() => map.resize());
     resize.observe(containerRef.current);
 
+    // Pinch works, but a fallback matters on a small embedded map where a
+    // two-finger gesture is easy to start on the wrong element. Compass hidden:
+    // rotation is already a two-finger gesture and the arrow tracks it.
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+
     map.on('zoom', () => setZoom(map.getZoom()));
+    // Rotating the map changes the arrow's screen angle without changing any
+    // prop, so nothing would re-render it. Bump zoom state to force the update.
+    map.on('rotate', () => setZoom(map.getZoom()));
 
     map.on('load', () => {
       map.addSource('zone', { type: 'geojson', data: circleFeature(zoneLng, zoneLat, zoneRadius, {}) });
@@ -144,14 +155,26 @@ export const ARPlacementMap: React.FC<Props> = ({
     new maplibregl.Marker({ element: centreEl }).setLngLat([zoneLng, zoneLat]).addTo(map);
 
     // The object. Draggable: this sets distance and bearing together.
+    //
+    // Built once here rather than re-rendered on each update. Rewriting
+    // innerHTML every frame would replace the very element the finger is
+    // dragging, and only the arrow's angle actually changes: the update below
+    // just sets a transform attribute.
     const objectEl = document.createElement('div');
     objectEl.style.cursor = 'grab';
+    objectEl.innerHTML =
+      `<svg width="40" height="40" viewBox="0 0 40 40" style="display:block;overflow:visible">
+         <circle cx="20" cy="20" r="11" fill="${OBJECT_COLOR}" stroke="white" stroke-width="2"/>
+         <g data-arrow transform="rotate(0 20 20)">
+           <polygon points="20,2 25.5,11.5 14.5,11.5" fill="white" stroke="${OBJECT_COLOR}" stroke-width="1"/>
+         </g>
+       </svg>`;
     const objectMarker = new maplibregl.Marker({ element: objectEl, draggable: true })
       .setLngLat([objectPoint.lng, objectPoint.lat])
       .addTo(map);
     objectMarkerRef.current = objectMarker;
 
-    objectMarker.on('dragstart', () => { draggingRef.current = true; });
+    objectMarker.on('dragstart', () => { draggingRef.current = 'object'; });
     objectMarker.on('drag', () => {
       const { lat, lng } = objectMarker.getLngLat();
       // offsetFrom, not getDistance: it inverts destinationPoint exactly, so
@@ -163,7 +186,7 @@ export const ARPlacementMap: React.FC<Props> = ({
         ground_bearing_degrees: Math.round(offset.bearingDegrees),
       });
     });
-    objectMarker.on('dragend', () => { draggingRef.current = false; });
+    objectMarker.on('dragend', () => { draggingRef.current = null; });
 
     // Rotation arm. A second draggable marker rather than a custom pointer
     // handler inside the first: MapLibre already solves dragging correctly at
@@ -177,15 +200,28 @@ export const ARPlacementMap: React.FC<Props> = ({
       .addTo(map);
     handleMarkerRef.current = handleMarker;
 
-    handleMarker.on('dragstart', () => { draggingRef.current = true; });
+    handleMarker.on('dragstart', () => { draggingRef.current = 'handle'; });
     handleMarker.on('drag', () => {
       const object = objectMarker.getLngLat();
       const handle = handleMarker.getLngLat();
+      // Only the angle is read. The distance the finger happens to be at is
+      // ignored, and the arm springs back to its fixed length on release.
       onChangeRef.current({
         facing_degrees: Math.round(bearingTo(object.lat, object.lng, handle.lat, handle.lng)),
       });
     });
-    handleMarker.on('dragend', () => { draggingRef.current = false; });
+    handleMarker.on('dragend', () => {
+      draggingRef.current = null;
+      // Snap back explicitly. Waiting for the next render would not do it: the
+      // final drag frame may not change facing at all, and then nothing
+      // re-renders and the arm stays wherever the finger left it.
+      const object = objectMarker.getLngLat();
+      const handle = handleMarker.getLngLat();
+      const angle = bearingTo(object.lat, object.lng, handle.lat, handle.lng);
+      const arm = HANDLE_PX * metersPerPixel(object.lat, map.getZoom());
+      const snapped = destinationPoint(object.lat, object.lng, angle, arm);
+      handleMarker.setLngLat([snapped.lng, snapped.lat]);
+    });
 
     return () => { resize.disconnect(); map.remove(); mapRef.current = null; };
     // Init-only: later prop changes are applied by the effects below.
@@ -204,29 +240,24 @@ export const ARPlacementMap: React.FC<Props> = ({
     const map = mapRef.current;
     if (!map) return;
 
-    if (!draggingRef.current) {
+    if (draggingRef.current !== 'object') {
       objectMarkerRef.current?.setLngLat([objectPoint.lng, objectPoint.lat]);
     }
 
-    // Arm length in metres for a constant on-screen size.
-    const armMeters = HANDLE_PX * metersPerPixel(objectPoint.lat, zoom);
-    const armEnd = destinationPoint(objectPoint.lat, objectPoint.lng, facing, armMeters);
-    handleMarkerRef.current?.setLngLat([armEnd.lng, armEnd.lat]);
-
-    // The object's own body, drawn as an arrow pointing where it faces. Counter
-    // -rotated by the map's bearing so it keeps pointing at real-world north
-    // when the creator rotates the map.
-    const el = objectMarkerRef.current?.getElement();
-    if (el) {
-      const screenAngle = facing - map.getBearing();
-      el.innerHTML =
-        `<div style="position:relative;width:30px;height:30px">
-           <div style="position:absolute;inset:0;border-radius:50%;background:${OBJECT_COLOR};border:2px solid white;box-shadow:0 1px 5px rgba(0,0,0,0.6)"></div>
-           <div style="position:absolute;inset:0;transform:rotate(${screenAngle}deg)">
-             <div style="position:absolute;left:50%;top:-1px;margin-left:-5px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:8px solid white"></div>
-           </div>
-         </div>`;
+    // Arm length in metres for a constant on-screen size. Left alone while the
+    // handle itself is being dragged, so the arm follows the finger instead of
+    // being snatched back to this length every frame.
+    if (draggingRef.current !== 'handle') {
+      const armMeters = HANDLE_PX * metersPerPixel(objectPoint.lat, zoom);
+      const armEnd = destinationPoint(objectPoint.lat, objectPoint.lng, facing, armMeters);
+      handleMarkerRef.current?.setLngLat([armEnd.lng, armEnd.lat]);
     }
+
+    // Point the arrow where the object faces. Counter-rotated by the map's own
+    // bearing so it keeps indicating real-world north when the creator rotates
+    // the map. Only the transform changes; the SVG itself was built at init.
+    const arrow = objectMarkerRef.current?.getElement().querySelector('[data-arrow]');
+    arrow?.setAttribute('transform', `rotate(${facing - map.getBearing()} 20 20)`);
 
     const sight = map.getSource('sight') as maplibregl.GeoJSONSource | undefined;
     sight?.setData({
