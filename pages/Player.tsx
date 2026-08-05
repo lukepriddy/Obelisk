@@ -1532,7 +1532,12 @@ export const Player: React.FC = () => {
               style={{
                 backgroundColor: bg,
                 paddingTop: '12px',
-                paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)',
+                // The safe-area term stays: it is what keeps the fine print off
+                // the home indicator, and off the screen edge when Safari's
+                // bottom toolbar collapses on scroll. Only the padding on top of
+                // it came down, 24 -> 10, which also squares the footer up with
+                // its 12px top rather than leaving it bottom-heavy.
+                paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 10px)',
               }}
             >
               <div className="w-full max-w-sm mx-auto px-5 flex flex-col gap-3">
@@ -1673,8 +1678,14 @@ export const Player: React.FC = () => {
             // over the white top bar while every other sheet used the (lighter)
             // themed scrim. Now it follows the same rule as the rest.
             backgroundColor: isDark ? 'rgba(0,0,0,0.55)' : 'transparent',
-            opacity: tourInfoVisible ? 1 : 0,
-            transition: 'opacity 0.3s',
+            // No opacity transition here, deliberately. SheetBlur is a child,
+            // so fading this element faded the blur with it — and Safari will
+            // not composite a backdrop-filter at full strength while its parent
+            // layer is still animating, so the blur arrived visibly late (about
+            // a second) where every other sheet blurs instantly. Those sheets
+            // simply mount with no fade, which is why they look immediate. The
+            // sheet keeps its own translateY slide below; that was the part
+            // worth having.
           }}
           onClick={closeTourInfo}
         >
