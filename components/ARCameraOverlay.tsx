@@ -5,7 +5,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { ARObjectConfig, Zone } from '../types';
-import { getDistance } from '../utils/geo';
+import { getDistance, bearingTo, destinationPoint } from '../utils/geo';
 import { loadArEngine, requestMotionAccess, readHeading } from '../services/arEngine';
 
 /**
@@ -64,14 +64,10 @@ const SCAN_TIMEOUT_MS = 10000;
 const REVEAL_MS = 350;
 
 /** Compass bearing from one coordinate to another, degrees from true north. */
-const bearingTo = (lat1: number, lng1: number, lat2: number, lng2: number) => {
-  const phi1 = toRad(lat1);
-  const phi2 = toRad(lat2);
-  const deltaLng = toRad(lng2 - lng1);
-  const y = Math.sin(deltaLng) * Math.cos(phi2);
-  const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(deltaLng);
-  return (toDeg(Math.atan2(y, x)) + 360) % 360;
-};
+// bearingTo and destinationPoint now live in utils/geo.ts so the placement
+// editor computes the object's coordinate with the identical formula. If the
+// editor used its own maths the marker a creator drags and the object a player
+// sees would sit in slightly different places, and the gap grows with distance.
 
 const defaultConfig = (zone: Zone): ARObjectConfig => ({
   enabled: true,
@@ -112,13 +108,15 @@ function localPlacement(
   anchor: { lat: number; lng: number } | null;
 } {
   // The object's real coordinate: the zone, plus any offset the creator set.
-  let anchorLat = config.anchor_lat ?? zone.lat;
-  let anchorLng = config.anchor_lng ?? zone.lng;
+  // Stored relative to the zone rather than as absolute coordinates, so moving
+  // a zone in the editor carries its object along instead of stranding it.
+  let anchorLat = zone.lat;
+  let anchorLng = zone.lng;
   const offset = config.ground_distance_m ?? 0;
   if (config.behavior !== 'flyover' && offset) {
-    const bearing = toRad(config.ground_bearing_degrees ?? 0);
-    anchorLat += (Math.cos(bearing) * offset) / 111_320;
-    anchorLng += (Math.sin(bearing) * offset) / (111_320 * Math.cos(toRad(anchorLat)) || 1);
+    const point = destinationPoint(zone.lat, zone.lng, config.ground_bearing_degrees ?? 0, offset);
+    anchorLat = point.lat;
+    anchorLng = point.lng;
   }
 
   // Without a fix, fall back to placing it at its configured offset straight

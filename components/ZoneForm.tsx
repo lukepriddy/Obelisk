@@ -5,7 +5,7 @@ import { uploadARAsset, uploadAudio, uploadImage } from '../services/storageServ
 import { supabase } from '../services/supabaseClient';
 import { Music, AlertCircle, Clock, Volume2, EyeOff, Radio, PlayCircle, Upload, Link as LinkIcon, FileAudio, ListMusic, Bot, MessageSquare, Lock, Unlock, GitBranch, Bell, Sparkles, KeySquare, ImageIcon, X, Trash2, Play, Pause, Loader2, Gift, HelpCircle, Camera, MapPin, Copy, Check } from 'lucide-react';
 import { ZoneProgressionSettings } from './ZoneProgressionSettings';
-import { ARPlacementPad } from './ARPlacementPad';
+import { ARPlacementMap } from './ARPlacementMap';
 
 // ── Mini audio preview player ───────────────────────────────────────────────
 const AudioPreview: React.FC<{ url: string; volume?: number }> = ({ url, volume = 1 }) => {
@@ -1573,11 +1573,18 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
 
               {arConfig.behavior === 'static' && (
                 <>
-                  <ARPlacementPad
+                  {/* Satellite by default: the point of putting this on a map
+                      is seeing what stands between the player and the object,
+                      and a vector basemap draws no trees. */}
+                  <ARPlacementMap
+                    zoneLat={zone.lat}
+                    zoneLng={zone.lng}
+                    zoneRadius={zone.radius}
                     distance={arConfig.ground_distance_m ?? 0}
                     bearing={arConfig.ground_bearing_degrees ?? 0}
                     facing={arConfig.facing_degrees}
                     altitude={arConfig.altitude_m}
+                    styleKey="satellite"
                     onChange={updateArConfig}
                   />
 

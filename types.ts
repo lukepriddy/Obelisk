@@ -63,10 +63,11 @@ export interface ARObjectConfig {
   asset_url?: string | null;
   asset_type?: 'image' | 'glb';
   behavior: ARObjectBehavior;
-  // The object defaults to the zone coordinate. These optional fields leave
-  // room for an independent anchor without creating a second zone model.
-  anchor_lat?: number | null;
-  anchor_lng?: number | null;
+  // An object's coordinate is always the zone's, offset by ground_distance_m
+  // along ground_bearing_degrees. Absolute anchor fields were declared here and
+  // read by the renderer but never written by anything, and reviving them would
+  // give the same fact two sources of truth: an absolute anchor would silently
+  // stay behind when a creator moved the zone, while the offset travels with it.
   altitude_m: number;
   scale_m: number;
   facing_degrees: number;
