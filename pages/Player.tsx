@@ -1677,22 +1677,30 @@ export const Player: React.FC = () => {
             // theme entirely, so on a light tour it dropped a near-black wash
             // over the white top bar while every other sheet used the (lighter)
             // themed scrim. Now it follows the same rule as the rest.
-            backgroundColor: isDark ? 'rgba(0,0,0,0.55)' : 'transparent',
-            // No opacity transition here, deliberately. SheetBlur is a child,
-            // so fading this element faded the blur with it — and Safari will
-            // not composite a backdrop-filter at full strength while its parent
-            // layer is still animating, so the blur arrived visibly late (about
-            // a second) where every other sheet blurs instantly. Those sheets
-            // simply mount with no fade, which is why they look immediate. The
-            // sheet keeps its own translateY slide below; that was the part
-            // worth having.
+            // Backdrop keys off tourInfoVisible, not tourInfoMounted, and has
+            // no opacity transition. Both halves of that matter, and each was
+            // its own bug:
+            //
+            // Fading this element faded SheetBlur with it, since the blur is a
+            // child — and Safari will not composite a backdrop-filter at full
+            // strength while its parent layer is still animating, so the blur
+            // arrived far later than the 0.3s transition implied.
+            //
+            // Keying off `mounted` then kept the backdrop alive for the whole
+            // 380ms slide-down, so dismissal felt laggy in the other direction.
+            // This sheet is the only one with an exit animation; the rest just
+            // unmount, which is why their blur leaves the moment you tap.
+            //
+            // Tying the backdrop to `visible` gives both: it appears and
+            // disappears on the tap, while the sheet keeps its slide.
+            backgroundColor: isDark && tourInfoVisible ? 'rgba(0,0,0,0.55)' : 'transparent',
           }}
           onClick={closeTourInfo}
         >
           {/* This sheet was also the only one without the blur, so in light mode
               — where the dim is now gone — it would have had no separation from
               the map at all. */}
-          <SheetBlur />
+          {tourInfoVisible && <SheetBlur />}
           <div
             className="relative z-10 -mb-px w-full max-w-lg"
             style={{
