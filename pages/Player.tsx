@@ -83,6 +83,37 @@ const SheetBlur: React.FC = () => (
   <div className="fixed inset-0 backdrop-blur-sm pointer-events-none" aria-hidden="true" />
 );
 
+/**
+ * The strip of sheet colour that runs off both screen edges, behind the sheet.
+ *
+ * `overlay-edge-bleed` used to be carried by the sheet itself, which killed the
+ * seam but cost the corners: a 40px radius on a surface hanging 16px past each
+ * edge leaves only the shallow tail of the curve on screen — it starts to bend,
+ * then the screen cuts it. (At the screen edge the card's top sits just 8px
+ * below its flat top, so you see 24px of horizontal curve instead of 40px.)
+ *
+ * So the sheet now sits at true viewport width, where its corners render in
+ * full, and this skirt takes over the overhang — starting *below* the corner
+ * radius, so it never fills in the curve it exists to make visible. Every row
+ * of the sheet body still has colour running past both edges; the only band
+ * where iOS could expose a hairline is the corner band, where the map is
+ * legitimately visible anyway and a gap reads as the corner rather than a seam.
+ *
+ * Same split as SheetBlur and the AR overlay: keep the bleed and the visible
+ * shape on separate layers. See docs/mobile-player-edge-seams.md.
+ *
+ * Only below 512px (max-w-lg), where the sheet is genuinely full-width. Wider
+ * than that it is a centred card with map either side, and a skirt would just
+ * be a 16px ledge sticking out of it.
+ */
+const SheetSkirt: React.FC<{ color: string; radius?: number }> = ({ color, radius = 40 }) => (
+  <div
+    aria-hidden="true"
+    className="hidden max-[512px]:block absolute left-[-16px] right-[-16px] bottom-0 pointer-events-none"
+    style={{ top: radius, backgroundColor: color }}
+  />
+);
+
 export const Player: React.FC = () => {
   const { tourId } = useParams<{ tourId: string }>();
   const navigate = useNavigate();
@@ -1227,14 +1258,21 @@ export const Player: React.FC = () => {
   // light theme changed the chrome and left those two screens black. An accent
   // would apply while the theme appeared to do nothing. Explicit colours still
   // win; only the fallback follows the theme.
-  // Scrim behind the bottom sheets. Stays dark in both themes deliberately:
-  // its contrast partner is the sheet, not the page, and what sits behind is
-  // map imagery — dimming makes bright imagery recede, lightening it would
-  // raise its luminance and pull attention forward. Only the weight changes,
-  // because the eye is adapted brighter on a light page and 60% reads as a
-  // blackout there.
-  const scrim = isDark ? 'bg-black/60' : 'bg-black/40';
-  const scrimStrong = isDark ? 'bg-black/70' : 'bg-black/50';
+  // Scrim behind the bottom sheets. Dark mode dims; light mode does not.
+  //
+  // The dim used to apply in both themes, on the reasoning that the scrim's
+  // contrast partner is the sheet rather than the page. That holds in the
+  // abstract and looked wrong in practice: the top bar is opaque and sits
+  // *under* the sheet overlay, so the dim landed on it too and turned a white
+  // bar grey — a hard two-tone band across the top of a light-themed screen,
+  // white sheet below, grey chrome above.
+  //
+  // Light mode now leans on blur alone for separation, which does the same job
+  // (kills detail behind the sheet) without changing anyone's luminance, so the
+  // bar keeps its colour and the screen reads as one surface. Dark mode is
+  // unchanged — a dim over dark chrome was never the problem.
+  const scrim = isDark ? 'bg-black/60' : '';
+  const scrimStrong = isDark ? 'bg-black/70' : '';
   const themedBg   = tour.bg_color   || (isDark ? '#09090b' : '#fafaf9');
   const themedText = tour.text_color || (isDark ? '#ffffff' : '#0f172a');
   const th = {
@@ -1624,20 +1662,34 @@ export const Player: React.FC = () => {
           right edge. Sharing the root's coordinate system removes the gap. */}
       {tourInfoMounted && tour && (
         <div
-          className="overlay-edge-bleed fixed inset-0 z-[2000] flex items-end justify-center"
+          className="overlay-edge-bleed fixed inset-0 z-[2000] flex items-end justify-center px-4 md:px-0"
           style={{
-            backgroundColor: 'rgba(0,0,0,0.55)',
+            // Was a hardcoded rgba(0,0,0,0.55) — the one sheet that ignored the
+            // theme entirely, so on a light tour it dropped a near-black wash
+            // over the white top bar while every other sheet used the (lighter)
+            // themed scrim. Now it follows the same rule as the rest.
+            backgroundColor: isDark ? 'rgba(0,0,0,0.55)' : 'transparent',
             opacity: tourInfoVisible ? 1 : 0,
             transition: 'opacity 0.3s',
           }}
           onClick={closeTourInfo}
         >
+          {/* This sheet was also the only one without the blur, so in light mode
+              — where the dim is now gone — it would have had no separation from
+              the map at all. */}
+          <SheetBlur />
           <div
-            className="-mb-px w-full max-w-lg flex flex-col rounded-t-[40px] shadow-2xl"
+            className="relative z-10 -mb-px w-full max-w-lg"
             style={{
-              backgroundColor: th.sheetBg,
               transform: tourInfoVisible ? 'translateY(0)' : 'translateY(100%)',
               transition: 'transform 0.38s cubic-bezier(0.32, 0.72, 0, 1)',
+            }}
+          >
+          <SheetSkirt color={th.sheetBg} />
+          <div
+            className="relative w-full flex flex-col rounded-t-[40px] shadow-2xl"
+            style={{
+              backgroundColor: th.sheetBg,
               paddingBottom: 'env(safe-area-inset-bottom, 0px)',
             }}
             onClick={(e) => e.stopPropagation()}
@@ -1705,6 +1757,7 @@ export const Player: React.FC = () => {
                   : <span key="coords" className="flex items-center justify-center gap-2 w-full"><MapPin size={14} /> {tour.lat.toFixed(5)}, {tour.lng.toFixed(5)}</span>}
               </button>
             </div>
+          </div>
           </div>
         </div>
       )}
@@ -2194,16 +2247,18 @@ export const Player: React.FC = () => {
       {/* ── PROGRESSION INVENTORY ── */}
       {showInventory && tour.progression_enabled && playerProgress && (
         <div
-          className={`overlay-edge-bleed fixed inset-0 z-[2500] ${scrim} flex items-end justify-center`}
+          className={`overlay-edge-bleed fixed inset-0 z-[2500] ${scrim} flex items-end justify-center px-4 md:px-0`}
           onClick={() => setShowInventory(false)}
         >
           <SheetBlur />
+          {/* relative z-10 keeps the sheet above SheetBlur. Without it the sheet
+              is a static in-flow box while the blur layer is positioned, and
+              positioned elements paint above static siblings — so the blur
+              lands on top of the sheet instead of behind it. */}
+          <div className="relative z-10 -mb-px w-full max-w-lg">
+          <SheetSkirt color={th.sheetBg} />
           <div
-            // relative z-10 keeps the card above SheetBlur. Without it the card
-            // is a static in-flow box while the blur layer is positioned, and
-            // positioned elements paint above static siblings — so the blur
-            // lands on top of the card instead of behind it.
-            className="relative z-10 -mb-px w-full max-w-lg flex flex-col rounded-t-[40px] shadow-2xl"
+            className="relative w-full flex flex-col rounded-t-[40px] shadow-2xl"
             style={{
               backgroundColor: th.sheetBg,
               color: th.sheetText,
@@ -2289,20 +2344,23 @@ export const Player: React.FC = () => {
               </button>
             </div>
           </div>
+          </div>
         </div>
       )}
 
       {/* ── PLAYER MENU ── */}
       {showPlayerMenu && audioStarted && (
         <div
-          className={`overlay-edge-bleed fixed inset-0 z-[2600] ${scrim} flex items-end justify-center`}
+          className={`overlay-edge-bleed fixed inset-0 z-[2600] ${scrim} flex items-end justify-center px-4 md:px-0`}
           onClick={closePlayerMenu}
         >
           <SheetBlur />
+          {/* relative z-10: see the progression sheet above — keeps the sheet
+              above SheetBlur rather than under it. */}
+          <div className="relative z-10 -mb-px w-full max-w-lg">
+          <SheetSkirt color={th.sheetBg} />
           <div
-            // relative z-10: see the progression sheet above — keeps the card
-            // above SheetBlur rather than under it.
-            className="relative z-10 -mb-px w-full max-w-lg rounded-t-[40px] shadow-2xl flex flex-col"
+            className="relative w-full rounded-t-[40px] shadow-2xl flex flex-col"
             style={{
               backgroundColor: th.sheetBg,
               color: th.sheetText,
@@ -2586,6 +2644,7 @@ export const Player: React.FC = () => {
               </div>
             </div>
           </div>
+          </div>
         </div>
       )}
 
@@ -2611,7 +2670,7 @@ export const Player: React.FC = () => {
           // lockNudge). Entrance animations only play on the first mount so
           // the remount is invisible.
           key={`${passphraseChallenge.id}:${lockNudge}`}
-          className={`overlay-edge-bleed fixed inset-0 z-[2500] ${scrimStrong} flex items-end justify-center overflow-y-auto ${lockNudge === 0 ? 'animate-in fade-in' : ''}`}
+          className={`overlay-edge-bleed fixed inset-0 z-[2500] ${scrimStrong} flex items-end justify-center overflow-y-auto px-4 md:px-0 ${lockNudge === 0 ? 'animate-in fade-in' : ''}`}
           style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)' }}
         >
           <SheetBlur />
@@ -2619,8 +2678,12 @@ export const Player: React.FC = () => {
               lives inside), matching the other slide-ups — continuous dark grey,
               no gap. Amber accent kept on the TOP edge only (1px, same as the
               input's focus border); no border on the sides/bottom. */}
+          {/* This sheet stays dark in both themes by design, so its skirt takes
+              the same literal colour rather than th.sheetBg. */}
+          <div className={`relative z-10 -mb-px w-full max-w-lg ${lockNudge === 0 ? 'animate-in slide-in-from-bottom-4' : ''}`}>
+          <SheetSkirt color="#09090b" />
           <div
-            className={`relative z-10 -mb-px border-t border-amber-500 rounded-t-[40px] w-full max-w-lg px-8 pt-6 max-h-[calc(100dvh-16px)] overflow-y-auto ${lockNudge === 0 ? 'animate-in slide-in-from-bottom-4' : ''}`}
+            className="relative border-t border-amber-500 rounded-t-[40px] w-full px-8 pt-6 max-h-[calc(100dvh-16px)] overflow-y-auto"
             style={{ backgroundColor: '#09090b', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }}
           >
             <div className="w-10 h-1 bg-zinc-700 rounded-full mx-auto mb-5" />
@@ -2679,6 +2742,7 @@ export const Player: React.FC = () => {
                 Unlock
               </button>
             </div>
+          </div>
           </div>
         </div>
       )}
