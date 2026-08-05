@@ -1379,38 +1379,39 @@ export const Player: React.FC = () => {
             className="overlay-edge-bleed fixed inset-0 z-[2000] flex flex-col overflow-hidden"
             style={{ backgroundColor: bg, fontFamily }}
           >
-            {/* ── HEADER — natural height, flex shrink-0 ── */}
-            <div
-              className="shrink-0 text-center"
-              style={{
-                backgroundColor: bg,
-                paddingTop: 'calc(env(safe-area-inset-top, 0px) + 24px)',
-                paddingBottom: '16px',
-              }}
-            >
-              <div className="w-full max-w-sm mx-auto px-5">
-                <h1 className="text-3xl font-bold leading-tight" style={{ color: textColor }}>{tour.title}</h1>
-                {tour.welcome_subtitle && (
-                  <p className="text-base font-medium mt-1.5" style={{ color: accent }}>{tour.welcome_subtitle}</p>
-                )}
-                {/* Distance, shape and time, before anyone commits. Someone
-                    deciding what to do with an afternoon needs this here, not
-                    after they've started walking. */}
-                {(() => {
-                  const summary = trailSummary(trailStats(tour, zones), tour.duration_minutes);
-                  return summary ? (
-                    <p className="text-xs mt-2 opacity-60" style={{ color: textColor }}>{summary}</p>
-                  ) : null;
-                })()}
-              </div>
-            </div>
-
-            {/* ── SCROLL AREA — takes all remaining space between header and footer ── */}
+            {/* ── SCROLL AREA — everything except the footer ── */}
             <div
               className="flex-1 overflow-y-auto"
               style={{ scrollbarWidth: 'none', overscrollBehavior: 'none' }}
             >
-              <div className="w-full max-w-sm mx-auto px-5 flex flex-col items-center text-center gap-5 py-4">
+              <div
+                className="w-full max-w-sm mx-auto px-5 flex flex-col items-center text-center gap-5 pb-4"
+                style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 24px)' }}
+              >
+
+                {/* Title, subtitle and trail summary scroll with everything
+                    else rather than sitting in a pinned header.
+                    As a fixed block this cost 129px out of a ~370px scroll
+                    window, and a two-line title made it worse at exactly the
+                    moment there was more to read — the squeeze grew with the
+                    content instead of the space. In the column, a longer title
+                    just makes the column longer. It is still the first thing on
+                    screen, and scrolling back up to re-read a title is cheap. */}
+                <div className="w-full">
+                  <h1 className="text-3xl font-bold leading-tight" style={{ color: textColor }}>{tour.title}</h1>
+                  {tour.welcome_subtitle && (
+                    <p className="text-base font-medium mt-1.5" style={{ color: accent }}>{tour.welcome_subtitle}</p>
+                  )}
+                  {/* Distance, shape and time, before anyone commits. Someone
+                      deciding what to do with an afternoon needs this here, not
+                      after they've started walking. */}
+                  {(() => {
+                    const summary = trailSummary(trailStats(tour, zones), tour.duration_minutes);
+                    return summary ? (
+                      <p className="text-xs mt-2 opacity-60" style={{ color: textColor }}>{summary}</p>
+                    ) : null;
+                  })()}
+                </div>
 
                 {tour.welcome_image_url && (
                   <img src={tour.welcome_image_url} alt={tour.title} className="w-40 h-40 object-cover rounded-2xl" />
@@ -1568,9 +1569,19 @@ export const Player: React.FC = () => {
 
                 {/* Assent sits directly against Begin, because that is the
                     action it refers to and proximity is what makes a clickwrap
-                    notice count for anything. Kept to one line: the full safety
-                    text is on the calibration screen a moment later, and a wall
-                    of text here would be scrolled past rather than read. */}
+                    notice count for anything. The full safety text is on the
+                    calibration screen a moment later; a wall of text here would
+                    be scrolled past rather than read.
+
+                    The privacy policy used to be a separate row underneath.
+                    Folding it into this sentence removes a row and a gap from a
+                    fixed footer that was squeezing the scroll area, and it puts
+                    both links in the sentence the player is actually agreeing
+                    to. Players never sign up, so this is still the only place
+                    they can reach the privacy policy, and the app reads their
+                    GPS. "At your own risk" is kept at the click rather than left
+                    to the linked terms: it is the one clause worth having in
+                    front of someone before they walk somewhere. */}
                 <p
                   className="text-[11px] leading-relaxed text-center px-1"
                   style={{ color: textColor, opacity: 0.5 }}
@@ -1586,25 +1597,18 @@ export const Player: React.FC = () => {
                   >
                     terms for playing
                   </a>
-                  , including that you take part at your own risk.
+                  {' '}and{' '}
+                  <a
+                    href="/privacy"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline underline-offset-2"
+                    style={{ color: accent, opacity: 0.9 }}
+                  >
+                    how your location is used
+                  </a>
+                  . You take part at your own risk.
                 </p>
-
-                {/* The real-world safety notice moved to the calibration screen.
-                    As background text here it was wallpaper people scrolled
-                    past; shown at the moment of commitment, after Begin, it is
-                    a beat they actually read — and this screen gets its space
-                    back. Still shown before anyone walks anywhere. */}
-                {/* Players never sign up, so this is the only place they can
-                    reach the privacy policy — and the app reads their GPS. */}
-                <a
-                  href="/privacy"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="block text-[11px] text-center underline underline-offset-2"
-                  style={{ color: textColor, opacity: 0.4 }}
-                >
-                  How your location is used
-                </a>
               </div>
             </div>
           </div>
