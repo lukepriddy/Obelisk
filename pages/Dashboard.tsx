@@ -311,13 +311,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
 
   const handleDelete = async (tourId: string) => {
     setDeletingId(tourId);
-    const ok = await dbDeleteTour(tourId);
+    const { ok, error } = await dbDeleteTour(tourId);
     if (ok) {
       setTours(prev => prev.filter(t => t.id !== tourId));
       setZoneCounts(prev => { const n = { ...prev }; delete n[tourId]; return n; });
       setConfirmDeleteId(null);
     } else {
-      alert('Could not delete. Please try again.');
+      // Prefer the server's message: it distinguishes "nothing was removed,
+      // retry" from "files went but the row didn't", which matter differently.
+      alert(error ?? 'Could not delete. Please try again.');
     }
     setDeletingId(null);
   };

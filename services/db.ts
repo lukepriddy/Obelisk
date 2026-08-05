@@ -152,10 +152,40 @@ export const updateTour = async (tourId: string, updates: Partial<Tour>): Promis
   if (error) { console.error('updateTour:', error); throw error; }
 };
 
-export const deleteTour = async (tourId: string): Promise<boolean> => {
-  const { error } = await supabase.from('tours').delete().eq('id', tourId);
-  if (error) { console.error('deleteTour:', error); return false; }
-  return true;
+/**
+ * Deletes a tour and everything uploaded under it.
+ *
+ * Goes through the `delete-tour` edge function rather than deleting the row
+ * directly. Storage RLS grants creators DELETE but no SELECT on their own
+ * objects, so the browser cannot enumerate what to remove — only the service
+ * role can. Deleting the row here would leave every audio file, image and 3D
+ * model behind while `constants/privacy.ts` promises the opposite.
+ *
+ * The function removes files first and verifies they are gone before touching
+ * the row, so a storage failure leaves the tour intact and retryable.
+ */
+export const deleteTour = async (tourId: string): Promise<{ ok: boolean; error?: string }> => {
+  try {
+    const { data, error } = await supabase.functions.invoke('delete-tour', {
+      body: { tourId },
+    });
+
+    // A non-2xx reply arrives as an error with the body on error.context.
+    let payload: Record<string, unknown> | null = data ?? null;
+    if (error && (error as { context?: Response }).context) {
+      payload = await (error as unknown as { context: Response }).context
+        .json().catch(() => null);
+    }
+
+    if (payload?.ok === true) return { ok: true };
+
+    const message = typeof payload?.error === 'string' ? payload.error : undefined;
+    console.error('deleteTour:', message ?? error);
+    return { ok: false, error: message };
+  } catch (e) {
+    console.error('deleteTour:', e);
+    return { ok: false };
+  }
 };
 
 // ── Zone helpers ──────────────────────────────────────────────────────────────

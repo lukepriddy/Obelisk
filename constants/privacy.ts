@@ -69,7 +69,11 @@ export const PRIVACY_SECTIONS: TermsSection[] = [
   {
     heading: 'Children',
     body: [
-      'Obelisk is not intended for children under 13, and accounts should not be created by them.',
+      // This previously spoke only about creating accounts, which covers
+      // creators and misses players entirely — and players are the ones whose
+      // location is read, with no account anywhere in the flow.
+      'Obelisk is not intended for anyone under 13. That applies to playing an experience as well as making one, and accounts should not be created by them.',
+      'We do not knowingly collect information from anyone under 13. If we learn that we have, we delete it — get in touch and we will.',
       'Experiences involve walking to real places. Anyone under 18 should be doing that with a parent or guardian who agrees to it.',
     ],
   },

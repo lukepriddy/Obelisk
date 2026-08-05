@@ -20,7 +20,7 @@
  * for agreement to new wording. Use a date so records are self-describing.
  */
 
-export const PLAYER_TERMS_VERSION = '2026-08-02';
+export const PLAYER_TERMS_VERSION = '2026-08-05';
 
 export interface TermsSection {
   heading: string;
@@ -60,9 +60,15 @@ export const PLAYER_TERMS_SECTIONS: TermsSection[] = [
     ],
   },
   {
-    heading: 'Younger players',
+    // COPPA attaches to under-13s specifically. The previous wording — "under
+    // 18, play with a guardian" — invited exactly the users that triggers it,
+    // while the app reads precise location, which is personal information
+    // under the rule. An express floor is the cheap position; the alternative
+    // is verifiable parental consent, which is a product in itself.
+    heading: 'Age',
     body: [
-      'If you are under 18, please take part with a parent or guardian, and only with their agreement.',
+      'You must be at least 13 years old to play. We do not knowingly collect information from anyone under 13, and if we learn that we have, we delete it.',
+      'If you are between 13 and 18, please take part with a parent or guardian, and only with their agreement.',
       'Some experiences contain mature themes chosen by their creator. Age suitability is not something we verify.',
     ],
   },

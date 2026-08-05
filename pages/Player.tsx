@@ -1537,7 +1537,8 @@ export const Player: React.FC = () => {
                   className="text-[11px] leading-relaxed text-center px-1"
                   style={{ color: textColor, opacity: 0.5 }}
                 >
-                  By tapping Begin you agree to the{' '}
+                  By tapping Begin you confirm you are 13 or older and agree to
+                  the{' '}
                   <a
                     href="/player-terms"
                     target="_blank"
