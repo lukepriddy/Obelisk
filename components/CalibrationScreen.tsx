@@ -345,7 +345,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
         )}
 
         <p className="text-[11px] leading-relaxed opacity-40 text-center mb-5">
-          Stay aware of your surroundings — watch for traffic, obey local laws,
+          Stay aware of your surroundings. Watch for traffic, obey local laws,
           and don’t enter private property. Locations are chosen by the creator
           of this experience. You take part at your own risk.
         </p>

@@ -1798,6 +1798,26 @@ export const Player: React.FC = () => {
             maxHeight: `calc(100dvh - ${bottomBarHeight + 84}px)`,
           }}
         >
+          {/* ── Minimized locked-zone pill ──────────────────────────────────────
+               Reopens the passphrase modal without having to leave and re-enter
+               the zone.
+
+               Lives inside this stack rather than being positioned against the
+               bottom bar on its own. Both were anchored to the same band, so a
+               locked zone and a playing zone landed on top of each other. As the
+               first child of a flex column they stack instead, with no element
+               needing to know another's height. */}
+          {minimizedLock && !passphraseChallenge && (
+            <button
+              onClick={() => { setMinimizedLock(null); setLockNudge(0); setPassphraseChallenge(minimizedLock); setPassphraseInput(''); setPassphraseError(false); }}
+              className="self-center shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-full bg-zinc-900/95 backdrop-blur border border-amber-500/50 shadow-xl active:opacity-80 animate-in slide-in-from-bottom-2"
+            >
+              <Lock size={15} className="text-amber-400" />
+              <span className="text-white text-sm font-semibold max-w-[160px] truncate">{minimizedLock.title}</span>
+              <span className="text-amber-400/70 text-xs shrink-0">Unlock</span>
+            </button>
+          )}
+
           {/* ── Character presence ─────────────────────────────────────────────
                Two states, one design language:
                • First entry (chatEverOpened=false): compact encounter card
@@ -2672,19 +2692,8 @@ export const Player: React.FC = () => {
       )}
 
       {/* ── PASSPHRASE MODAL ── */}
-      {/* Minimized locked-zone pill — reopens the passphrase modal without needing
-          to leave and re-enter the zone. */}
-      {audioStarted && minimizedLock && !passphraseChallenge && (
-        <button
-          onClick={() => { setMinimizedLock(null); setLockNudge(0); setPassphraseChallenge(minimizedLock); setPassphraseInput(''); setPassphraseError(false); }}
-          className="absolute z-[1600] left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2.5 rounded-full bg-zinc-900/95 backdrop-blur border border-amber-500/50 shadow-xl active:opacity-80 animate-in slide-in-from-bottom-2"
-          style={{ bottom: `calc(${bottomBarHeight}px + env(safe-area-inset-bottom, 0px) + 16px)` }}
-        >
-          <Lock size={15} className="text-amber-400" />
-          <span className="text-white text-sm font-semibold max-w-[160px] truncate">{minimizedLock.title}</span>
-          <span className="text-amber-400/70 text-xs shrink-0">Unlock</span>
-        </button>
-      )}
+      {/* The minimized locked-zone pill now lives inside the floating panel
+          stack above, so it can never land on top of the Now Playing card. */}
 
       {passphraseChallenge && (
         <div
@@ -2785,7 +2794,7 @@ export const Player: React.FC = () => {
           paddingTop: 'env(safe-area-inset-top, 0px)',
         }}
       >
-        <div className="flex items-center h-14 px-3 gap-2">
+        <div className="relative flex items-center h-14 px-3 gap-2">
 
           {audioStarted ? (
             <button
@@ -2799,10 +2808,19 @@ export const Player: React.FC = () => {
             <div className="w-10 shrink-0" />
           )}
 
-          <div className="flex-1 flex items-center justify-center gap-2">
+          {/* Centred against the bar, not against the space left over between
+              the buttons. As a flex-1 sibling it drifted left whenever the
+              right-hand group grew, which is what the progression button does.
+              pointer-events-none so an absolute overlay can never swallow a tap
+              meant for the buttons underneath it. */}
+          <div className="absolute inset-x-0 flex items-center justify-center gap-2 pointer-events-none">
             <MapPin size={18} style={{ color: accent }} className="shrink-0" />
             <span className="font-bold tracking-tight" style={{ color: th.barText }}>Obelisk</span>
           </div>
+
+          {/* Takes the space the title used to occupy, so the right-hand group
+              still sits against the right edge. */}
+          <div className="flex-1" />
 
           <div className="flex items-center gap-1 shrink-0">
             {tour.progression_enabled && playerProgress && (tour.progression_resources || []).length > 0 && (
