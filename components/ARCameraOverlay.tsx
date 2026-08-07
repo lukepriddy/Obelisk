@@ -175,6 +175,109 @@ function localTargetFrom(
   );
 }
 
+/**
+ * The field of drifting points behind the "View in camera" card.
+ *
+ * Before this, the screen waiting for the tap was flat black, which reads as
+ * something failing to load rather than something about to happen. What is
+ * drawn is a rough picture of the job the tracker is about to do: features
+ * appearing, linking to their neighbours, and dissolving as the view changes.
+ *
+ * Laid out once at module load from a fixed seed, never per render. The
+ * positions have to be stable across re-renders or the field would resample
+ * itself and jump, and there is no reason to pay for the maths again.
+ *
+ * Two layers at different drift rates and amplitudes: that difference is the
+ * whole depth cue. A single layer, however many points, looks like a flat sheet.
+ * Everything animates on opacity and transform only, because this sits directly
+ * in front of loading a very heavy AR engine and must not compete for the main
+ * thread.
+ */
+const INTRO_FIELD = (() => {
+  // Small deterministic PRNG. Math.random would give a different field on every
+  // reload, and a fixed layout can be tuned by eye and stay tuned.
+  let seed = 20260807;
+  const rnd = () => {
+    seed = (seed * 1664525 + 1013904223) % 4294967296;
+    return seed / 4294967296;
+  };
+  // Laid out 100 x 200, roughly a phone's proportions. A square viewBox
+  // stretched to a tall screen turns every point into an oval, and correcting
+  // that with a preserved aspect ratio instead would crop away half the field.
+  // Authoring at the shape it will be displayed at avoids both.
+  const layer = (count: number) =>
+    Array.from({ length: count }, () => ({
+      x: +(rnd() * 100).toFixed(2),
+      y: +(rnd() * 200).toFixed(2),
+      delay: +(rnd() * 7).toFixed(2),
+      dur: +(4.5 + rnd() * 4).toFixed(2),
+      r: +(0.34 + rnd() * 0.5).toFixed(2),
+    }));
+
+  const near = layer(20);
+  const far = layer(34);
+
+  // Link only near-layer points that are genuinely close. A distance threshold
+  // rather than nearest-neighbour: it leaves some points unlinked, which is
+  // what stops the mesh looking like a deliberate lattice.
+  const edges: { x1: number; y1: number; x2: number; y2: number; delay: number; dur: number }[] = [];
+  for (let i = 0; i < near.length; i++) {
+    for (let j = i + 1; j < near.length; j++) {
+      if (Math.hypot(near[i].x - near[j].x, near[i].y - near[j].y) > 26) continue;
+      edges.push({
+        x1: near[i].x, y1: near[i].y, x2: near[j].x, y2: near[j].y,
+        delay: +(rnd() * 8).toFixed(2),
+        dur: +(5.5 + rnd() * 4).toFixed(2),
+      });
+    }
+  }
+  return { near, far, edges };
+})();
+
+const IntroField: React.FC<{ accent: string }> = ({ accent }) => (
+  <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+    {/* Sits low and off-centre so the composition has a horizon rather than a
+        bullseye, and so the brightest part is not behind the card. */}
+    <div
+      className="absolute left-1/2 top-[38%] -translate-x-1/2 -translate-y-1/2 rounded-full"
+      style={{
+        width: '150vmin', height: '150vmin',
+        background: `radial-gradient(circle, ${accent}2b 0%, ${accent}0d 42%, transparent 70%)`,
+        animation: 'ar-glow 9s ease-in-out infinite',
+      }}
+    />
+    <svg
+      className="absolute inset-0 w-full h-full"
+      viewBox="0 0 100 200"
+      preserveAspectRatio="xMidYMid slice"
+    >
+      <g style={{ animation: 'ar-drift-far 26s ease-in-out infinite', transformOrigin: 'center' }}>
+        {INTRO_FIELD.far.map((p, i) => (
+          <circle
+            key={`f${i}`} cx={p.x} cy={p.y} r={p.r * 0.62} fill={accent}
+            style={{ animation: `ar-twinkle ${p.dur * 1.3}s ease-in-out ${p.delay}s infinite`, opacity: 0 }}
+          />
+        ))}
+      </g>
+      <g style={{ animation: 'ar-drift-near 19s ease-in-out infinite', transformOrigin: 'center' }}>
+        {INTRO_FIELD.edges.map((e, i) => (
+          <line
+            key={`e${i}`} x1={e.x1} y1={e.y1} x2={e.x2} y2={e.y2}
+            stroke={accent} strokeWidth={0.14}
+            style={{ animation: `ar-edge ${e.dur}s ease-in-out ${e.delay}s infinite`, opacity: 0 }}
+          />
+        ))}
+        {INTRO_FIELD.near.map((p, i) => (
+          <circle
+            key={`n${i}`} cx={p.x} cy={p.y} r={p.r} fill={accent}
+            style={{ animation: `ar-twinkle ${p.dur}s ease-in-out ${p.delay}s infinite`, opacity: 0 }}
+          />
+        ))}
+      </g>
+    </svg>
+  </div>
+);
+
 export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
   zone, userPosition, gpsAccuracy, accent = '#10b981', onClose,
 }) => {
@@ -660,6 +763,11 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
         className="absolute inset-0 m-auto max-w-full max-h-full"
         style={{ aspectRatio: '3 / 4' }}
       />
+
+      {/* Only while waiting for the tap. Once the camera is live it would be
+          drawing over the real world for no reason, and competing for frames
+          with the tracker. */}
+      {phase === 'intro' && <IntroField accent={accent} />}
 
       <div className="absolute top-0 inset-x-0 pt-[max(1rem,env(safe-area-inset-top))] px-4 flex items-center justify-between">
         <div className="rounded-xl bg-black/70 backdrop-blur px-3 py-2">

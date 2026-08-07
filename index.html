@@ -162,6 +162,48 @@
         55%  { transform: scale(1.14); opacity: 0.22; }
         100% { transform: scale(1);    opacity: 0.55; }
       }
+      /* ── AR intro field ────────────────────────────────────────────────────
+         The black screen before the camera opens. Feature points appearing and
+         linking is what the tracker is about to do for real once the camera
+         starts, so the wait previews the mechanism rather than just filling
+         space. Two layers drift at different rates and amplitudes, which is
+         what makes it read as depth rather than a flat sheet of dots.
+         Opacity and transform only: this sits directly in front of loading a
+         very heavy AR engine, so it must stay on the compositor and off the
+         main thread. */
+      @keyframes ar-twinkle {
+        0%, 100% { opacity: 0; }
+        18%      { opacity: 1; }
+        62%      { opacity: 0.55; }
+      }
+      @keyframes ar-edge {
+        0%, 100% { opacity: 0; }
+        30%      { opacity: 0.5; }
+        70%      { opacity: 0.1; }
+      }
+      @keyframes ar-drift-near {
+        0%, 100% { transform: translate3d(-1.6%, 1.1%, 0) scale(1.05); }
+        50%      { transform: translate3d(1.6%, -1.1%, 0) scale(1); }
+      }
+      @keyframes ar-drift-far {
+        0%, 100% { transform: translate3d(0.7%, -0.5%, 0); }
+        50%      { transform: translate3d(-0.7%, 0.5%, 0); }
+      }
+      @keyframes ar-glow {
+        0%, 100% { opacity: 0.22; transform: scale(1); }
+        50%      { opacity: 0.4;  transform: scale(1.09); }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        /* The field holds still and simply stays lit. Drifting and twinkling
+           are decoration; the depth cue is not worth motion sickness. */
+        @keyframes ar-twinkle    { 0%, 100% { opacity: 0.7; } }
+        @keyframes ar-edge       { 0%, 100% { opacity: 0.22; } }
+        @keyframes ar-drift-near { 0%, 100% { transform: none; } }
+        @keyframes ar-drift-far  { 0%, 100% { transform: none; } }
+        @keyframes ar-glow       { 0%, 100% { opacity: 0.3; transform: scale(1); } }
+      }
+
       @media (prefers-reduced-motion: reduce) {
         /* Travelling and spinning are exactly what this setting is for. The
            accuracy ring still moves — that one is information, not decoration. */
