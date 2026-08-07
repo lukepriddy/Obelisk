@@ -57,11 +57,26 @@ function canUseWebAudioGain(url: string) {
   }
 }
 
+/**
+ * ?audio-keeper=0 turns the silent route keeper off, for A/B testing in the
+ * field. On by default. See startRouteKeeper.
+ */
+const routeKeeperEnabled = (): boolean => {
+  try {
+    return new URLSearchParams(window.location.search).get('audio-keeper') !== '0';
+  } catch {
+    return true;
+  }
+};
+
 export class AudioService {
   public context: AudioContext | null = null;
   private nodes: Map<string, NodeData> = new Map();
   private isUnlocked = false;
   private interruptionPaused = false;
+  private keeperSource: AudioBufferSourceNode | null = null;
+  private keeperGain: GainNode | null = null;
+  private keeperTimeout: number | null = null;
 
   constructor() {
     const AudioContextClass = (window.AudioContext || (window as any).webkitAudioContext);
@@ -124,6 +139,75 @@ export class AudioService {
     await this.resumeContext();
     this.isUnlocked = true;
     this.interruptionPaused = false;
+    this.startRouteKeeper();
+  }
+
+  /**
+   * Holds the audio route open with silence, from unlock until prefetch ends.
+   *
+   * Bluetooth headphones drop the audio route when nothing is playing and
+   * re-engage it when something starts, and that re-engagement is a physical
+   * click. On calibration the sequence is: the chime plays (route engages, the
+   * chime covers the click), the chime ends, the route idles, and then priming
+   * calls play() on every zone to warm it. That last step re-engages the route
+   * into silence, with nothing to cover it. Over a speaker there is no route to
+   * engage, which is why it is only ever reported on AirPods.
+   *
+   * Staggering the primes spread those clicks out but could never remove the
+   * first one. Keeping the route continuously busy does, because it never
+   * disengages in the first place.
+   *
+   * Held until prefetch finishes, not until priming does. Measured in the
+   * browser: priming runs immediately on the Begin tap, at ~0.5s, while the
+   * chime is still sounding and covering it. The exposed gap is later, when
+   * prefetch swaps each zone to its downloaded copy and calls load() on the
+   * element, and that starts at TONE_DURATION_MS with the chime already over.
+   * Stopping at the end of priming closed the keeper a full four seconds before
+   * the moment it exists to cover.
+   *
+   * A silent looping buffer on the existing context, deliberately: it is purely
+   * additive. It never touches the zone signal path, the nodes map, the unlock
+   * state or the prime routine, so the worst it can do is nothing.
+   */
+  private startRouteKeeper() {
+    if (!this.context || this.keeperSource || !routeKeeperEnabled()) return;
+    try {
+      const ctx = this.context;
+      // One second of zeroes, looped. A buffer rather than an oscillator: an
+      // oscillator still runs a generator every frame to produce samples that
+      // are then multiplied away, where an empty buffer is already silence.
+      const buffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+      const gain = ctx.createGain();
+      gain.gain.value = 0;
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.loop = true;
+      source.connect(gain);
+      gain.connect(ctx.destination);
+      source.start();
+      this.keeperSource = source;
+      this.keeperGain = gain;
+      // Backstop. prefetchAll is what normally releases the keeper, but a tour
+      // with no prefetchable zones never calls it, and a walk should not spend
+      // an hour holding the headphones in their high-power profile because of
+      // a path nobody took.
+      window.clearTimeout(this.keeperTimeout ?? undefined);
+      this.keeperTimeout = window.setTimeout(() => this.stopRouteKeeper(), 90_000);
+    } catch (error) {
+      // The keeper is an optimisation. Never let it block audio from starting.
+      console.warn('Route keeper failed to start:', error);
+      this.stopRouteKeeper();
+    }
+  }
+
+  private stopRouteKeeper() {
+    window.clearTimeout(this.keeperTimeout ?? undefined);
+    this.keeperTimeout = null;
+    try { this.keeperSource?.stop(); } catch { /* already stopped */ }
+    try { this.keeperSource?.disconnect(); } catch { /* already detached */ }
+    try { this.keeperGain?.disconnect(); } catch { /* already detached */ }
+    this.keeperSource = null;
+    this.keeperGain = null;
   }
 
   async resume() {
@@ -446,6 +530,10 @@ export class AudioService {
       done += 1;
       onProgress?.(done, total);
     }
+
+    // Every src swap that could re-engage the Bluetooth route has now happened,
+    // so the route can be allowed to idle again. See startRouteKeeper.
+    this.stopRouteKeeper();
   }
 
   async primeLoadedAudio(): Promise<void> {
@@ -507,6 +595,7 @@ export class AudioService {
       new Promise<void>(resolve =>
         window.setTimeout(resolve, Math.min(5000, 1200 + pending.length * STAGGER_MS))),
     ]);
+
   }
 
   /**
@@ -816,6 +905,7 @@ export class AudioService {
       if (data.localUrl) { try { URL.revokeObjectURL(data.localUrl); } catch { /* already gone */ } }
     });
     this.nodes.clear();
+    this.stopRouteKeeper();
     this.isUnlocked = false;
     this.interruptionPaused = false;
   }
