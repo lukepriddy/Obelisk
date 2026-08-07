@@ -139,11 +139,10 @@ export class AudioService {
     await this.resumeContext();
     this.isUnlocked = true;
     this.interruptionPaused = false;
-    this.startRouteKeeper();
   }
 
   /**
-   * Holds the audio route open with silence, from unlock until prefetch ends.
+   * Holds the audio route open with silence for the duration of prefetch.
    *
    * Bluetooth headphones drop the audio route when nothing is playing and
    * re-engage it when something starts, and that re-engagement is a physical
@@ -157,13 +156,13 @@ export class AudioService {
    * first one. Keeping the route continuously busy does, because it never
    * disengages in the first place.
    *
-   * Held until prefetch finishes, not until priming does. Measured in the
-   * browser: priming runs immediately on the Begin tap, at ~0.5s, while the
-   * chime is still sounding and covering it. The exposed gap is later, when
-   * prefetch swaps each zone to its downloaded copy and calls load() on the
-   * element, and that starts at TONE_DURATION_MS with the chime already over.
-   * Stopping at the end of priming closed the keeper a full four seconds before
-   * the moment it exists to cover.
+   * Scoped to prefetch, not to priming, and not to the whole session. Measured
+   * in the browser: priming runs immediately on the Begin tap while the chime
+   * is still sounding and covering it, so it never needed help. The exposed
+   * work is prefetch, which swaps each zone to its downloaded copy and calls
+   * load() on the element. An earlier version started this at unlock and
+   * released it when priming ended, which covered neither: it opened four
+   * seconds too early and shut before the download began.
    *
    * A silent looping buffer on the existing context, deliberately: it is purely
    * additive. It never touches the zone signal path, the nodes map, the unlock
@@ -507,6 +506,13 @@ export class AudioService {
     const total = targets.length;
     let done = 0;
     onProgress?.(0, total);
+
+    // Open the route just before the work that disturbs it, and only if there
+    // is any. This used to start at unlock, which stopped being right once
+    // prefetch moved to the "I'm ready" tap: the keeper would have spent the
+    // whole calibration holding the route open for nothing, and its 90s
+    // backstop could close it before prefetch had even begun.
+    if (total > 0) this.startRouteKeeper();
 
     for (const nodeData of targets) {
       try {

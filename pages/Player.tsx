@@ -75,9 +75,10 @@ const ViewportStats: React.FC<{ labelColor: string; valueColor: string }> = ({ l
  * Nothing behind this needs to react to it, and it must not swallow the
  * tap-to-dismiss on the wrapper, hence `pointer-events-none`.
  */
-/** Length of public/calibration-tone.m4a, rounded up. Used to keep heavy
- *  background work off the audio path while the tone is still sounding. */
-const TONE_DURATION_MS = 5000;
+// TONE_DURATION_MS used to delay prefetch until the calibration chime had
+// finished. Prefetch now waits for the "I'm ready" tap instead, which is later
+// and unconditional, so timing against the chime's length no longer means
+// anything and the constant went with it.
 
 const SheetBlur: React.FC = () => (
   <div className="fixed inset-0 backdrop-blur-sm pointer-events-none" aria-hidden="true" />
@@ -310,6 +311,10 @@ export const Player: React.FC = () => {
 
   // Analytics: session ID for the current play; null in preview mode or before Begin.
   const sessionIdRef = useRef<string | null>(null);
+  /** Zone ids to prefetch, nearest-first. Filled at Begin, consumed on the
+   *  "I'm ready" tap — see the prefetch note in startAudio. Nulled once
+   *  started so a re-render cannot kick off a second pass. */
+  const prefetchOrderRef = useRef<string[] | null>(null);
   // Tracks which zone IDs have already been recorded this session so we don't double-count.
   const recordedVisitsRef = useRef<Set<string>>(new Set());
   // Swipe-up detection on bottom bar
@@ -1200,18 +1205,19 @@ export const Player: React.FC = () => {
         .sort((a, b) =>
           getDistance(tour.lat, tour.lng, a.lat, a.lng) - getDistance(tour.lat, tour.lng, b.lat, b.lng))
         .map(z => z.id);
-      // Held back until the calibration tone has finished. Downloading and
-      // decoding every zone's audio at once is heavy enough to make a
-      // concurrently playing element stutter, which is why the blips were
-      // audible on a first open and never on a replay — by then this has
-      // already run. Nothing depends on prefetch starting promptly: zones
-      // reached before their download finishes simply stream, exactly as they
-      // did before prefetch existed.
-      window.setTimeout(() => {
-        void audioService.prefetchAll(ordered, (done, total) => {
-          setPrefetchStatus(total > 0 && done < total ? { done, total } : null);
-        });
-      }, TONE_DURATION_MS);
+      // Deliberately NOT started here. Downloading and decoding every zone's
+      // audio is heavy enough to glitch the audio thread, and during
+      // calibration the player is standing still with headphones on and nothing
+      // playing, which is the most exposed moment in the whole experience for a
+      // click. Deferring it to the "I'm ready" tap moves the work to where the
+      // player is walking, the map is up, and the first zone is usually a
+      // minute away.
+      //
+      // Nothing depends on prefetch starting promptly: a zone reached before
+      // its download finishes simply streams, exactly as it did before prefetch
+      // existed. The order is kept nearest-first so the zones most likely to be
+      // reached first are also downloaded first.
+      prefetchOrderRef.current = ordered;
     }
 
     // Start analytics session — skip in preview mode so creator test-runs don't pollute data.
@@ -1357,7 +1363,18 @@ export const Player: React.FC = () => {
           gpsUnavailable={Boolean(gpsError) || simulationMode}
           startLat={tour.lat}
           startLng={tour.lng}
-          onReady={() => setCalibrating(false)}
+          onReady={() => {
+            setCalibrating(false);
+            // Downloading starts on the tap, not before. Nulling the ref first
+            // means this can only ever run once, however this re-renders.
+            const ordered = prefetchOrderRef.current;
+            prefetchOrderRef.current = null;
+            if (ordered && ordered.length) {
+              void audioService.prefetchAll(ordered, (done, total) => {
+                setPrefetchStatus(total > 0 && done < total ? { done, total } : null);
+              });
+            }
+          }}
           onBack={() => { setCalibrating(false); exitExperience(); }}
         />
       )}

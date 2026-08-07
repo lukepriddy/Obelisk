@@ -39,7 +39,11 @@ export interface CalibrationScreenProps {
   distanceToStart: number | null;
   /** Distance from the start to the outermost stop — sizes the distance gate. */
   furthestMeters: number;
-  /** Background audio prefetch, purely informational. Never gates. */
+  /** Background audio prefetch, purely informational. Never gates.
+   *  In practice this no longer fires: downloading is deferred to the "I'm
+   *  ready" tap, so nothing is in flight while this screen is up, and the same
+   *  counter appears over the map instead. Kept because it costs nothing and
+   *  stays correct if prefetch ever moves earlier again. */
   prefetch: { done: number; total: number } | null;
   /** True when geolocation failed outright — don't hold them here. */
   gpsUnavailable?: boolean;
@@ -150,7 +154,24 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
       className="overlay-edge-bleed fixed inset-0 z-[2200] flex flex-col"
       style={{ backgroundColor: bg, color: textColor, fontFamily }}
     >
-      <div className="flex-1 flex flex-col items-center justify-center px-8 text-center w-full max-w-sm mx-auto">
+      {/* Scrolls rather than clips. The column was centred with no overflow and
+          no height cap, so on any browser whose chrome eats more of the screen
+          than Safari's — Chrome iOS especially — the primary button fell off
+          the bottom with no way to reach it.
+
+          min-h-full on the inner column rather than justify-center on a flex
+          parent: a centred flex child that outgrows its container gets clipped
+          at the TOP, past the scroll origin, so the scrollbar cannot reach it.
+          This way it centres while it fits and grows into a scroll when it
+          does not. */}
+      <div className="flex-1 overflow-y-auto overscroll-contain">
+        <div
+          className="min-h-full flex flex-col items-center justify-center px-8 text-center w-full max-w-sm mx-auto"
+          style={{
+            paddingTop: 'calc(env(safe-area-inset-top, 0px) + 1rem)',
+            paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 1rem)',
+          }}
+        >
 
         {/* An instrument coming into focus. Graduated rings counter-rotate
             while the fix is loose and halt on lock; the accuracy ring's radius
@@ -160,7 +181,12 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
             collapsed to a dot, which put the dullest frame at the climax. */}
         <div
           className="relative flex items-center justify-center"
-          style={{ width: 'min(19rem, 74vw)', aspectRatio: '1 / 1' }}
+          // 38dvh caps the ring against the height actually available, not just
+          // the width. Without it a short viewport (Chrome's taller toolbars,
+          // or landscape) got a ring sized for the width that pushed everything
+          // below it off screen. dvh rather than vh so it tracks the toolbars
+          // collapsing and expanding as you scroll.
+          style={{ width: 'min(19rem, 74vw, 38dvh)', aspectRatio: '1 / 1' }}
           aria-hidden="true"
         >
           {/* Outer graduation: sparse, slow, clockwise. */}
@@ -388,6 +414,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
             {ready ? 'I’m ready' : 'Just a moment…'}
           </button>
         )}
+        </div>
       </div>
     </div>
   );
