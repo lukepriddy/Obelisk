@@ -151,26 +151,30 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
 
   return (
     <div
-      className="overlay-edge-bleed fixed inset-0 z-[2200] flex flex-col"
+      className="overlay-edge-bleed fixed inset-0 z-[2200] flex flex-col overflow-hidden"
       style={{ backgroundColor: bg, color: textColor, fontFamily }}
     >
-      {/* Scrolls rather than clips. The column was centred with no overflow and
-          no height cap, so on any browser whose chrome eats more of the screen
-          than Safari's — Chrome iOS especially — the primary button fell off
-          the bottom with no way to reach it.
+      {/* Never scrolls. An earlier attempt at the too-short-viewport problem
+          made this column scrollable, which was the wrong shape entirely: the
+          primary button drifted below the fold, and the whole screen slid
+          under a finger instead of sitting still.
 
-          min-h-full on the inner column rather than justify-center on a flex
-          parent: a centred flex child that outgrows its container gets clipped
-          at the TOP, past the scroll origin, so the scrollbar cannot reach it.
-          This way it centres while it fits and grows into a scroll when it
-          does not. */}
-      <div className="flex-1 overflow-y-auto overscroll-contain">
+          What actually has to be guaranteed is that the text and the button are
+          on screen. The instrument does not: it is the one element that can
+          spill past the edges and lose nothing, because it reads as a ring
+          radiating outward either way. So the panel below is fixed, this region
+          takes whatever height is left, and the rings are centred inside it and
+          allowed to overflow — clipped by overflow-hidden rather than pushing
+          anything off screen. */}
+      <div className="relative flex-1 min-h-0 overflow-hidden">
+        {/* Anchored to the BOTTOM of the region, not centred in it. Centring
+            would let a short screen clip the status text along with the rings,
+            and the text is the half that has to stay readable. Anchored here,
+            the wording sits immediately above the fixed panel and never moves,
+            while the rings extend upward from it and simply run off the top
+            edge when there is not enough room. */}
         <div
-          className="min-h-full flex flex-col items-center justify-center px-8 text-center w-full max-w-sm mx-auto"
-          style={{
-            paddingTop: 'calc(env(safe-area-inset-top, 0px) + 1rem)',
-            paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 1rem)',
-          }}
+          className="absolute inset-x-0 bottom-0 mx-auto flex flex-col items-center px-8 text-center w-full max-w-sm"
         >
 
         {/* An instrument coming into focus. Graduated rings counter-rotate
@@ -181,12 +185,10 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
             collapsed to a dot, which put the dullest frame at the climax. */}
         <div
           className="relative flex items-center justify-center"
-          // 38dvh caps the ring against the height actually available, not just
-          // the width. Without it a short viewport (Chrome's taller toolbars,
-          // or landscape) got a ring sized for the width that pushed everything
-          // below it off screen. dvh rather than vh so it tracks the toolbars
-          // collapsing and expanding as you scroll.
-          style={{ width: 'min(19rem, 74vw, 38dvh)', aspectRatio: '1 / 1' }}
+          // Sized against width alone. It no longer needs a height cap: the
+          // region clips it, so on a short screen it overflows the top rather
+          // than shrinking or shoving the text down.
+          style={{ width: 'min(19rem, 74vw)', aspectRatio: '1 / 1' }}
           aria-hidden="true"
         >
           {/* Outer graduation: sparse, slow, clockwise. */}
@@ -329,6 +331,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
             <Navigation size={15} /> Directions to the start
           </a>
         )}
+        </div>
       </div>
 
       <div
@@ -414,7 +417,6 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
             {ready ? 'I’m ready' : 'Just a moment…'}
           </button>
         )}
-        </div>
       </div>
     </div>
   );
