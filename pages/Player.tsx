@@ -319,6 +319,30 @@ export const Player: React.FC = () => {
   const recordedVisitsRef = useRef<Set<string>>(new Set());
   // Swipe-up detection on bottom bar
 
+  /**
+   * Paint the browser's status-bar strip the same colour as the experience.
+   *
+   * The strip above the top bar is drawn by the browser, not the page, from the
+   * theme-color meta. That meta is a fixed near-black in index.html, so the
+   * moment a tour uses any other background the top of the screen splits into
+   * two tones: the phone's strip in one colour, the app's bar in another. No
+   * amount of styling inside the page can fix that, because the page does not
+   * own those pixels.
+   *
+   * Restored on unmount so the strip goes back to the app's own colour when the
+   * player is left. Duplicated rather than shared with the `th` object because
+   * that is computed after this component's early returns, and hooks cannot run
+   * conditionally.
+   */
+  useEffect(() => {
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (!meta) return;
+    const previous = meta.getAttribute('content');
+    const dark = (tour?.player_theme || 'dark') === 'dark';
+    meta.setAttribute('content', tour?.bg_color || (dark ? '#09090b' : '#fafaf9'));
+    return () => { if (previous) meta.setAttribute('content', previous); };
+  }, [tour?.bg_color, tour?.player_theme]);
+
   useEffect(() => {
     if (tourId) loadTour(tourId);
     return () => {
@@ -1282,13 +1306,19 @@ export const Player: React.FC = () => {
   const themedBg   = tour.bg_color   || (isDark ? '#09090b' : '#fafaf9');
   const themedText = tour.text_color || (isDark ? '#ffffff' : '#0f172a');
   const th = {
-    // Top / bottom bars + all slide-up sheets share this dark surface (#09090b),
-    // so header, footer, and every sheet are one seamless colour. Only the small
-    // pill/floating elements use the lighter grey (cardBg / zinc-900) to stand
-    // out against it.
-    barBg:       isDark ? '#09090b'              : '#ffffff',
+    // Bars, sheets and the page all take the experience's own background, so
+    // the chrome reads as one surface in whatever colour the creator chose
+    // rather than a fixed near-black sitting next to it. These were hardcoded
+    // #09090b, which agreed with the default by luck and disagreed the moment
+    // a tour set bg_color to anything else — including true black.
+    //
+    // The status bar strip above the bar is painted by the browser from the
+    // theme-color meta, so that is kept in step too (see the effect below).
+    // Without it the phone paints its own colour there and the top of the
+    // screen splits into two tones no matter what these values are.
+    barBg:       themedBg,
     barBorder:   isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
-    barText:     isDark ? '#ffffff'              : '#09090b',
+    barText:     themedText,
     barMuted:    isDark ? '#71717a'              : '#52525b',
     // Floating cards (Now Playing, Character card)
     cardBg:      isDark ? 'rgba(24,24,27,0.95)' : 'rgba(255,255,255,0.95)',
@@ -1296,8 +1326,8 @@ export const Player: React.FC = () => {
     cardText:    isDark ? '#ffffff'              : '#09090b',
     cardMuted:   isDark ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.55)',
     // Info sheet — same dark surface as the bars (see barBg note).
-    sheetBg:     isDark ? '#09090b'              : '#ffffff',
-    sheetText:   isDark ? '#ffffff'              : '#09090b',
+    sheetBg:     themedBg,
+    sheetText:   themedText,
     sheetMuted:  isDark ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.55)',
     sheetHandle: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)',
     sheetBorder: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
