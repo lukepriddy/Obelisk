@@ -294,13 +294,16 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
           />
         </div>
 
-        {/* Fixed height, because everything here sits in a justify-center
-            column: any line appearing or disappearing below re-centres the
-            stack and nudges the rings. The prefetch counter is the worst
-            offender — it arrives partway through and leaves again — but the
-            status wording can rewrap too. Reserving the space means the
-            instrument stays welded in place through every transition. */}
-        <div className="mt-10 w-full max-w-xs flex flex-col items-center" style={{ minHeight: '7rem' }}>
+        {/* Fixed height so a line appearing or disappearing cannot nudge the
+            rings. Now 5.25rem rather than 7rem: the extra was reserved for the
+            prefetch counter, which used to arrive partway through and leave
+            again, and no longer runs during this screen at all. Downloading
+            waits for the tap now, so the space it was holding was simply a gap.
+            Still enough for the status line over a two-line subtitle, which is
+            the tallest the wording gets ("Head to the starting point and open
+            it again from there"). Because this column is anchored to the bottom
+            of its region, shortening it lowers the rings by the same amount. */}
+        <div className="mt-10 w-full max-w-xs flex flex-col items-center" style={{ minHeight: '5.25rem' }}>
           <p className="text-lg font-semibold">{statusLine}</p>
 
           {/* "Ready" over "give it a moment" read as the screen contradicting
@@ -335,7 +338,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
       </div>
 
       <div
-        className="shrink-0 px-8 pt-8 w-full max-w-sm mx-auto"
+        className="shrink-0 px-8 pt-5 w-full max-w-sm mx-auto"
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 28px)' }}
       >
         {/* The audio check. No API can answer this — on iOS the silent switch
