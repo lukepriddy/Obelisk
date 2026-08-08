@@ -176,6 +176,47 @@ function buildTags(tour: TourRow, zones: { lat: number; lng: number }[], url: st
     `<meta name="twitter:description" content="${escapeHtml(description)}">`,
   );
 
+  // Structured data. Meta tags say what the page is called; this says what the
+  // page *is* — a thing at a coordinate that takes a certain time to do. That
+  // is the difference between a search engine treating this as a web page that
+  // mentions a place and treating it as a place, which is what any query about
+  // a destination is actually looking for.
+  //
+  // TouristAttraction over Event: an Event needs a date, and these have none —
+  // they are available whenever someone walks there.
+  //
+  // JSON-LD is injected as a script tag rather than inline attributes so a
+  // parse failure degrades to "no structured data" instead of corrupting the
+  // markup around it. JSON.stringify escapes the values; the `<` guard below
+  // is for the one sequence that could still close the script element early.
+  const structured: Record<string, unknown> = {
+    '@context': 'https://schema.org',
+    '@type': 'TouristAttraction',
+    name: title,
+    description,
+    url,
+    isAccessibleForFree: true,
+  };
+  // Coordinates are the whole point of the markup, but null ones are worse
+  // than none: they assert a location at 0,0 off West Africa.
+  if (typeof tour.lat === 'number' && typeof tour.lng === 'number') {
+    structured.geo = {
+      '@type': 'GeoCoordinates',
+      latitude: tour.lat,
+      longitude: tour.lng,
+    };
+  }
+  if (tour.welcome_image_url) structured.image = tour.welcome_image_url;
+  // ISO 8601 duration. Only when the creator actually supplied one — an
+  // invented number here would be a machine-readable lie.
+  if (tour.duration_minutes) structured.timeRequired = `PT${tour.duration_minutes}M`;
+
+  tags.push(
+    `<script type="application/ld+json">${
+      JSON.stringify(structured).replace(/</g, '\\u003c')
+    }</script>`,
+  );
+
   return tags.join('\n    ');
 }
 

@@ -1,0 +1,102 @@
+/**
+ * sitemap.xml — the list of pages worth indexing.
+ *
+ * Generated rather than static: the set of public experiences changes whenever
+ * a creator publishes or unpublishes, and a stale sitemap pointing at removed
+ * pages is worse than none.
+ *
+ * Served only on the canonical host, and empty until PUBLIC_SITE_ORIGIN is set,
+ * matching api/robots.ts. A sitemap advertising throwaway addresses would
+ * actively invite the indexing the robots rules exist to prevent.
+ *
+ * Reads with the ANON key, so RLS decides what is listed: anonymous reads are
+ * already scoped to is_public = true. An unpublished tour cannot appear here
+ * even by mistake, because the same rule that hides it from the player hides it
+ * from this. The moderation status is filtered too — approved is what "public"
+ * actually means once the gate is involved, and admin-owned tours are stamped
+ * approved by trigger so they are not a special case.
+ */
+
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY;
+
+const FETCH_TIMEOUT_MS = 2500;
+
+type NodeReq = { headers: Record<string, string | string[] | undefined> };
+type NodeRes = {
+  statusCode: number;
+  setHeader: (name: string, value: string) => void;
+  end: (body?: string) => void;
+};
+
+const firstHeader = (value: string | string[] | undefined) =>
+  (Array.isArray(value) ? value[0] : value || '').split(',')[0].trim();
+
+const escapeXml = (value: string) =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+
+type TourRow = { id: string; updated_at?: string | null; created_at?: string | null };
+
+async function fetchPublicTours(): Promise<TourRow[]> {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return [];
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/tours` +
+        `?select=id,created_at&is_public=eq.true&moderation_status=eq.approved`,
+      {
+        headers: { apikey: SUPABASE_ANON_KEY, authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+        signal: controller.signal,
+      },
+    );
+    if (!res.ok) return [];
+    return (await res.json()) as TourRow[];
+  } catch {
+    // An empty sitemap is a recoverable disappointment; a 500 on a file
+    // crawlers fetch repeatedly is a signal the site is unhealthy.
+    return [];
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export default async function handler(req: NodeReq, res: NodeRes): Promise<void> {
+  const host = (firstHeader(req.headers['x-forwarded-host']) ||
+    firstHeader(req.headers.host)).toLowerCase();
+
+  const origin = (process.env.PUBLIC_SITE_ORIGIN || '').replace(/\/+$/, '');
+  let canonicalHost: string | null = null;
+  try {
+    canonicalHost = origin ? new URL(origin).host.toLowerCase() : null;
+  } catch {
+    canonicalHost = null;
+  }
+
+  const urls: string[] = [];
+  if (canonicalHost && host === canonicalHost) {
+    urls.push(`${origin}/`);
+    for (const tour of await fetchPublicTours()) {
+      if (tour.id) urls.push(`${origin}/player/${tour.id}`);
+    }
+  }
+
+  const body =
+    '<?xml version="1.0" encoding="UTF-8"?>\n' +
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
+    urls.map(url => `  <url><loc>${escapeXml(url)}</loc></url>\n`).join('') +
+    '</urlset>\n';
+
+  res.statusCode = 200;
+  res.setHeader('content-type', 'application/xml; charset=utf-8');
+  res.setHeader('cache-control', 'public, s-maxage=3600, stale-while-revalidate=86400');
+  if (!(canonicalHost && host === canonicalHost)) {
+    res.setHeader('x-robots-tag', 'noindex, nofollow');
+  }
+  res.end(body);
+}

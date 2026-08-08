@@ -1,6 +1,7 @@
 {
   "rewrites": [
     { "source": "/robots.txt", "destination": "/api/robots" },
+    { "source": "/sitemap.xml", "destination": "/api/sitemap" },
     { "source": "/player/:tourId", "destination": "/api/render" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
