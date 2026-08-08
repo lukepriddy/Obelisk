@@ -1288,21 +1288,25 @@ export const Player: React.FC = () => {
   // light theme changed the chrome and left those two screens black. An accent
   // would apply while the theme appeared to do nothing. Explicit colours still
   // win; only the fallback follows the theme.
-  // Scrim behind the bottom sheets. Dark mode dims; light mode does not.
+  // No scrim behind the bottom sheets, in either theme. Blur alone does the
+  // separating.
   //
-  // The dim used to apply in both themes, on the reasoning that the scrim's
-  // contrast partner is the sheet rather than the page. That holds in the
-  // abstract and looked wrong in practice: the top bar is opaque and sits
-  // *under* the sheet overlay, so the dim landed on it too and turned a white
-  // bar grey — a hard two-tone band across the top of a light-themed screen,
-  // white sheet below, grey chrome above.
+  // The dim went from light mode first: the top bar is opaque and sits *under*
+  // the sheet overlay, so the dim landed on it too and turned a white bar grey,
+  // a hard two-tone band across the top of the screen.
   //
-  // Light mode now leans on blur alone for separation, which does the same job
-  // (kills detail behind the sheet) without changing anyone's luminance, so the
-  // bar keeps its colour and the screen reads as one surface. Dark mode is
-  // unchanged — a dim over dark chrome was never the problem.
-  const scrim = isDark ? 'bg-black/60' : '';
-  const scrimStrong = isDark ? 'bg-black/70' : '';
+  // Dark mode kept it, on the grounds that dimming dark chrome was harmless.
+  // It was not, for a reason the light case did not have: the status bar band
+  // is drawn by iOS with its own faint backdrop, outside anything CSS can
+  // reach. Darkening the page beneath it while that backdrop stays put widens
+  // the difference between the two, so the band separates from the header
+  // exactly when a sheet opens. Removing the dim leaves the page under the band
+  // at the colour the band is expecting.
+  //
+  // Blur was always the part doing the work: it destroys the detail behind the
+  // sheet without changing anyone's luminance.
+  const scrim = '';
+  const scrimStrong = '';
   const themedBg   = tour.bg_color   || (isDark ? '#09090b' : '#fafaf9');
   const themedText = tour.text_color || (isDark ? '#ffffff' : '#0f172a');
   const th = {
@@ -1720,13 +1724,14 @@ export const Player: React.FC = () => {
         <div
           className="overlay-edge-bleed fixed inset-0 z-[2000] flex items-end justify-center px-4 md:px-0"
           style={{
-            // Was a hardcoded rgba(0,0,0,0.55) — the one sheet that ignored the
-            // theme entirely, so on a light tour it dropped a near-black wash
-            // over the white top bar while every other sheet used the (lighter)
-            // themed scrim. Now it follows the same rule as the rest.
-            // Backdrop keys off tourInfoVisible, not tourInfoMounted, and has
-            // no opacity transition. Both halves of that matter, and each was
-            // its own bug:
+            // No tint at all now, matching every other sheet: this one used a
+            // hardcoded rgba(0,0,0,0.55) that ignored the theme, then a themed
+            // dim, and now none. Blur alone separates the sheet. See the scrim
+            // note where `scrim` is defined.
+            //
+            // The blur still keys off tourInfoVisible, not tourInfoMounted, and
+            // still has no opacity transition. Both halves of that matter, and
+            // each was its own bug:
             //
             // Fading this element faded SheetBlur with it, since the blur is a
             // child — and Safari will not composite a backdrop-filter at full
@@ -1740,7 +1745,7 @@ export const Player: React.FC = () => {
             //
             // Tying the backdrop to `visible` gives both: it appears and
             // disappears on the tap, while the sheet keeps its slide.
-            backgroundColor: isDark && tourInfoVisible ? 'rgba(0,0,0,0.55)' : 'transparent',
+            backgroundColor: 'transparent',
           }}
           onClick={closeTourInfo}
         >
