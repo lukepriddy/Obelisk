@@ -1,6 +1,16 @@
 {
   "rewrites": [
+    { "source": "/robots.txt", "destination": "/api/robots" },
     { "source": "/player/:tourId", "destination": "/api/render" },
     { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "(.*)\\.vercel\\.app" }],
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
+      ]
+    }
   ]
 }

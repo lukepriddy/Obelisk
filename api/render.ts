@@ -213,6 +213,17 @@ export default async function handler(req: NodeReq, res: NodeRes): Promise<void>
   const proto = firstHeader(req.headers['x-forwarded-proto']) || 'https';
   const host = firstHeader(req.headers['x-forwarded-host']) || firstHeader(req.headers.host);
   const origin = `${proto}://${host}`;
+
+  // Public URLs name the real site, never the address this request happened to
+  // arrive on. The deployment answers on the production domain, the project's
+  // *.vercel.app address, and a new URL for every preview build; deriving the
+  // canonical from the request meant each of those declared itself permanent
+  // and competed with the real domain for its own content.
+  //
+  // Falls back to the request origin only when PUBLIC_SITE_ORIGIN is unset, in
+  // which case robots.txt is refusing every host anyway, so nothing is indexed
+  // for the fallback to mislabel.
+  const publicOrigin = (process.env.PUBLIC_SITE_ORIGIN || origin).replace(/\/+$/, '');
   const pathname = (req.url || '/').split('?')[0];
 
   // The built shell, served by the same deployment. Requesting it over HTTP
@@ -238,7 +249,9 @@ export default async function handler(req: NodeReq, res: NodeRes): Promise<void>
     const data = await fetchTour(tourId);
     if (!data) return sendHtml(res, shell);
 
-    const canonical = `${origin}/player/${tourId}`;
+    // publicOrigin, not origin: this URL is what a crawler records as the
+    // page's permanent home, and what a shared link resolves to in a preview.
+    const canonical = `${publicOrigin}/player/${tourId}`;
     // The shell already carries <title>Obelisk</title>. Appending a second one
     // does not override it — browsers and most crawlers take the FIRST — so the
     // tab and the preview would both still read "Obelisk". Strip it, and only
