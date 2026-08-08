@@ -34,6 +34,13 @@ interface ARCameraOverlayProps {
   gpsAccuracy?: number | null;
   /** The tour's accent colour, so the camera view matches the rest of it. */
   accent?: string;
+  /**
+   * The tour's background colour. Used for the backdrop behind the camera: the
+   * intro screen before the feed starts, and the letterbox bars around it once
+   * it does. Hardcoded black before, which made this the one screen that did
+   * not match the status bar band above it after everything else was unified.
+   */
+  bg?: string;
   onClose: () => void;
 }
 
@@ -279,7 +286,7 @@ const IntroField: React.FC<{ accent: string }> = ({ accent }) => (
 );
 
 export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
-  zone, userPosition, gpsAccuracy, accent = '#10b981', onClose,
+  zone, userPosition, gpsAccuracy, accent = '#10b981', bg = '#09090b', onClose,
 }) => {
   // ?ar-debug=1 shows the engine's raw tracking status. Not linked anywhere;
   // it's for diagnosing "why isn't it staying put" in the field.
@@ -748,12 +755,21 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
 
   return (
     <>
-      {/* The black backdrop is a separate fixed layer so it can carry
+      {/* The backdrop is a separate fixed layer so it can carry
           overlay-edge-bleed (see docs/mobile-player-edge-seams.md) without
           dragging the edge-anchored chrome below off-screen with it. The
           content layer stays at a true inset-0 so `px-4` still means 4 from
-          the real screen edge. Both are position:fixed, as the class requires. */}
-      <div className="fixed inset-0 z-[5000] overlay-edge-bleed bg-black" aria-hidden="true" />
+          the real screen edge. Both are position:fixed, as the class requires.
+
+          Takes the tour's background rather than black. This is what shows
+          behind the intro screen and in the letterbox bars around the camera
+          feed, and while it was hardcoded black it was the only surface left
+          that did not match the status bar band above it. */}
+      <div
+        className="fixed inset-0 z-[5000] overlay-edge-bleed"
+        style={{ backgroundColor: bg }}
+        aria-hidden="true"
+      />
     <div className="fixed inset-0 z-[5000] text-white overflow-hidden">
       {/* inset-0 + margin auto centres an element with an intrinsic aspect,
           and the max- constraints make it behave like object-fit: contain on
