@@ -5,6 +5,7 @@ import { Editor } from './pages/Editor';
 import { Player } from './pages/Player';
 import { AdminModeration } from './pages/AdminModeration';
 import { LegalPage } from './pages/LegalPage';
+import { ReportPage } from './pages/ReportPage';
 import { TERMS_SECTIONS, TERMS_VERSION } from './constants/terms';
 import { PLAYER_TERMS_SECTIONS, PLAYER_TERMS_VERSION } from './constants/playerTerms';
 import { PRIVACY_SECTIONS, PRIVACY_VERSION } from './constants/privacy';
@@ -66,7 +67,10 @@ const AppShell: React.FC<{ user: User | null; onLogout: () => void }> = ({ user,
           <Route path="/admin/moderation" element={user ? <AdminModeration /> : <Navigate to="/auth" />} />
           {/* Public by design: a creator should be able to read the terms
               before signing up, and a player needs the privacy policy without
-              ever having an account. */}
+              ever having an account. The report route goes further — it has to
+              work for someone who has never used Obelisk and is objecting to an
+              experience they found the hard way. */}
+          <Route path="/report" element={<ReportPage />} />
           <Route
             path="/terms"
             element={

@@ -17,7 +17,7 @@ import { trailStats, trailSummary, formatDistance } from '../utils/trail';
 import { PLAYER_TERMS_VERSION } from '../constants/playerTerms';
 import { PlayerProgress, ProgressionReward, Tour, Zone } from '../types';
 import { FONT_STYLES, MAP_STYLES, DEFAULT_MAP_STYLE } from '../constants';
-import { Loader2, PlayCircle, Volume2, MessageCircle, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu, Layers, Locate, RotateCcw, ZoomIn, ZoomOut, Backpack, Gem, Trash2, Info, RefreshCw, LogOut, Bug, Navigation, ChevronRight, Camera } from 'lucide-react';
+import { Loader2, PlayCircle, Volume2, MessageCircle, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu, Layers, Locate, RotateCcw, ZoomIn, ZoomOut, Backpack, Gem, Trash2, Info, RefreshCw, LogOut, Bug, Navigation, ChevronRight, Camera, Flag } from 'lucide-react';
 import { ChatInterface } from '../components/ChatInterface';
 import { ARCameraOverlay } from '../components/ARCameraOverlay';
 import { CalibrationScreen } from '../components/CalibrationScreen';
@@ -2621,6 +2621,23 @@ export const Player: React.FC = () => {
                         <p className="text-xs mt-0.5" style={{ color: th.sheetMuted }}>Returns to welcome without deleting progress</p>
                       </div>
                     </button>
+
+                    {/* The player terms promise a way to report an experience,
+                        and until now there wasn't one anywhere in the product.
+                        Opens the public form with this tour's URL prefilled, so
+                        a player doesn't have to describe which one they mean. */}
+                    <a
+                      href={`/report?url=${encodeURIComponent(window.location.origin + '/player/' + tour.id)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="w-full min-h-14 py-3 flex items-center gap-3 text-left"
+                    >
+                      <Flag size={18} style={{ color: th.sheetMuted }} />
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold">Report a problem</p>
+                        <p className="text-xs mt-0.5" style={{ color: th.sheetMuted }}>Somewhere unsafe, private property, or wrong content</p>
+                      </div>
+                    </a>
                   </div>
                 </div>
 

@@ -42,6 +42,20 @@ interface AccessRequest {
   requested_at: string | null;
 }
 
+/** A report from outside: no account, and usually no tour id either. */
+interface Takedown {
+  id: number;
+  kind: string;
+  tour_id: string | null;
+  tour_url: string | null;
+  location_text: string | null;
+  claim: string;
+  relationship: string | null;
+  contact_name: string | null;
+  contact_email: string;
+  created_at: string;
+}
+
 export const AdminModeration: React.FC = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -49,6 +63,7 @@ export const AdminModeration: React.FC = () => {
   const [queue, setQueue] = useState<QueueTour[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [accessRequests, setAccessRequests] = useState<AccessRequest[]>([]);
+  const [takedowns, setTakedowns] = useState<Takedown[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -73,6 +88,7 @@ export const AdminModeration: React.FC = () => {
         setQueue(data.queue ?? []);
         setReports(data.reports ?? []);
         setAccessRequests(data.accessRequests ?? []);
+        setTakedowns(data.takedowns ?? []);
       }
     } catch {
       setError('Could not load the queue. Check your connection and try again.');
@@ -162,6 +178,61 @@ export const AdminModeration: React.FC = () => {
             First, because while Obelisk is invite-only this is the section
             with anything in it. Approving here is what actually lets someone
             create an account. */}
+        {/* Outside reports first. These come from people with no account who
+            are objecting to something in the real world, and unlike everything
+            else in this queue there is a stranger waiting on a reply. */}
+        <section className="mb-8">
+          <h2 className="text-xs font-bold uppercase tracking-wide text-zinc-500 mb-3">
+            Reports from outside ({takedowns.length})
+          </h2>
+          {takedowns.length === 0 ? (
+            <p className="text-sm text-zinc-500">Nothing reported.</p>
+          ) : (
+            <div className="space-y-3">
+              {takedowns.map(t => (
+                <article key={t.id} className="rounded-xl border border-amber-900/50 bg-amber-950/20 p-4">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <h3 className="font-bold text-sm capitalize">{t.kind}</h3>
+                    <span className="text-[11px] text-zinc-500 shrink-0">
+                      {new Date(t.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-200 mt-2 leading-relaxed whitespace-pre-wrap">{t.claim}</p>
+                  <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[11px] text-zinc-400">
+                    {t.location_text && (<><dt className="text-zinc-500">Where</dt><dd>{t.location_text}</dd></>)}
+                    {t.relationship && (<><dt className="text-zinc-500">Connection</dt><dd>{t.relationship}</dd></>)}
+                    {t.tour_url && (<><dt className="text-zinc-500">Link</dt><dd className="truncate">{t.tour_url}</dd></>)}
+                    <dt className="text-zinc-500">Reply to</dt>
+                    <dd>
+                      <a href={`mailto:${t.contact_email}`} className="text-emerald-400 hover:text-emerald-300">
+                        {t.contact_name ? `${t.contact_name} · ` : ''}{t.contact_email}
+                      </a>
+                    </dd>
+                  </dl>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {t.tour_id && (
+                      <button
+                        onClick={() => act(`td-unpub-${t.id}`, { action: 'force_unpublish', tourId: t.tour_id, note: 'Taken offline following a report.' })}
+                        disabled={busy !== null}
+                        className="text-xs font-bold px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-50"
+                      >
+                        Take the experience offline
+                      </button>
+                    )}
+                    <button
+                      onClick={() => act(`td-close-${t.id}`, { action: 'resolve_takedown', id: t.id })}
+                      disabled={busy !== null}
+                      className="text-xs font-bold px-3 py-1.5 rounded-lg border border-zinc-700 hover:bg-zinc-800 disabled:opacity-50"
+                    >
+                      Mark handled
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+
         <section className="mb-8">
           <h2 className="text-xs font-bold uppercase tracking-wide text-zinc-500 mb-3">
             Access requests ({accessRequests.length})

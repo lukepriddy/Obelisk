@@ -95,7 +95,7 @@ export const PLAYER_TERMS_SECTIONS: TermsSection[] = [
   {
     heading: 'Reporting something',
     body: [
-      'If an experience puts people at risk, sends them somewhere they should not go, or contains something that should not be there, report it from the player menu.',
+      'If an experience puts people at risk, sends them somewhere they should not go, or contains something that should not be there, report it at obelisk.place/report. You do not need an account, and you do not need to have played it.',
       'We remove experiences that create a real-world hazard, and we do so without waiting to hear from the creator.',
     ],
   },

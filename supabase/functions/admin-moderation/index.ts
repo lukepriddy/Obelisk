@@ -92,10 +92,22 @@ Deno.serve(async (req) => {
         .order('requested_at', { ascending: false })
         .limit(200);
 
+      // Takedown requests come from outside: landowners and rights holders who
+      // never played the experience and have no account. Listed first in
+      // priority terms even though the shape matches the others, because these
+      // are the ones with a person waiting on a reply.
+      const { data: takedowns } = await admin
+        .from('takedown_requests')
+        .select('id, kind, tour_id, tour_url, location_text, claim, relationship, contact_name, contact_email, created_at')
+        .is('resolved_at', null)
+        .order('created_at', { ascending: true })
+        .limit(200);
+
       return json({
         queue: queue ?? [],
         reports: reports ?? [],
         accessRequests: accessRequests ?? [],
+        takedowns: takedowns ?? [],
       });
     }
 
@@ -138,6 +150,24 @@ Deno.serve(async (req) => {
       await admin.from('tour_reports')
         .update({ resolved_at: new Date().toISOString() })
         .eq('tour_id', tourId).is('resolved_at', null);
+      // Same for outside reports that named this tour. A landowner who
+      // reported it should not still be sitting in the queue after the thing
+      // they reported has gone.
+      await admin.from('takedown_requests')
+        .update({ resolved_at: new Date().toISOString(), resolution: 'Experience taken offline.' })
+        .eq('tour_id', tourId).is('resolved_at', null);
+      return json({ ok: true });
+    }
+
+    if (action === 'resolve_takedown') {
+      const id = Number(body?.id);
+      if (!Number.isInteger(id) || id <= 0) return json({ error: 'Invalid request.' }, 400);
+      const note = typeof body?.note === 'string' ? body.note.trim().slice(0, 600) : '';
+      const { error } = await admin.from('takedown_requests').update({
+        resolved_at: new Date().toISOString(),
+        resolution: note || 'Reviewed.',
+      }).eq('id', id);
+      if (error) return json({ error: 'Could not close that report.' }, 500);
       return json({ ok: true });
     }
 
