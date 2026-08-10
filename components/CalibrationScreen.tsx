@@ -151,7 +151,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
 
   return (
     <div
-      className="overlay-edge-bleed fixed inset-0 z-[2200] flex flex-col overflow-hidden"
+      className="overlay-edge-bleed fixed inset-0 z-[2200] flex flex-col overflow-hidden md:justify-center"
       style={{ backgroundColor: bg, color: textColor, fontFamily }}
     >
       {/* Never scrolls. An earlier attempt at the too-short-viewport problem
@@ -166,15 +166,21 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
           takes whatever height is left, and the rings are centred inside it and
           allowed to overflow — clipped by overflow-hidden rather than pushing
           anything off screen. */}
-      <div className="relative flex-1 min-h-0 overflow-hidden">
+      <div className="relative flex-1 min-h-0 overflow-hidden md:flex-none md:overflow-visible">
         {/* Anchored to the BOTTOM of the region, not centred in it. Centring
             would let a short screen clip the status text along with the rings,
             and the text is the half that has to stay readable. Anchored here,
             the wording sits immediately above the fixed panel and never moves,
             while the rings extend upward from it and simply run off the top
-            edge when there is not enough room. */}
+            edge when there is not enough room.
+
+            All of that is a phone problem. From md up there is height to spare,
+            so the column returns to normal flow, the region stops stretching,
+            and the root centres the whole composition instead of leaving it
+            sitting on the floor of a tall window. Everything below md is
+            untouched. */}
         <div
-          className="absolute inset-x-0 bottom-0 mx-auto flex flex-col items-center px-8 text-center w-full max-w-sm"
+          className="absolute inset-x-0 bottom-0 mx-auto flex flex-col items-center px-8 text-center w-full max-w-sm md:static"
         >
 
         {/* An instrument coming into focus. Graduated rings counter-rotate
