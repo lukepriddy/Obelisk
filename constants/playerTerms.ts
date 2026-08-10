@@ -2,10 +2,10 @@
  * Player terms.
  *
  * IMPORTANT: a plain-language DRAFT, not reviewed by a lawyer. It exists so
- * players agree to something before walking somewhere, which they currently do
- * not — the single largest gap in docs/launch-readiness.md item 2. Creators
- * accept terms at publish; the person who can actually be injured accepts
- * nothing, and they are not party to the creator agreement.
+ * players agree to something before walking somewhere. Creators accept terms at
+ * publish, but the person who can actually be injured is the player, and they
+ * are not party to the creator agreement — so before this they accepted
+ * nothing at all.
  *
  * Three things deliberately NOT drafted here, because they are load-bearing and
  * inventing them would be worse than leaving them out:
@@ -20,7 +20,7 @@
  * for agreement to new wording. Use a date so records are self-describing.
  */
 
-export const PLAYER_TERMS_VERSION = '2026-08-05';
+export const PLAYER_TERMS_VERSION = '2026-08-08';
 
 export interface TermsSection {
   heading: string;
@@ -96,7 +96,7 @@ export const PLAYER_TERMS_SECTIONS: TermsSection[] = [
     heading: 'Reporting something',
     body: [
       'If an experience puts people at risk, sends them somewhere they should not go, or contains something that should not be there, report it at obelisk.place/report. You do not need an account, and you do not need to have played it.',
-      'We remove experiences that create a real-world hazard, and we do so without waiting to hear from the creator.',
+      'We reply to every report within 15 days. We remove experiences that create a real-world hazard straight away, without waiting to hear from the creator.',
     ],
   },
 ];

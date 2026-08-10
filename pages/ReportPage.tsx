@@ -95,9 +95,9 @@ export const ReportPage: React.FC = () => {
             </div>
             <h1 className="text-xl font-bold text-white mb-2">Report received</h1>
             <p className="text-sm text-zinc-400 leading-relaxed max-w-md mx-auto">
-              We have it, and we will reply to the address you gave. If an
-              experience is putting people at risk we take it offline first and
-              work out the details afterwards.
+              We have it, and we will reply to the address you gave within 15
+              days. If an experience is putting people at risk we take it
+              offline straight away and work out the details afterwards.
             </p>
             <button
               onClick={() => navigate('/')}
@@ -226,8 +226,9 @@ export const ReportPage: React.FC = () => {
           </button>
 
           <p className="text-[11px] text-zinc-500 leading-relaxed">
-            We remove experiences that create a real-world hazard without waiting
-            to hear from the creator. Your email is used to reply to this report
+            We reply to every report within 15 days. Anything that looks like a
+            real-world hazard comes offline straight away, without waiting to
+            hear from the creator. Your email is used to reply to this report
             and nothing else.
           </p>
         </form>
