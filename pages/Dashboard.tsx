@@ -27,7 +27,7 @@ interface DashboardProps {
 }
 
 type SortKey = 'newest' | 'oldest' | 'az' | 'za';
-type FilterKey = 'all' | 'public' | 'private';
+type FilterKey = 'all' | 'public' | 'unlisted' | 'private';
 
 // ── Sidebar nav item ────────────────────────────────────────────────────────
 const NavItem: React.FC<{
@@ -242,7 +242,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
 
   // ── Derived stats ────────────────────────────────────────────────────────
   const totalZones  = Object.values(zoneCounts).reduce((s, c) => s + c, 0);
-  const publicCount = tours.filter(t => t.is_public).length;
+  // Counts what the badge and the filter call Public, not merely what is live.
+  // Unlisted tours are live too, but calling them Public here would contradict
+  // the word's meaning three inches away on the same screen.
+  const publicCount = tours.filter(t => t.is_public && t.is_listed !== false).length;
   const allTags = React.useMemo(
     () => Array.from(new Set(tours.flatMap(t => t.tags || []))).sort((a, b) => a.localeCompare(b)),
     [tours],
@@ -251,8 +254,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
   // ── Filtered + sorted tour list ──────────────────────────────────────────
   const visibleTours = useMemo(() => {
     let list = [...tours];
-    if (filter === 'public')  list = list.filter(t => t.is_public);
-    if (filter === 'private') list = list.filter(t => !t.is_public);
+    if (filter === 'public')   list = list.filter(t => t.is_public && t.is_listed !== false);
+    if (filter === 'unlisted') list = list.filter(t => t.is_public && t.is_listed === false);
+    if (filter === 'private')  list = list.filter(t => !t.is_public);
     if (tagFilter !== 'all') list = list.filter(t => (t.tags || []).includes(tagFilter));
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -505,7 +509,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
 
                   {/* Visibility filter */}
                   <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded-xl p-1">
-                    {(['all', 'public', 'private'] as FilterKey[]).map(f => (
+                    {(['all', 'public', 'unlisted', 'private'] as FilterKey[]).map(f => (
                       <button
                         key={f}
                         onClick={() => setFilter(f)}
