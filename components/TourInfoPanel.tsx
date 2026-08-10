@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Tour, Zone } from '../types';
 import { MAP_STYLES, FONT_STYLES, DEFAULT_MAP_STYLE } from '../constants';
 import { uploadImage } from '../services/storageService';
-import { Image, Type, Palette, AlignLeft, AlignCenter, Upload, MapPin, Eye, Settings, Globe, Lock, Loader2, Sun, Moon, X, Tag as TagIcon, Clock, Route } from 'lucide-react';
+import { Image, Type, Palette, AlignLeft, AlignCenter, Upload, MapPin, Eye, Settings, Globe, Lock, Loader2, Sun, Moon, X, Tag as TagIcon, Clock, Route, EyeOff } from 'lucide-react';
 import { ProgressionSettings } from './ProgressionSettings';
 import { trailStats, formatDistance, suggestDuration } from '../utils/trail';
 
@@ -432,15 +432,27 @@ export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({
             <label className="block text-xs font-bold text-zinc-400 uppercase mb-2 flex items-center gap-2">
               <Globe size={13} /> Visibility
             </label>
+            {/* Three states, because is_public was doing two jobs: deciding who
+                can open the link, and deciding whether it may appear in
+                listings. Unlisted separates them — fully playable by anyone
+                holding the link, absent from search, maps and place pages.
+                Listed-but-private is not offered because it cannot exist; a
+                database constraint rejects it. */}
             <div className="flex bg-zinc-800 rounded p-1">
               <button
-                onClick={() => onUpdate({ is_public: true })}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded transition-colors ${tour.is_public ? 'bg-emerald-600 text-white shadow' : 'text-zinc-400 hover:text-zinc-200'}`}
+                onClick={() => onUpdate({ is_public: true, is_listed: true })}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded transition-colors ${tour.is_public && tour.is_listed !== false ? 'bg-emerald-600 text-white shadow' : 'text-zinc-400 hover:text-zinc-200'}`}
               >
                 <Globe size={12} /> Public
               </button>
               <button
-                onClick={() => onUpdate({ is_public: false })}
+                onClick={() => onUpdate({ is_public: true, is_listed: false })}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded transition-colors ${tour.is_public && tour.is_listed === false ? 'bg-emerald-600 text-white shadow' : 'text-zinc-400 hover:text-zinc-200'}`}
+              >
+                <EyeOff size={12} /> Unlisted
+              </button>
+              <button
+                onClick={() => onUpdate({ is_public: false, is_listed: false })}
                 className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded transition-colors ${!tour.is_public ? 'bg-emerald-600 text-white shadow' : 'text-zinc-400 hover:text-zinc-200'}`}
               >
                 <Lock size={12} /> Private
@@ -467,9 +479,15 @@ export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({
                 </p>
               </div>
             )}
-            {tour.is_public && (
+            {tour.is_public && tour.is_listed !== false && (
               <p className="text-[10px] text-zinc-500 mt-1.5 leading-snug">
-                Live and playable by anyone with the link.
+                Playable by anyone with the link, and can appear in search and on place pages.
+              </p>
+            )}
+            {tour.is_public && tour.is_listed === false && (
+              <p className="text-[10px] text-zinc-500 mt-1.5 leading-snug">
+                Playable by anyone with the link, but kept out of search, maps and
+                place pages. Good for sharing with friends, or testing.
               </p>
             )}
             {!tour.is_public && tour.moderation_status !== 'rejected' && tour.moderation_status !== 'pending_review' && (

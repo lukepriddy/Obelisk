@@ -77,6 +77,7 @@ type TourRow = {
   duration_minutes?: number | null;
   lat?: number | null;
   lng?: number | null;
+  is_listed?: boolean | null;
 };
 
 async function fetchTour(tourId: string): Promise<{ tour: TourRow; zones: { lat: number; lng: number }[] } | null> {
@@ -87,7 +88,7 @@ async function fetchTour(tourId: string): Promise<{ tour: TourRow; zones: { lat:
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
   try {
-    const columns = 'title,description,welcome_subtitle,welcome_image_url,duration_minutes,lat,lng';
+    const columns = 'title,description,welcome_subtitle,welcome_image_url,duration_minutes,lat,lng,is_listed';
     const [tourRes, zoneRes] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/tours?id=eq.${encodeURIComponent(tourId)}&select=${columns}`,
         { headers, signal: controller.signal }),
@@ -153,13 +154,27 @@ function buildTags(tour: TourRow, zones: { lat: number; lng: number }[], url: st
   const tags = [
     `<title>${escapeHtml(title)}</title>`,
     `<meta name="description" content="${escapeHtml(description)}">`,
+  ];
+
+  // Unlisted means reachable by link but absent from search. Leaving it out of
+  // the sitemap is not enough on its own: crawlers find pages by following
+  // links, so one person posting a shared link anywhere public would get it
+  // indexed. The instruction has to travel with the page.
+  //
+  // Note this suppresses listing, not sharing — the Open Graph tags below are
+  // untouched, so a link texted to a friend still renders a proper card.
+  if (tour.is_listed === false) {
+    tags.push(`<meta name="robots" content="noindex, follow">`);
+  }
+
+  tags.push(
     `<meta property="og:type" content="website">`,
     `<meta property="og:site_name" content="Obelisk">`,
     `<meta property="og:title" content="${escapeHtml(title)}">`,
     `<meta property="og:description" content="${escapeHtml(description)}">`,
     `<meta property="og:url" content="${escapeHtml(url)}">`,
     `<link rel="canonical" href="${escapeHtml(url)}">`,
-  ];
+  );
 
   if (tour.welcome_image_url) {
     tags.push(

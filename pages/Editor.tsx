@@ -447,6 +447,15 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
           description_align: tour.description_align,
           tags: tour.tags || [],
           ...(wantsToPublish ? {} : { is_public: tour.is_public }),
+          // Listing is a plain creator preference, not a moderation outcome, so
+          // it saves normally even on the publish transition.
+          //
+          // Forced false whenever the tour is not public, rather than trusting
+          // local state to be consistent. A DB constraint forbids
+          // listed-but-private, so a stale or partially-updated tour object
+          // reaching here would fail the whole save — and the failure would
+          // look like "saving is broken", not like a visibility bug.
+          is_listed: tour.is_public ? tour.is_listed !== false : false,
           lat: tour.lat,
           lng: tour.lng,
           start_zoom: editorMapZoomRef.current,

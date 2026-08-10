@@ -9,12 +9,16 @@
  * matching api/robots.ts. A sitemap advertising throwaway addresses would
  * actively invite the indexing the robots rules exist to prevent.
  *
- * Reads with the ANON key, so RLS decides what is listed: anonymous reads are
- * already scoped to is_public = true. An unpublished tour cannot appear here
- * even by mistake, because the same rule that hides it from the player hides it
- * from this. The moderation status is filtered too — approved is what "public"
- * actually means once the gate is involved, and admin-owned tours are stamped
- * approved by trigger so they are not a special case.
+ * Reads with the ANON key, so RLS decides what is readable at all: anonymous
+ * reads are already scoped to is_public = true. An unpublished tour cannot
+ * appear here even by mistake, because the same rule that hides it from the
+ * player hides it from this.
+ *
+ * Two further filters on top of that. Moderation status, because approved is
+ * what "public" actually means once the gate is involved. And is_listed, which
+ * is how an unlisted experience stays out of search while remaining fully
+ * reachable by anyone holding the link — shared with a friend, or used for
+ * field testing, without being volunteered to a crawler.
  */
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
@@ -49,7 +53,7 @@ async function fetchPublicTours(): Promise<TourRow[]> {
   try {
     const res = await fetch(
       `${SUPABASE_URL}/rest/v1/tours` +
-        `?select=id,created_at&is_public=eq.true&moderation_status=eq.approved`,
+        `?select=id,created_at&is_public=eq.true&is_listed=eq.true&moderation_status=eq.approved`,
       {
         headers: { apikey: SUPABASE_ANON_KEY, authorization: `Bearer ${SUPABASE_ANON_KEY}` },
         signal: controller.signal,

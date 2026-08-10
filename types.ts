@@ -9,6 +9,9 @@ export interface Tour {
   title: string;
   description: string;
   is_public: boolean;
+  /** May this appear in listings? Access is is_public; this is discoverability.
+   *  A DB constraint forbids listed-but-private. */
+  is_listed?: boolean;
   created_at: string;
   lat: number;
   lng: number;
