@@ -607,13 +607,25 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
 
                         {/* Badges */}
                         <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
+                          {/* Three states, matching the editor. Unlisted is
+                              distinct from both: it is live and shareable, so
+                              it must not read as Private, but it is invisible
+                              to search, so it must not read as Public either.
+                              Amber rather than emerald because "live but
+                              hidden" is a state worth noticing at a glance. */}
                           <span className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg backdrop-blur-sm ${
-                            tour.is_public
-                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                              : 'bg-zinc-700/80 text-zinc-400 border border-zinc-600/40'
+                            !tour.is_public
+                              ? 'bg-zinc-700/80 text-zinc-400 border border-zinc-600/40'
+                              : tour.is_listed === false
+                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                           }`}>
-                            {tour.is_public ? <Globe size={9} /> : <Lock size={9} />}
-                            {tour.is_public ? 'Public' : 'Private'}
+                            {!tour.is_public
+                              ? <Lock size={9} />
+                              : tour.is_listed === false ? <EyeOff size={9} /> : <Globe size={9} />}
+                            {!tour.is_public
+                              ? 'Private'
+                              : tour.is_listed === false ? 'Unlisted' : 'Public'}
                           </span>
                         </div>
 
