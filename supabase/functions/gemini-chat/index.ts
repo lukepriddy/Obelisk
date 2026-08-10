@@ -12,6 +12,7 @@
  */
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { corsFor } from '../_shared/cors.ts';
 import { checkAndRecordUsage, rateLimited } from '../_shared/usage.ts';
 
 const GEMINI_API_KEY   = Deno.env.get('GEMINI_API_KEY') ?? '';
@@ -39,24 +40,6 @@ async function keyForTour(tourId: unknown): Promise<string> {
   } catch {
     return GEMINI_API_KEY;
   }
-}
-
-const ALLOWED_ORIGINS = [
-  'https://obelisk-main.vercel.app',
-  'http://localhost:3000',
-  'http://localhost:5173',
-];
-
-function corsFor(req: Request) {
-  const origin = req.headers.get('Origin') ?? '';
-  const ok = ALLOWED_ORIGINS.includes(origin) ||
-    /^https:\/\/obelisk-main-[a-z0-9]+-lukepriddys-projects\.vercel\.app$/.test(origin);
-  return {
-    'Access-Control-Allow-Origin': ok ? origin : ALLOWED_ORIGINS[0],
-    'Vary': 'Origin',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  };
 }
 
 Deno.serve(async (req) => {

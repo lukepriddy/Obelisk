@@ -52,6 +52,13 @@ tool.** It is far cheaper and it is already authenticated:
 supabase functions deploy <name> --project-ref pzlgiurtjrmkpbjlaabz
 ```
 
+**Edge function CORS lives in `supabase/functions/_shared/cors.ts`.** It used to
+be copy-pasted into each function, and when `obelisk.place` was bought only the
+function written after that point got the new origin. Everything else — publish,
+delete, admin moderation, AI chat, voice, generation — failed its preflight on
+the real domain while still working on `*.vercel.app`, which is where it was
+tested. Import `corsFor` rather than adding an eighth copy of the list.
+
 **`api/` is not typechecked by the Vite build.** `npm run build` will happily
 pass with broken TypeScript in `api/render.ts`. Always run `npx tsc --noEmit`.
 Two pre-existing errors are expected noise: one in `ChatInterface.tsx`, and
@@ -147,6 +154,14 @@ timeout and malformed output, creator terms required before first publish.
   asymmetric downside.
 - Content hash with `policy_version` in the cache key, so identical content
   never calls Gemini twice and a policy change invalidates old approvals.
+- **A cached approval is not the same statement as a matching hash.** Going
+  Private retains the snapshot — the draft keeps the content in the row either
+  way, so clearing it removes one copy while another sits beside it and forfeits
+  the cache for nothing. But a tour that was rejected or force-unpublished by an
+  admin must not be able to flip back to Public and ride the cache back to live
+  without review. Make "not invalidated by a takedown" an explicit condition of
+  the cache lookup, alongside the hash and the policy version, rather than
+  something the hash is assumed to imply.
 - 60-second cooldown; one active job per experience; newest pending revision
   wins.
 - **A hidden, configurable, atomic per-account daily ceiling on actual Gemini
@@ -165,6 +180,22 @@ them in the draft. `delete-tour` removes everything under the tour's storage
 prefix, which is correct on tour deletion — but any future "clean up unused
 uploads" task must treat snapshot-referenced files as live, or a creator's
 published experience quietly loses its images.
+
+**`lock_passphrase` is already publicly readable and the snapshot does not
+change that.** `zones_select` grants anonymous reads on every zone of a public
+tour, and both player and editor load zones with `select('*')`, so a passphrase
+is in the browser before the player types it. Pre-existing, worth knowing, and
+specifically not introduced by the snapshot — which has to carry the column
+because the player needs it. Fixing it properly means narrowing what the player
+reads, and that is its own task.
+
+**Nothing approved may reach a public surface without a snapshot.** Between the
+migration and the reader switch a tour can be approved and snapshotless: the
+backfill covers the 11 that exist now, but a publish landing inside that window
+would not be covered. The sitemap fails silently here and only surfaces as 404s
+in Search Console months later. Filter every public surface on snapshot
+presence, not just `is_public`, and check that invariant directly after the
+switch rather than reasoning that it holds.
 
 ### Verify
 

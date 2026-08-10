@@ -19,6 +19,7 @@
  */
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { corsFor } from '../_shared/cors.ts';
 
 const GEMINI_API_KEY   = Deno.env.get('GEMINI_API_KEY') ?? '';
 const SUPABASE_URL     = Deno.env.get('SUPABASE_URL') ?? '';
@@ -34,24 +35,6 @@ const MAX_IMAGES = 6;
 const IMAGE_FETCH_TIMEOUT_MS = 6000;
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const GEMINI_TIMEOUT_MS = 45000;
-
-const ALLOWED_ORIGINS = [
-  'https://obelisk-main.vercel.app',
-  'http://localhost:3000',
-  'http://localhost:5173',
-];
-
-function corsFor(req: Request) {
-  const origin = req.headers.get('Origin') ?? '';
-  const ok = ALLOWED_ORIGINS.includes(origin) ||
-    /^https:\/\/obelisk-main-[a-z0-9]+-lukepriddys-projects\.vercel\.app$/.test(origin);
-  return {
-    'Access-Control-Allow-Origin': ok ? origin : ALLOWED_ORIGINS[0],
-    'Vary': 'Origin',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  };
-}
 
 const SYSTEM_INSTRUCTION = `
 You review user-created walking tours for a location-based storytelling app

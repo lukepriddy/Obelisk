@@ -19,29 +19,12 @@
  */
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { corsFor } from '../_shared/cors.ts';
 
 const SUPABASE_URL     = Deno.env.get('SUPABASE_URL') ?? '';
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-const ALLOWED_ORIGINS = [
-  'https://obelisk-main.vercel.app',
-  'http://localhost:3000',
-  'http://localhost:5173',
-];
-
-function corsFor(req: Request) {
-  const origin = req.headers.get('Origin') ?? '';
-  const ok = ALLOWED_ORIGINS.includes(origin) ||
-    /^https:\/\/obelisk-main-[a-z0-9]+-lukepriddys-projects\.vercel\.app$/.test(origin);
-  return {
-    'Access-Control-Allow-Origin': ok ? origin : ALLOWED_ORIGINS[0],
-    'Vary': 'Origin',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  };
-}
 
 Deno.serve(async (req) => {
   const cors = corsFor(req);
