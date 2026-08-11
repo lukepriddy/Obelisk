@@ -1,8 +1,12 @@
-# Handoff: draft/live publishing
+# Handoff: publishing
 
 Written at the end of a long session so the next one starts from the design
-rather than from a chat log. Read this, then the reading list in "Start here",
-before proposing anything.
+rather than from a chat log.
+
+Draft/live publishing was the open task when this document was first written.
+It shipped on 2026-08-11 and the section below now describes what exists rather
+than what to build. The open work is in "Also pending" and in
+`docs/platform-audit-2026-08-11.md`.
 
 ---
 
@@ -79,8 +83,11 @@ to be wrong, including some in the project's own docs.
 
 ## Current state
 
-**Everything is committed, pushed and deployed.** Working tree clean at the time
-of writing.
+**Everything is committed and deployed. Nothing is pushed.** As of
+2026-08-11 the local `main` is 12 commits ahead of `origin/main`, which still
+sits at `d1a4d39`. GitHub does not have any of the draft/live work. Vercel has
+it because `vercel --prod` uploads local files and stamps local commit metadata,
+which makes the dashboard look like a Git deploy when it is not.
 
 - `obelisk.place` is live with a valid certificate, pointed at this Vercel
   project via a Cloudflare CNAME (proxy off).
@@ -88,141 +95,164 @@ of writing.
   refuses every host and the sitemap is empty, so nothing anywhere is
   indexable. That is the intended state until there is real content worth
   finding. Setting it is the switch that turns indexing on.
-- All 11 live tours are **Unlisted** — reachable by link, absent from listings.
-  One is Private. None are Public.
-- No real creators yet: 3 accounts, 2 of them platform admins.
+- 12 live tours, all **Unlisted** — reachable by link, absent from listings.
+  Two are Private. None are Public.
+- No real creators yet: 3 accounts, 2 of them platform admins. The third,
+  `cloudenglish.net@gmail.com`, is the ordinary-creator account, and it is the
+  only way to exercise the moderation gate as a stranger meets it.
 
 **Recently shipped** (context for why things look the way they do): storage
 cascade deletion on tour delete; a 13+ age floor; light-mode sheet fixes; the
 welcome screen; an AR placement map replacing a radial pad; SEO plumbing
 (robots, sitemap, structured data, canonical from `PUBLIC_SITE_ORIGIN`); a
-public `/report` takedown path with a 15-day response commitment; and
-unlisted experiences.
+public `/report` takedown path with a 15-day response commitment; unlisted
+experiences; and on 2026-08-11 draft/live publishing, a within-tour media
+picker, a "Changes not published" badge, and the app's first favicon.
+
+**Also fixed 2026-08-11, and worth knowing because it was invisible:** every
+edge function except `submit-takedown` was refusing requests from
+`obelisk.place`. The CORS origin list had been copy-pasted into each function
+and only the one written after the domain was bought knew about it, so
+publishing, deleting, admin moderation, character chat, voice and generation
+were all broken on the real domain while working perfectly on `*.vercel.app`,
+which is where they were tested. The list now lives in
+`supabase/functions/_shared/cors.ts`. Do not add an eighth copy.
 
 ---
 
-## The task: draft/live publishing (task #67)
+## Draft/live publishing (task #67) — SHIPPED 2026-08-11
 
-### Why
+Built, deployed, and exercised end to end from a non-admin account. This
+section describes what exists; it is no longer a plan.
 
-Today a tour is moderated once, at publish. Editing an approved tour re-checks
-nothing, which is the obvious way through the gate once strangers can publish.
+### What it does
 
-The naive fix — re-check on edit and unpublish on failure — is worse than the
-problem. It means a false positive takes down a live experience mid-campaign,
-killing every link the creator has shared, silently, possibly while they sleep.
+Saving never moderates. A creator edits a live tour as much as they like and
+players keep getting the last approved version until a new one passes review.
+A failed check touches nothing that is live.
 
-**Draft/live dissolves this.** Saving never moderates. The previously approved
-version stays live until a new one passes. Moderation stops being something
+That was the point. Re-checking on edit and unpublishing on failure — the
+obvious design — means a false positive takes down a running experience
+mid-campaign, killing every link the creator has shared, silently, possibly
+while they sleep. Draft/live dissolves that: moderation stops being something
 that can punish a creator and becomes a gate they walk through. It also makes
-the cost problem mostly disappear without any diffing, because ordinary saving
-never calls the model at all.
+the cost problem mostly disappear, because ordinary saving never calls the
+model at all.
 
-### Architecture
+### How it is put together
 
-- `published_snapshot` JSONB on `tours`. **Not** a revisions table — the
-  simplest thing that guarantees an immutable approved version.
-- The snapshot must contain everything the public player needs, **including
-  zones**.
-- Public reads the snapshot: player load, `api/render.ts` share previews,
-  `api/sitemap.ts`. The editor preview deliberately keeps reading the draft.
-- Build the immutable candidate snapshot **before** calling Gemini. On pass,
-  promote that exact snapshot. Never re-read the mutable draft afterwards, or
-  edits made during review leak into approved content.
+**`published_snapshot` JSONB on `tours`** holds the approved version, including
+zones. Not a revisions table: the simplest thing that guarantees an immutable
+approved version.
 
-### Security — verify this first
+**`build_tour_snapshot(tour_id)` is the single definition of what a snapshot
+contains.** Both the backfill and the publish path call it, so there is one
+answer to "what did we approve". It works by *excluding* a list of internal
+columns, which means a new column lands in the snapshot automatically. That is
+the right default — a missing player field is the worse bug — but it has bitten
+once already: the list was not updated when the draft-review and hash columns
+were added, which put a stale `rejected` verdict inside a live snapshot and
+made the hash columns recurse into their own input. **Add bookkeeping columns
+to that blocklist when you add them.**
 
-If creators can write the snapshot columns directly, the whole architecture is
-decorative. **Check this before building anything else.**
+**Fingerprints.** `tour_snapshot_hash(snapshot, policy_version)` decides whether
+a paid review can be skipped. `tour_content_hash(snapshot)` is content only and
+drives the "Changes not published" badge — deliberately without the policy
+version, or bumping the policy would make every tour claim unpublished changes
+overnight. Both hash the `jsonb`, so Postgres normalises key order and
+whitespace and two callers cannot disagree by accident.
 
-There is already a pattern for it: `enforce_moderation_gate` is a trigger that
-rejects client writes to the moderation columns and refuses `is_public = true`
-unless the status is approved. That is why the existing gate holds even against
-a direct PostgREST call from devtools. Extend that trigger to cover
-`published_snapshot` and `published_hash` rather than inventing a new mechanism.
+**Readers.** The player and `api/render.ts` read the snapshot;
+`api/sitemap.ts` additionally filters on `published_snapshot is not null`. The
+editor preview deliberately still reads the draft — a creator previewing wants
+to see their edits. `getPublishedTour()` falls back to the draft when there is
+no snapshot, which is reachable only by an owner viewing their own unpublished
+tour, because RLS means a stranger cannot read a non-public tour at all.
 
-Keep the existing properties: server re-reads canonical content rather than
-trusting the client, ownership checked server-side, fail closed on error,
-timeout and malformed output, creator terms required before first publish.
+**Live visibility fields come from the row, not the snapshot.** Unlisting or
+going private takes effect immediately rather than waiting for a re-review.
 
-### Cost and abuse
+### The gate
 
-- **Stay on Gemini 2.5 Flash.** Do not migrate to Flash-Lite. The saving is
-  fractions of a cent at this volume, validating it properly needs ~25 smoke
-  cases plus ~50 production shadow runs that would take months to accumulate,
-  and safety classification is the one place where being cheap has an
-  asymmetric downside.
-- Content hash with `policy_version` in the cache key, so identical content
-  never calls Gemini twice and a policy change invalidates old approvals.
-- **A cached approval is not the same statement as a matching hash.** Going
-  Private retains the snapshot — the draft keeps the content in the row either
-  way, so clearing it removes one copy while another sits beside it and forfeits
-  the cache for nothing. But a tour that was rejected or force-unpublished by an
-  admin must not be able to flip back to Public and ride the cache back to live
-  without review. Make "not invalidated by a takedown" an explicit condition of
-  the cache lookup, alongside the hash and the policy version, rather than
-  something the hash is assumed to imply.
-- 60-second cooldown; one active job per experience; newest pending revision
-  wins.
-- **A hidden, configurable, atomic per-account daily ceiling on actual Gemini
-  executions** (~10 as a generous default, manually overridable). The cooldown
-  bounds rate but not spend — it still permits 1,440 paid calls a day, and a
-  creator changing one character each time defeats hash deduplication.
-- No visible per-day update limit at launch.
-- Log per execution: tour id, creator id, content hash, policy version, model,
-  verdict, reason, token usage from Gemini's own usage metadata, estimated
-  cost, timestamp, and whether it was promoted.
+`enforce_moderation_gate` refuses client writes to the moderation columns, the
+snapshot columns, the hash columns and the draft-review columns, and refuses
+`is_public = true` unless the status is approved. It holds because
+`is_privileged_caller()` tests `current_user`, PostgREST runs creators as
+`authenticated`, and only the service role takes the early return.
 
-### Known conflict, do not lose this
+Verified as `authenticated` with a real owner's claims, in a rolled-back
+transaction: writing the snapshot is refused, writing the hash is refused,
+forging a snapshot while flipping `is_public` in one statement is refused, an
+ordinary title edit still succeeds.
 
-Images referenced by `published_snapshot` must survive the creator replacing
-them in the draft. `delete-tour` removes everything under the tour's storage
-prefix, which is correct on tour deletion — but any future "clean up unused
-uploads" task must treat snapshot-referenced files as live, or a creator's
-published experience quietly loses its images.
+### Cost control, as built
 
-**`lock_passphrase` is already publicly readable and the snapshot does not
-change that.** `zones_select` grants anonymous reads on every zone of a public
-tour, and both player and editor load zones with `select('*')`, so a passphrase
-is in the browser before the player types it. Pre-existing, worth knowing, and
-specifically not introduced by the snapshot — which has to carry the column
-because the player needs it. Fixing it properly means narrowing what the player
-reads, and that is its own task.
+- Still **Gemini 2.5 Flash**. Real measured cost is **$0.00037 per review**
+  (~1,070 input tokens, ~19 output). The earlier "about a cent" estimate was
+  roughly 25x too high. At the daily ceiling that is about half a cent.
+- **Order of checks matters and is deliberate**: cooldown and lock first, then
+  the fingerprint cache, then the daily ceiling immediately before the model
+  call. A cache hit or a cooldown must never burn a paid slot.
+- **60-second cooldown, one review at a time per tour**, both enforced by
+  `begin_moderation_attempt` in a single upsert so two simultaneous publishes
+  cannot both win. A stale lock expires after 120 seconds.
+- **15 real executions per account per day**, hidden, overridable per account
+  in `moderation_daily_limits`. `consume_moderation_quota` is one
+  `INSERT ... ON CONFLICT DO UPDATE`, so the ceiling is a row lock rather than
+  a read-then-write. Refunded only when the model never returned anything
+  billable — never for a fail or borderline verdict.
+- Every real call is logged in `moderation_runs` with tokens from Gemini's own
+  usage metadata, estimated cost, and whether it was promoted. Readable by
+  platform admins, which is what an admin dashboard should use.
 
-**Nothing approved may reach a public surface without a snapshot.** Between the
-migration and the reader switch a tour can be approved and snapshotless: the
-backfill covers the 11 that exist now, but a publish landing inside that window
-would not be covered. The sitemap fails silently here and only surfaces as 404s
-in Search Console months later. Filter every public surface on snapshot
-presence, not just `is_public`, and check that invariant directly after the
-switch rather than reasoning that it holds.
+### A matching fingerprint is not permission
 
-### Verify
+The cache asks two questions: is the content identical, *and* has that approval
+since been revoked. A `fail` verdict calls `revoke_tour_approvals`, so
+violate → taken down → republish unchanged cannot ride an old verdict back to
+live. Admin publishes are logged as `exempt`, not `pass`, so unreviewed admin
+content never becomes a cached approval someone else could reach by copying it.
 
-1. Draft edits never change the public experience.
-2. A passed revision becomes the exact public revision reviewed.
-3. Editing during moderation cannot leak into the approved snapshot.
-4. Failed or borderline leaves the previous live version intact.
-5. An API outage leaves the previous live version intact.
-6. Identical requests produce one Gemini call.
-7. Two simultaneous promotes cannot double-call or race.
-8. Clients cannot write the snapshot columns directly.
-9. Published images survive draft image replacement.
-10. The daily ceiling is enforced atomically and counts only real executions.
+### What the review reads
 
-### Start here — read before editing
+`textForReview` in `moderate-tour`. Tour title, description, welcome subtitle,
+HUD resource names; per zone: title, description, entry message, character
+persona, greeting, bio, lock hint, narration script, voice direction. Plus the
+first 6 images.
 
-Read-only first, then propose the smallest safe plan:
+**This list is hand-maintained and does not update itself.** Every
+creator-authored string added to `tours` or `zones` from now on must be added
+there or it silently escapes review. Narration scripts escaped for months
+exactly this way.
 
-- `tours` / `zones` schema and RLS policies
-- the `enforce_moderation_gate` trigger
-- `pages/Editor.tsx` — `saveTour` and the publish transition
-- `services/db.ts` — `requestPublish`
-- `pages/Player.tsx` — the tour/zone load path
-- `api/render.ts` and `api/sitemap.ts`
-- `supabase/functions/moderate-tour/index.ts`
+### Verified in production
 
----
+From `cloudenglish.net@gmail.com`, a non-admin account, against the live site:
+
+1. First publish went through the real gate, passed, went live.
+2. Editing the title and saving did **not** change what the player served.
+3. Publish changes promoted it, and the player then served the new version.
+4. A zone entry message telling players to stab people was **rejected**, with a
+   usable reason, and the live version kept playing untouched.
+5. Removing the offending line and resubmitting was approved.
+
+Item 4 is the one that matters. It is the case the old design got wrong.
+
+### Known gaps, carried forward
+
+- **The public API still serves drafts.** `tours_select` grants anonymous
+  callers the whole row of a public tour, which includes the draft the player
+  is deliberately not being shown, plus `lock_passphrase` and
+  `character_prompt`. See `docs/platform-audit-2026-08-11.md`, finding 1. This
+  is the most important loose end in the feature.
+- **Images referenced by a snapshot must survive the creator replacing them in
+  the draft.** `delete-tour` removes everything under the tour's storage
+  prefix, which is correct on deletion — but any future "clean up unused
+  uploads" task must treat snapshot-referenced files as live, or a published
+  experience quietly loses its images.
+- **"Newest pending revision wins" was not built.** It matters for a background
+  queue; review here is synchronous, so a second attempt mid-review is simply
+  told the tour is busy. Revisit if review ever moves to a queue.
 
 ## Also pending
 
@@ -230,13 +260,20 @@ Read-only first, then propose the smallest safe plan:
 it said. Store a hash of the terms text alongside the version so a record proves
 the content. Small, and impossible to add retroactively.
 
-**#69 — refresh `docs/launch-readiness.md`.** At least five claims in it are now
-false: that players accept nothing (player terms shipped), that no real publish
-has gone through moderation (Cluett-Schantz did, from a non-admin account), that
-AR placement uses a radial pad (it is a map now), that there is a report path in
-the player menu (there was none anywhere until `/report` shipped), and the
-sections on discovery predate the SEO plumbing. A readiness doc that overstates
-risk is its own problem when it is being used to decide what to do next.
+**#69 — refresh `docs/launch-readiness.md`.** Done 2026-08-11.
+
+**From the audit (`docs/platform-audit-2026-08-11.md`), highest first:**
+
+1. The public API still serves drafts, passphrases and character personas to
+   anonymous callers on any public tour. Dropping anonymous `SELECT` on `zones`
+   is the cheapest large win — nothing anonymous reads that table any more.
+2. Four account helpers (`is_platform_admin`, `storage_used_by`,
+   `storage_limit_for`, `tour_cap_for`) accept an arbitrary user id and are
+   callable by anyone. Check policies before revoking: one RLS policy calls
+   `is_platform_admin` as the invoking role.
+3. `search_path` is unpinned on ten functions including `enforce_moderation_gate`.
+4. The uploads ledger undercounts, because `elevenlabs-tts` writes to storage
+   without recording. 27 of 133 files are unaccounted for in the quota.
 
 **Not blocked on engineering:** LLC, counsel review, DMCA agent registration
 (~$6, cheapest item on the list), and inviting one real creator — which is the

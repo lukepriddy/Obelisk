@@ -3,6 +3,11 @@
 Where Obelisk stands between "a tool I use" and "a platform other people use,"
 and what's deliberately not done yet.
 
+Last refreshed 2026-08-11. Several claims in the previous version had gone
+stale, which matters because this document is used to decide what to do next
+and it was overstating risk in some places while understating it in others.
+Security posture is audited separately in `docs/platform-audit-2026-08-11.md`.
+
 ## Already in place
 
 Publishing runs an automatic content review (`moderate-tour`) before anything
@@ -17,10 +22,16 @@ build, reviewed at `/admin/moderation`.
 Admins (both of Luke's accounts, seeded in `platform_admins`) are exempt from
 the moderation gate but **not** from the terms.
 
+There is a public takedown path at `/report`, reachable without an account,
+with a stated 15-day response commitment. That commitment is a real obligation
+with a clock on it, and the only place reports surface is `/admin/moderation` —
+worth remembering before inviting anyone.
+
 **AR is shipped.** Camera view uses Niantic Spatial's engine for visual
 tracking, credited on the intro card and at `/licenses`. Both behaviours —
 static and flyover — have been tested in the field and work. Placement is
-authored on a top-down pad, in feet like the rest of the UI. GPS position
+authored on a map, in feet like the rest of the UI; it replaced an earlier
+radial pad. GPS position
 correction is a per-zone setting, off unless enabled, because it measurably
 hurts nearby objects. `docs/ar-tracking-notes.md` has the measurements, the
 distance/error model behind that default, and one approach that was tried and
@@ -72,8 +83,9 @@ The full risk assessment is in the conversation history; the short version:
   before filing. Biennial statement afterwards is $9 every two years.
 - **Lawyer review** of `constants/terms.ts` and `constants/privacy.ts`. Both
   are plain-language drafts covering the right ground; neither has been
-  reviewed. Priorities: a player-facing assumption-of-risk agreement (players
-  currently accept nothing, yet they're the ones who can be injured),
+  reviewed. Players now do accept terms — the Begin screen carries a 13+ age
+  floor and an at-your-own-risk assent, recorded per session — so the gap is no
+  longer "players accept nothing" but "nothing a lawyer has read". Priorities:
   governing law + venue + arbitration, a real indemnity, and a liability cap.
 - **DMCA agent registration** — ~$6 with the Copyright Office. Without it
   there's no §512 safe harbor for creator-uploaded material. Cheapest item on
@@ -101,13 +113,17 @@ default tier, which changes both the price and the design.
 **Do a dry run from `cloudenglish.net@gmail.com` first.** It is an ordinary
 creator, not in `platform_admins`, so publishing from it is the only way to
 exercise the moderation gate, the quotas, the terms prompt and the BYOK key
-step the way a stranger meets them. This matters more than it sounds: admin
-exemption means *no real publish has ever gone through `moderate-tour` in
-production*. Every test of that path has been synthetic. A regression there is
-currently invisible from Luke's own accounts, and the first person to find it
-should not be the first invited creator.
+step the way a stranger meets them. Admin exemption means none of that is
+reachable from Luke's own accounts.
 
-Repeat the same dry run after any change to the moderation path.
+That path is no longer untested: on 2026-08-11 it was run end to end from that
+account against production — first publish approved, an edit held back until
+submitted, a genuinely harmful edit rejected with the live version left
+playing, and the corrected version approved. Six logged runs, five pass one
+fail, $0.0015 total.
+
+Repeat the same dry run after any change to the moderation path. It stays the
+cheapest regression test available.
 
 ---
 
@@ -148,15 +164,29 @@ silently gets the paid benefit.
   a successful upload, so a determined caller hitting Supabase Storage directly
   would undercount their usage. Closing it needs a trigger on `storage.objects`
   or proxying uploads through an edge function.
-- **No re-moderation after edits.** A tour is reviewed at publish. Editing an
-  already-approved tour doesn't re-check it — covered by reports and
-  fast-unpublish rather than detection.
-- **3D models are not reviewed at all.** `moderate-tour` reads text and images.
+- ~~**No re-moderation after edits.**~~ Fixed 2026-08-11 by draft/live
+  publishing. Saving never moderates, the approved snapshot stays live until a
+  new one passes, and a failed check leaves the live version untouched. See
+  `docs/handoff-publishing.md`.
+- **3D models are not reviewed at all**, and are now the largest remaining
+  hole in review coverage, since narration scripts, voice direction and HUD
+  resource names were added to the pass on 2026-08-11. `moderate-tour` reads
+  text and images.
   A GLB uploaded as an AR object passes through unexamined, and unlike an image
   there is no cheap way to look at one — it has to be rendered from some angle
   first. This became a live gap when AR shipped rather than a theoretical one.
   Same mitigation as the above (terms, reports, fast-unpublish), but worth
   naming separately, because "we review uploads" is not currently true of the
   most novel thing a creator can upload.
-- **No discovery.** `is_public` only filters a creator's own dashboard; there
-  is no page listing other people's tours. Deferred on purpose.
+- **No discovery surface.** There is still no page listing other people's
+  tours, deliberately. But the SEO plumbing around it exists now: generated
+  sitemap, structured data, canonical URLs, and per-tour share previews, all
+  inert while `PUBLIC_SITE_ORIGIN` is unset. Unlisted is the third visibility
+  state and every live tour currently uses it, so nothing is discoverable today
+  even by a crawler following a shared link.
+
+- **The public API is looser than the player.** Anonymous callers can read the
+  draft of a public tour, plus zone passphrases and character personas. Fix and
+  ordering in `docs/platform-audit-2026-08-11.md`, finding 1. This is the
+  highest-priority item on that list and it should be closed before a stranger
+  publishes.
