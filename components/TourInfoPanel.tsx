@@ -2,7 +2,8 @@ import React, { useState, useRef } from 'react';
 import { Tour, Zone } from '../types';
 import { MAP_STYLES, FONT_STYLES, DEFAULT_MAP_STYLE } from '../constants';
 import { uploadImage } from '../services/storageService';
-import { Image, Type, Palette, AlignLeft, AlignCenter, Upload, MapPin, Eye, Settings, Globe, Lock, Loader2, Sun, Moon, X, Tag as TagIcon, Clock, Route, EyeOff } from 'lucide-react';
+import { MediaPicker } from './MediaPicker';
+import { Image as ImageIcon, Type, Palette, AlignLeft, AlignCenter, Upload, MapPin, Eye, Settings, Globe, Lock, Loader2, Sun, Moon, X, Tag as TagIcon, Clock, Route, EyeOff } from 'lucide-react';
 import { ProgressionSettings } from './ProgressionSettings';
 import { trailStats, formatDistance, suggestDuration } from '../utils/trail';
 
@@ -38,6 +39,7 @@ export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({
   const [tab, setTab] = useState<'edit' | 'preview'>('edit');
   const [imageUploading, setImageUploading] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
+  const [pickingImage, setPickingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const accent  = tour.accent_color || '#10b981';
@@ -279,7 +281,7 @@ export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({
           {/* Image */}
           <div>
             <label className="block text-xs font-bold text-zinc-400 uppercase mb-2 flex items-center gap-2">
-              <Image size={13} /> Cover Image
+              <ImageIcon size={13} /> Cover Image
             </label>
             <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
             <div className="flex gap-2">
@@ -299,6 +301,21 @@ export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({
                 placeholder="or paste URL..."
               />
             </div>
+            <button
+              onClick={() => setPickingImage(true)}
+              className="mt-1.5 flex items-center gap-1 text-[10px] font-semibold text-zinc-500 hover:text-zinc-200 transition-colors"
+            >
+              <ImageIcon size={10} /> Reuse an image from this experience
+            </button>
+            {pickingImage && (
+              <MediaPicker
+                tourId={tour.id}
+                kind="image"
+                currentUrl={tour.welcome_image_url}
+                onPick={(url) => { setImageError(null); onUpdate({ welcome_image_url: url }); }}
+                onClose={() => setPickingImage(false)}
+              />
+            )}
             {/* Says what the field is actually for. Most creators fill it once
                 they know it's the picture that shows up when someone shares the
                 link — which is cheaper than generating fallback cards for the

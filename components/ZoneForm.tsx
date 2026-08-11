@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { ARObjectConfig, ProgressionResource, Zone, ZoneExitBehavior, ZoneEndBehavior } from '../types';
 import { SAMPLE_AUDIO_FILES, VOICES, CHARACTER_TEMPLATES } from '../constants';
 import { uploadARAsset, uploadAudio, uploadImage } from '../services/storageService';
+import { MediaPicker } from './MediaPicker';
 import { supabase } from '../services/supabaseClient';
 import { Music, AlertCircle, Clock, Volume2, EyeOff, Radio, PlayCircle, Upload, Link as LinkIcon, FileAudio, ListMusic, Bot, MessageSquare, Lock, Unlock, GitBranch, Bell, Sparkles, KeySquare, ImageIcon, X, Trash2, Play, Pause, Loader2, Gift, HelpCircle, Camera, MapPin, Copy, Check } from 'lucide-react';
 import { ZoneProgressionSettings } from './ZoneProgressionSettings';
@@ -280,6 +281,11 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
   const [fileName, setFileName] = useState<string>('');
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [imageUploadError, setImageUploadError] = useState<string | null>(null);
+  /** Which media picker is open. The image one carries the field it will fill,
+   *  since a zone has both a character portrait and a zone image. */
+  const [pickingAudio, setPickingAudio] = useState(false);
+  const [pickingImageFor, setPickingImageFor] =
+    useState<'character_image_url' | 'zone_image_url' | null>(null);
   const [arAssetUploadError, setArAssetUploadError] = useState<string | null>(null);
   const [showAllVoices, setShowAllVoices] = useState(false);
   const [audioUploading, setAudioUploading] = useState(false);
@@ -450,6 +456,33 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
 
   return (
     <div className="text-zinc-200 pb-20">
+      {pickingAudio && (
+        <MediaPicker
+          tourId={zone.tour_id}
+          kind="audio"
+          currentUrl={zone.media_url}
+          onPick={(url) => {
+            // Mirror what a fresh upload does, so a reused clip behaves
+            // identically from here on.
+            setFileName(url.split('/').pop() || '');
+            setUploadError(null);
+            onUpdate({ media_url: url });
+          }}
+          onClose={() => setPickingAudio(false)}
+        />
+      )}
+      {pickingImageFor && (
+        <MediaPicker
+          tourId={zone.tour_id}
+          kind="image"
+          currentUrl={zone[pickingImageFor]}
+          onPick={(url) => {
+            setImageUploadError(null);
+            onUpdate({ [pickingImageFor]: url });
+          }}
+          onClose={() => setPickingImageFor(null)}
+        />
+      )}
       <div className="mb-6">
         <h3 className="text-emerald-400 font-bold uppercase tracking-wider text-sm mb-4">Zone Properties</h3>
 
@@ -604,6 +637,12 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
                 </span>
               </button>
             )}
+            <button
+              onClick={() => setPickingImageFor('character_image_url')}
+              className="mt-1.5 flex items-center gap-1 text-[10px] font-semibold text-zinc-500 hover:text-zinc-200 transition-colors"
+            >
+              <ImageIcon size={10} /> Reuse an image
+            </button>
             {imageUploadError && (
               <p className="text-xs text-red-400 mt-1.5 leading-snug">{imageUploadError}</p>
             )}
@@ -868,6 +907,12 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
                 </span>
               </button>
             )}
+            <button
+              onClick={() => setPickingImageFor('zone_image_url')}
+              className="mt-1.5 flex items-center gap-1 text-[10px] font-semibold text-zinc-500 hover:text-zinc-200 transition-colors"
+            >
+              <ImageIcon size={10} /> Reuse an image
+            </button>
             {imageUploadError && (
               <p className="text-xs text-red-400 mt-1.5 leading-snug">{imageUploadError}</p>
             )}
@@ -918,6 +963,16 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
                       <span className="text-xs text-zinc-400">{fileName || 'Click to Upload'}</span>
                     )}
                   </div>
+                  {/* Reuse rather than re-upload. Sound zones repeat far more
+                      than images do — the same ambience under several zones is
+                      the normal case — and this also surfaces generated
+                      voiceovers, which never reach the uploads ledger. */}
+                  <button
+                    onClick={() => setPickingAudio(true)}
+                    className="w-full mt-1.5 flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-semibold text-zinc-400 hover:text-white border border-zinc-800 hover:border-zinc-600 rounded transition-colors"
+                  >
+                    <ListMusic size={12} /> Use audio already in this experience
+                  </button>
                   {uploadError && (
                     <p className="flex items-center gap-1.5 text-xs text-red-400 mt-1.5">
                       <AlertCircle size={12} className="shrink-0" /> {uploadError}
@@ -1217,6 +1272,12 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
                 </span>
               </button>
             )}
+            <button
+              onClick={() => setPickingImageFor('zone_image_url')}
+              className="mt-1.5 flex items-center gap-1 text-[10px] font-semibold text-zinc-500 hover:text-zinc-200 transition-colors"
+            >
+              <ImageIcon size={10} /> Reuse an image
+            </button>
             {imageUploadError && (
               <p className="text-xs text-red-400 mt-1.5 leading-snug">{imageUploadError}</p>
             )}
@@ -1267,6 +1328,16 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
                       <span className="text-xs text-zinc-400">{fileName || 'Click to Upload'}</span>
                     )}
                   </div>
+                  {/* Reuse rather than re-upload. Sound zones repeat far more
+                      than images do — the same ambience under several zones is
+                      the normal case — and this also surfaces generated
+                      voiceovers, which never reach the uploads ledger. */}
+                  <button
+                    onClick={() => setPickingAudio(true)}
+                    className="w-full mt-1.5 flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-semibold text-zinc-400 hover:text-white border border-zinc-800 hover:border-zinc-600 rounded transition-colors"
+                  >
+                    <ListMusic size={12} /> Use audio already in this experience
+                  </button>
                   {uploadError && (
                     <p className="flex items-center gap-1.5 text-xs text-red-400 mt-1.5">
                       <AlertCircle size={12} className="shrink-0" /> {uploadError}

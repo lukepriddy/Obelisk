@@ -205,3 +205,69 @@ export async function uploadARAsset(
     ? uploadModel(file, tourId, opts)
     : uploadImage(file, `${tourId}/ar`, opts);
 }
+
+// ── Reusing what a tour already has ──────────────────────────────────────────
+/**
+ * List the files already uploaded under a tour, so a creator can pick one
+ * instead of uploading the same thing again.
+ *
+ * Reads storage directly rather than the `uploads` ledger, and that choice
+ * matters: the ledger is written by this module, but generated voiceovers are
+ * uploaded by the elevenlabs-tts edge function, which never touches it. At the
+ * time of writing that was 27 of 133 files — and generated narration is exactly
+ * what gets reused across zones, so a ledger-backed picker would have missed
+ * the most useful case.
+ *
+ * Needs the "Creators list their own tour files" policy on storage.objects;
+ * before that, listing returned nothing at all for creators.
+ */
+export interface TourMediaFile {
+  /** Bare filename, for display. */
+  name: string;
+  /** Full storage path, unique within the bucket. */
+  path: string;
+  url: string;
+  sizeBytes: number | null;
+  updatedAt: string | null;
+}
+
+async function listBucketFolder(bucket: string, folder: string): Promise<TourMediaFile[]> {
+  const { data, error } = await supabase.storage.from(bucket).list(folder, {
+    limit: 200,
+    sortBy: { column: 'created_at', order: 'desc' },
+  });
+  if (error) { console.error(`list ${bucket}/${folder}:`, error.message); return []; }
+
+  return (data ?? [])
+    // list() returns pseudo-entries for subfolders; those have no metadata.
+    .filter(entry => entry.id !== null && entry.name !== '.emptyFolderPlaceholder')
+    .map(entry => {
+      const path = `${folder}/${entry.name}`;
+      return {
+        name: entry.name,
+        path,
+        url: supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl,
+        sizeBytes: (entry.metadata as { size?: number } | null)?.size ?? null,
+        updatedAt: entry.updated_at ?? entry.created_at ?? null,
+      };
+    });
+}
+
+/** Audio already uploaded or generated for this tour, newest first. */
+export async function listTourAudio(tourId: string): Promise<TourMediaFile[]> {
+  return listBucketFolder('audio', tourId);
+}
+
+/**
+ * Images already uploaded for this tour, newest first.
+ *
+ * Includes the `ar/` subfolder, because an AR billboard image is an ordinary
+ * image a creator may well want as a character portrait too.
+ */
+export async function listTourImages(tourId: string): Promise<TourMediaFile[]> {
+  const [root, ar] = await Promise.all([
+    listBucketFolder('images', tourId),
+    listBucketFolder('images', `${tourId}/ar`),
+  ]);
+  return [...root, ...ar].sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''));
+}
