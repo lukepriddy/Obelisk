@@ -12,6 +12,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Loader2, Music, Check } from 'lucide-react';
 import { listTourAudio, listTourImages, TourMediaFile } from '../services/storageService';
 
@@ -57,9 +58,22 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  return (
+  // Rendered into document.body rather than in place.
+  //
+  // Both call sites live inside the editor's scrollable properties panel. A
+  // `position: fixed` child is positioned against its nearest ancestor that
+  // establishes a containing block — a transform, filter, backdrop-filter or
+  // contain will do it — so instead of covering the window, the overlay
+  // stretched over the panel's entire scroll height and centered the dialog
+  // somewhere far below the visible area. The dimming appeared; the dialog did
+  // not. A portal takes it out of that subtree so `fixed` means the viewport.
+  //
+  // z-[700] clears the panel's own z-[600]. On phones that panel is a bottom
+  // sheet, and a picker rendered underneath it would be just as invisible as
+  // one clipped by it.
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      className="fixed inset-0 z-[700] flex items-center justify-center bg-black/70 p-4"
       onClick={onClose}
     >
       <div
@@ -151,6 +165,7 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
