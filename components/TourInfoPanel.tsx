@@ -18,6 +18,9 @@ interface TourInfoPanelProps {
    *  is already live, where saving alone no longer changes what players get. */
   onPublishChanges?: () => void;
   publishing?: boolean;
+  /** Transient message about the submission itself, not about the content —
+   *  "you just did this, wait a minute". Not a review verdict. */
+  publishNotice?: string | null;
 }
 
 const ACCENT_PRESETS = ['#10b981','#6366f1','#f59e0b','#ef4444','#3b82f6','#ec4899'];
@@ -29,7 +32,7 @@ const TEXT_PRESETS   = ['#ffffff','#f1f5f9','#1e293b','#0f172a','#94a3b8','#d1fa
 
 export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({
   tour, zones = [], measuredSeconds, completedSessions = 0, onUpdate,
-  onPublishChanges, publishing = false,
+  onPublishChanges, publishing = false, publishNotice = null,
 }) => {
   const [tagDraft, setTagDraft] = useState('');
   const [tab, setTab] = useState<'edit' | 'preview'>('edit');
@@ -481,10 +484,16 @@ export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({
                     {publishing ? 'Checking…' : 'Publish changes'}
                   </button>
                 )}
-                <p className="text-[10px] text-zinc-500 leading-snug mt-1.5">
-                  If the check does not pass, the version players are walking
-                  right now stays exactly as it is.
-                </p>
+                {publishNotice ? (
+                  <p className="text-[10px] text-zinc-400 leading-snug mt-1.5">
+                    {publishNotice}
+                  </p>
+                ) : (
+                  <p className="text-[10px] text-zinc-500 leading-snug mt-1.5">
+                    If the check does not pass, the version players are walking
+                    right now stays exactly as it is.
+                  </p>
+                )}
               </div>
             )}
 

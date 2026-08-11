@@ -112,6 +112,9 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   // True while the content review runs, so the Save button can say so.
   const [publishing, setPublishing] = useState(false);
+  /** Transient "you just did this" message. Deliberately not part of the tour's
+   *  review state, because no review took place. */
+  const [publishNotice, setPublishNotice] = useState<string | null>(null);
   // Set when publishing is blocked pending acceptance of the creator terms.
   const [termsPrompt, setTermsPrompt] = useState<{ version: string; tourId: string } | null>(null);
   // The tour's is_public value as last known to the DATABASE — not the local
@@ -401,9 +404,19 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
       return false;
     }
 
+    // A cooldown is not a verdict. Nothing was reviewed and nothing changed, so
+    // it must not be written into the draft review state — doing that told a
+    // creator who simply clicked twice that their experience was queued for a
+    // manual check, which is both false and alarming.
+    if (result.status === 'cooldown') {
+      setPublishNotice(result.reason ?? 'Try again in a minute.');
+      return false;
+    }
+    setPublishNotice(null);
+
     // An approval is the only outcome that changes the live version. Everything
-    // else — rejected, queued, rate limited — lands on the draft fields and
-    // leaves whatever is live exactly as it was.
+    // else — rejected or queued — lands on the draft fields and leaves whatever
+    // is live exactly as it was.
     const approved = result.status === 'approved';
     publishedRef.current = result.is_public;
     setTour(prev => prev && ({
@@ -807,6 +820,7 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
               onUpdate={updateTourFields}
               onPublishChanges={publishChanges}
               publishing={publishing || saving}
+              publishNotice={publishNotice}
             />
           ) : (
             <div className="text-zinc-500 text-center mt-20">Select a zone</div>

@@ -454,7 +454,11 @@ export const getApiKeys = async (userId: string): Promise<{ elevenlabs_key: stri
  */
 export type PublishResult = {
   verdict: 'pass' | 'fail' | 'borderline';
-  status: 'approved' | 'rejected' | 'pending_review';
+  /** `cooldown` is not a review outcome. It means the request was refused
+   *  before any review happened — too soon after the last one, or one already
+   *  running. Nothing about the tour changed, so it must not be shown as a
+   *  verdict. */
+  status: 'approved' | 'rejected' | 'pending_review' | 'cooldown';
   is_public: boolean;
   reason?: string | null;
   categories?: string[];
