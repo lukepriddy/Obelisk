@@ -231,15 +231,32 @@ export interface TourMediaFile {
   updatedAt: string | null;
 }
 
-async function listBucketFolder(bucket: string, folder: string): Promise<TourMediaFile[]> {
+/**
+ * List one folder, and recurse into any subfolders it reports.
+ *
+ * `list()` is not recursive: it returns files in the folder plus pseudo-entries
+ * for subfolders, which have a null id and no metadata. The first version of
+ * this hardcoded the subfolder names it expected, which was a guess and a wrong
+ * one — it looked for `ar/`, while the images actually live under
+ * `progression/`. Eight files platform-wide were invisible to the picker
+ * because of it.
+ *
+ * Enumerating instead of guessing means a new upload path cannot quietly go
+ * missing from the picker the way that one did. Depth is capped because the
+ * layout is one level deep today and a runaway recursion in an editor control
+ * is a worse failure than a missing file.
+ */
+async function listBucketFolder(
+  bucket: string, folder: string, depth = 0,
+): Promise<TourMediaFile[]> {
   const { data, error } = await supabase.storage.from(bucket).list(folder, {
     limit: 200,
     sortBy: { column: 'created_at', order: 'desc' },
   });
   if (error) { console.error(`list ${bucket}/${folder}:`, error.message); return []; }
 
-  return (data ?? [])
-    // list() returns pseudo-entries for subfolders; those have no metadata.
+  const entries = data ?? [];
+  const files = entries
     .filter(entry => entry.id !== null && entry.name !== '.emptyFolderPlaceholder')
     .map(entry => {
       const path = `${folder}/${entry.name}`;
@@ -251,23 +268,33 @@ async function listBucketFolder(bucket: string, folder: string): Promise<TourMed
         updatedAt: entry.updated_at ?? entry.created_at ?? null,
       };
     });
+
+  if (depth >= 2) return files;
+
+  const subfolders = entries.filter(
+    entry => entry.id === null && entry.name !== '.emptyFolderPlaceholder',
+  );
+  const nested = await Promise.all(
+    subfolders.map(sub => listBucketFolder(bucket, `${folder}/${sub.name}`, depth + 1)),
+  );
+  return [...files, ...nested.flat()];
 }
+
+const newestFirst = (a: TourMediaFile, b: TourMediaFile) =>
+  (b.updatedAt ?? '').localeCompare(a.updatedAt ?? '');
 
 /** Audio already uploaded or generated for this tour, newest first. */
 export async function listTourAudio(tourId: string): Promise<TourMediaFile[]> {
-  return listBucketFolder('audio', tourId);
+  return (await listBucketFolder('audio', tourId)).sort(newestFirst);
 }
 
 /**
  * Images already uploaded for this tour, newest first.
  *
- * Includes the `ar/` subfolder, because an AR billboard image is an ordinary
- * image a creator may well want as a character portrait too.
+ * Covers subfolders too — `progression/` for resource icons, `ar/` for
+ * billboard images. A character portrait and a progression icon are the same
+ * kind of thing to a creator, so there is no reason to hide one from the other.
  */
 export async function listTourImages(tourId: string): Promise<TourMediaFile[]> {
-  const [root, ar] = await Promise.all([
-    listBucketFolder('images', tourId),
-    listBucketFolder('images', `${tourId}/ar`),
-  ]);
-  return [...root, ...ar].sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''));
+  return (await listBucketFolder('images', tourId)).sort(newestFirst);
 }
