@@ -263,3 +263,15 @@ design, because it answers how much friction the BYOK API key step really is.
   locality has to be stored. Not yet purchased; only needed to test.
 - **Audio is never moderated.** Possible but costly, and covered by
   notice-and-takedown. Say so plainly rather than implying uploads are reviewed.
+  Note the distinction added on 2026-08-11: the audio FILE is not reviewed, but
+  the narration SCRIPT now is. A script is plain text in the same row as
+  everything else the review already reads, and skipping it meant a creator
+  could write anything, turn it into speech, and have it checked at no point —
+  a gap between two reasonable decisions rather than a decision anyone made.
+  15 zones already had scripts when this was found. `voice_instructions` and
+  progression resource names were added at the same time, for the same reason.
+
+  **Which fields the review reads is a list in `textForReview`, and it does not
+  update itself.** Every creator-authored string added to `tours` or `zones`
+  from now on has to be added there, or it silently escapes review. Worth a
+  glance whenever a text field is added.

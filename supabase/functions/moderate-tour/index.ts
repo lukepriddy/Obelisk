@@ -138,6 +138,14 @@ function textForReview(snap: Snapshot) {
   ];
   if (tour.welcome_subtitle) lines.push(`WELCOME SUBTITLE: ${tour.welcome_subtitle}`);
 
+  // Progression resource names are creator-authored and shown in the player's
+  // HUD for the whole walk, so they are as visible as any zone title.
+  const resources = Array.isArray(tour.progression_resources) ? tour.progression_resources : [];
+  const resourceNames = resources
+    .map(r => (r as Record<string, unknown>)?.name)
+    .filter((n): n is string => typeof n === 'string' && n.trim() !== '');
+  if (resourceNames.length) lines.push(`HUD RESOURCE NAMES: ${resourceNames.join(', ')}`);
+
   zones.forEach((z, i) => {
     const parts: string[] = [`\n--- ZONE ${i + 1} (${z.type ?? 'audio'}) ---`];
     const push = (label: string, v: unknown) => {
@@ -150,6 +158,16 @@ function textForReview(snap: Snapshot) {
     push('CHARACTER GREETING', z.greeting_message);
     push('CHARACTER BIO', z.character_bio);
     push('LOCK HINT', z.lock_hint);
+    // The narration script. Players HEAR this, which makes it among the most
+    // player-facing text a tour has, and it was going unreviewed: the finished
+    // audio is deliberately not moderated (notice-and-takedown covers it), so
+    // skipping the script meant nothing checked it at any point. The script is
+    // plain text sitting in the same row as everything else here, so reviewing
+    // it costs almost nothing.
+    push('NARRATION SCRIPT', z.voiceover_script);
+    // Delivery direction. Less visible, but it is creator-authored text that
+    // gets fed to a speech model, so it belongs in the same pass.
+    push('VOICE DIRECTION', z.voice_instructions);
     lines.push(parts.join('\n'));
   });
 
