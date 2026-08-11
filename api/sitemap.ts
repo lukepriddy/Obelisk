@@ -52,8 +52,14 @@ async function fetchPublicTours(): Promise<TourRow[]> {
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
     const res = await fetch(
+      // published_snapshot=not.is.null is not belt and braces, it is the
+      // filter that matters. A tour with no approved snapshot has nothing for
+      // the player or the share preview to serve, so listing it would publish
+      // a URL that renders an empty shell. That failure is silent and only
+      // shows up as 404s in Search Console months later.
       `${SUPABASE_URL}/rest/v1/tours` +
-        `?select=id,created_at&is_public=eq.true&is_listed=eq.true&moderation_status=eq.approved`,
+        `?select=id,created_at&is_public=eq.true&is_listed=eq.true` +
+        `&moderation_status=eq.approved&published_snapshot=not.is.null`,
       {
         headers: { apikey: SUPABASE_ANON_KEY, authorization: `Bearer ${SUPABASE_ANON_KEY}` },
         signal: controller.signal,

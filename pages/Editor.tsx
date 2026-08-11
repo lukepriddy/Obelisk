@@ -401,17 +401,44 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
       return false;
     }
 
+    // An approval is the only outcome that changes the live version. Everything
+    // else — rejected, queued, rate limited — lands on the draft fields and
+    // leaves whatever is live exactly as it was.
+    const approved = result.status === 'approved';
     publishedRef.current = result.is_public;
     setTour(prev => prev && ({
       ...prev,
       is_public: result.is_public,
-      moderation_status: result.status,
-      moderation_reason: result.reason ?? null,
+      ...(approved
+        ? {
+            moderation_status: 'approved' as const,
+            moderation_reason: null,
+            draft_review_status: null,
+            draft_review_reason: null,
+          }
+        : {
+            draft_review_status:
+              result.status === 'rejected' ? ('rejected' as const) : ('pending_review' as const),
+            draft_review_reason: result.reason ?? null,
+          }),
     }));
-    return result.is_public;
+    return approved;
   };
 
-  const saveTour = async () => {
+  /**
+   * Push the current draft live on an already-published tour.
+   *
+   * Saves first, because the review reads what is in the database, not what is
+   * on screen. A creator who edits and immediately hits this would otherwise
+   * have the previous draft reviewed and promoted.
+   */
+  const publishChanges = async () => {
+    if (!tour || saving || publishing) return;
+    await saveTour({ skipPublishTransition: true });
+    await runPublish(tour.id);
+  };
+
+  const saveTour = async (options?: { skipPublishTransition?: boolean }) => {
     if (!tour || saving) return; // guard against concurrent saves (e.g. Cmd+S spam)
     setSaving(true);
     setSaveError(null);
@@ -424,7 +451,13 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
     // Publishing is gated: a DB trigger refuses `is_public = true` from the
     // client, so a false -> true transition has to go through the review
     // service instead of riding along in this batched update.
-    const wantsToPublish = tour.is_public && !publishedRef.current;
+    //
+    // Note this fires only on the FIRST publish. Once a tour is live, saving
+    // edits does not touch what players see at all — the approved snapshot
+    // stays live until the creator submits the changes and they pass. That is
+    // why publishChanges() saves with this suppressed and then reviews.
+    const wantsToPublish = tour.is_public && !publishedRef.current
+      && !options?.skipPublishTransition;
 
     try {
       await Promise.all([
@@ -636,7 +669,7 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
                      <span className="hidden sm:inline text-xs text-emerald-400 font-medium">Saved ✓</span>
                    )}
                    <button
-                     onClick={saveTour}
+                     onClick={() => saveTour()}
                      disabled={saving}
                      title="Save (⌘S)"
                      className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded text-white text-xs font-semibold transition-all disabled:opacity-60 ${saveError ? 'bg-red-600 hover:bg-red-500' : hasUnsavedChanges ? 'bg-amber-500 hover:bg-amber-400 shadow-lg shadow-amber-900/40' : 'bg-emerald-600 hover:bg-emerald-500'}`}
@@ -768,7 +801,13 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
             )
           ) : rightPanel === 'tour' && tour ? (
 
-            <TourInfoPanel tour={tour} zones={zones} onUpdate={updateTourFields} />
+            <TourInfoPanel
+              tour={tour}
+              zones={zones}
+              onUpdate={updateTourFields}
+              onPublishChanges={publishChanges}
+              publishing={publishing || saving}
+            />
           ) : (
             <div className="text-zinc-500 text-center mt-20">Select a zone</div>
           )}

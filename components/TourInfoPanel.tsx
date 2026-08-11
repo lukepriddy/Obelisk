@@ -14,6 +14,10 @@ interface TourInfoPanelProps {
   measuredSeconds?: number | null;
   completedSessions?: number;
   onUpdate: (updates: Partial<Tour>) => void;
+  /** Save the draft, then submit it for review. Only offered for a tour that
+   *  is already live, where saving alone no longer changes what players get. */
+  onPublishChanges?: () => void;
+  publishing?: boolean;
 }
 
 const ACCENT_PRESETS = ['#10b981','#6366f1','#f59e0b','#ef4444','#3b82f6','#ec4899'];
@@ -25,6 +29,7 @@ const TEXT_PRESETS   = ['#ffffff','#f1f5f9','#1e293b','#0f172a','#94a3b8','#d1fa
 
 export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({
   tour, zones = [], measuredSeconds, completedSessions = 0, onUpdate,
+  onPublishChanges, publishing = false,
 }) => {
   const [tagDraft, setTagDraft] = useState('');
   const [tab, setTab] = useState<'edit' | 'preview'>('edit');
@@ -458,27 +463,61 @@ export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({
                 <Lock size={12} /> Private
               </button>
             </div>
-            {/* Review feedback. Publishing runs an automatic content check on
-                save; a tour that doesn't pass stays private with a reason. */}
-            {!tour.is_public && tour.moderation_status === 'rejected' && (
+            {/* Live tour: saving edits no longer changes what players get.
+                The approved version stays up until a new one passes review,
+                so pushing changes live is now a separate, deliberate act. */}
+            {tour.is_public && (
+              <div className="mt-2 rounded bg-zinc-800/60 border border-zinc-700 px-3 py-2">
+                <p className="text-[11px] text-zinc-300 leading-snug">
+                  Players are seeing the last approved version. Your edits are
+                  saved but not live yet.
+                </p>
+                {onPublishChanges && (
+                  <button
+                    onClick={onPublishChanges}
+                    disabled={publishing}
+                    className="mt-2 w-full py-2 text-xs font-bold rounded bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {publishing ? 'Checking…' : 'Publish changes'}
+                  </button>
+                )}
+                <p className="text-[10px] text-zinc-500 leading-snug mt-1.5">
+                  If the check does not pass, the version players are walking
+                  right now stays exactly as it is.
+                </p>
+              </div>
+            )}
+
+            {/* Verdict on the DRAFT. Shown whether or not the tour is live,
+                because the whole point is that a live tour can have a rejected
+                draft without anything happening to the live version. */}
+            {tour.draft_review_status === 'rejected' && (
               <div className="mt-2 rounded bg-red-950/70 border border-red-900 px-3 py-2">
-                <p className="text-[11px] font-bold text-red-300">Not approved for publishing</p>
+                <p className="text-[11px] font-bold text-red-300">Changes not approved</p>
                 <p className="text-[11px] text-red-200/90 leading-snug mt-0.5">
-                  {tour.moderation_reason || 'This experience did not pass review.'}
+                  {tour.draft_review_reason || 'These changes did not pass review.'}
                 </p>
                 <p className="text-[10px] text-red-200/60 leading-snug mt-1">
-                  Edit the flagged content, then set it to Public and save again.
+                  {tour.is_public
+                    ? 'Your live version is untouched. Edit the flagged content and submit again.'
+                    : 'Edit the flagged content, then set it to Public and save again.'}
                 </p>
               </div>
             )}
-            {!tour.is_public && tour.moderation_status === 'pending_review' && (
+            {tour.draft_review_status === 'pending_review' && (
               <div className="mt-2 rounded bg-amber-950/70 border border-amber-900 px-3 py-2">
-                <p className="text-[11px] font-bold text-amber-300">In review</p>
+                <p className="text-[11px] font-bold text-amber-300">Waiting on a manual check</p>
                 <p className="text-[11px] text-amber-200/90 leading-snug mt-0.5">
-                  {tour.moderation_reason || 'This experience needs a manual check before it can go live.'}
+                  {tour.draft_review_reason || 'These changes need a manual check before they can go live.'}
                 </p>
+                {tour.is_public && (
+                  <p className="text-[10px] text-amber-200/60 leading-snug mt-1">
+                    Your live version is unaffected and still playable.
+                  </p>
+                )}
               </div>
             )}
+
             {tour.is_public && tour.is_listed !== false && (
               <p className="text-[10px] text-zinc-500 mt-1.5 leading-snug">
                 Playable by anyone with the link, and can appear in search and on place pages.
@@ -490,7 +529,7 @@ export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({
                 place pages. Good for sharing with friends, or testing.
               </p>
             )}
-            {!tour.is_public && tour.moderation_status !== 'rejected' && tour.moderation_status !== 'pending_review' && (
+            {!tour.is_public && !tour.draft_review_status && (
               <p className="text-[10px] text-zinc-500 mt-1.5 leading-snug">
                 Setting this to Public runs a quick content check when you save.
               </p>

@@ -24,6 +24,23 @@ export interface Tour {
   moderation_categories?: string[] | null;
   moderated_at?: string | null;
 
+  // The verdict on the DRAFT, which is a different thing from the verdict on
+  // the live version above. Saving never moderates, so a creator can edit a
+  // published tour freely; these fields describe the last time they submitted
+  // those edits for review. Null once a draft has been approved and promoted.
+  //
+  // A rejection here never unpublishes anything. That is the whole point: a
+  // false positive on an edit must not take down a live experience.
+  draft_review_status?: 'rejected' | 'pending_review' | null;
+  draft_review_reason?: string | null;
+  draft_review_categories?: string[] | null;
+  draft_reviewed_at?: string | null;
+
+  /** The approved, immutable version the public is served. Written only by the
+   *  review service. Null means nothing has been approved yet. */
+  published_snapshot?: TourSnapshot | null;
+  published_hash?: string | null;
+
   // Creator's estimate of typical completion time. Planning information, so it
   // has to appear before someone commits — twenty minutes and ninety minutes
   // are different afternoons. Distance and route shape are derived instead
@@ -52,6 +69,20 @@ export interface Tour {
   // Optional player progression
   progression_enabled?: boolean;
   progression_resources?: ProgressionResource[];
+}
+
+/**
+ * A frozen, approved copy of a tour and its zones — what the public is served.
+ *
+ * Built by `build_tour_snapshot()` in the database, which is the single
+ * definition of what an approved version contains. It carries the same fields
+ * the live tables do, minus ownership, visibility and moderation columns, so
+ * the player can render it exactly as it renders a draft.
+ */
+export interface TourSnapshot {
+  version: number;
+  tour: Omit<Tour, 'owner_id' | 'is_public' | 'is_listed' | 'created_at'>;
+  zones: Zone[];
 }
 
 export type ZoneExitBehavior = 'pause' | 'stop' | 'keep';

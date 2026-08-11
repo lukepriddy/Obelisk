@@ -88,18 +88,35 @@ async function fetchTour(tourId: string): Promise<{ tour: TourRow; zones: { lat:
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
   try {
-    const columns = 'title,description,welcome_subtitle,welcome_image_url,duration_minutes,lat,lng,is_listed';
-    const [tourRes, zoneRes] = await Promise.all([
-      fetch(`${SUPABASE_URL}/rest/v1/tours?id=eq.${encodeURIComponent(tourId)}&select=${columns}`,
-        { headers, signal: controller.signal }),
-      fetch(`${SUPABASE_URL}/rest/v1/zones?tour_id=eq.${encodeURIComponent(tourId)}&select=lat,lng`,
-        { headers, signal: controller.signal }),
-    ]);
+    // Reads the APPROVED SNAPSHOT, not the draft. A share preview is a public
+    // surface, so it has to describe the version that passed review — otherwise
+    // a link would advertise a title the reviewer never saw, and an edit would
+    // change every card already posted anywhere.
+    //
+    // is_listed comes from the live row rather than the snapshot: unlisting is
+    // a preference about an approved version, and must take effect at once
+    // rather than waiting for a re-review.
+    const columns = 'is_listed,published_snapshot';
+    const tourRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/tours?id=eq.${encodeURIComponent(tourId)}&select=${columns}`,
+      { headers, signal: controller.signal },
+    );
     if (!tourRes.ok) return null;
     const tours = await tourRes.json();
     if (!Array.isArray(tours) || !tours.length) return null;
-    const zones = zoneRes.ok ? await zoneRes.json().catch(() => []) : [];
-    return { tour: tours[0], zones: Array.isArray(zones) ? zones : [] };
+
+    const row = tours[0];
+    const snapshot = row?.published_snapshot;
+    // No snapshot means nothing has been approved, so there is nothing public
+    // to describe. The caller serves the plain shell.
+    if (!snapshot?.tour) return null;
+
+    const zones = Array.isArray(snapshot.zones) ? snapshot.zones : [];
+    return {
+      tour: { ...snapshot.tour, is_listed: row.is_listed },
+      zones: zones.filter((z: { lat?: unknown; lng?: unknown }) =>
+        typeof z?.lat === 'number' && typeof z?.lng === 'number'),
+    };
   } catch {
     // Timeout, network failure, or malformed JSON. The caller serves the
     // untouched page; a missing preview is not worth a broken player.

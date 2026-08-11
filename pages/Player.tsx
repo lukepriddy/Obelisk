@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { PlayerMap } from '../components/PlayerMap';
 import { WelcomePreviewMap, WelcomePreviewHandle } from '../components/WelcomePreviewMap';
-import { getTourById, getZonesByTourId, startSession, endSession, recordZoneVisit } from '../services/db';
+import { getTourById, getZonesByTourId, getPublishedTour, startSession, endSession, recordZoneVisit } from '../services/db';
 import { audioService } from '../services/audioService';
 import {
   canMeetProgressionRequirements,
@@ -1142,8 +1142,21 @@ export const Player: React.FC = () => {
 
   const loadTour = async (id: string) => {
    try {
-    const t = await getTourById(id);
-    if (!t) { setNotFound(true); setLoading(false); return; }
+    // Preview reads the DRAFT, the real player reads the APPROVED SNAPSHOT.
+    //
+    // That split is the whole feature. A creator previewing from the editor
+    // wants to see the edits they just made; a player walking the route must
+    // get the version that passed review, and must keep getting it while the
+    // creator edits, until a new version passes.
+    const loaded = isPreview
+      ? await (async () => {
+          const t = await getTourById(id);
+          return t ? { tour: t, zones: await getZonesByTourId(id) } : null;
+        })()
+      : await getPublishedTour(id);
+
+    if (!loaded) { setNotFound(true); setLoading(false); return; }
+    const { tour: t, zones: z } = loaded;
     setTour(t);
     if (t.progression_enabled) {
       const progress = loadPlayerProgress(t.id, t.progression_resources || []);
@@ -1153,7 +1166,6 @@ export const Player: React.FC = () => {
       playerProgressRef.current = null;
       setPlayerProgress(null);
     }
-    const z = await getZonesByTourId(id);
     setZones(z);
 
     // Restore visited/unlocked state from a previous session on this device,

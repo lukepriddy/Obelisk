@@ -132,6 +132,51 @@ export const getTourById = async (tourId: string): Promise<Tour | null> => {
   return data as Tour;
 };
 
+/**
+ * Load a tour the way the PUBLIC sees it: the approved snapshot, not the draft.
+ *
+ * This is the reader half of draft/live publishing. `getTourById` and
+ * `getZonesByTourId` keep returning the draft, because the editor and its
+ * preview genuinely want the draft — a creator previewing unsaved work should
+ * see their work, not the last approved version. Only the real player uses
+ * this.
+ *
+ * Falls back to the draft when there is no snapshot. That is not a hole in the
+ * gate: RLS only lets a stranger read a tour at all when is_public is true, and
+ * every public tour has a snapshot (backfilled, and the publish path writes one
+ * on every promotion including the admin-exempt path). So the fallback is
+ * reachable only by the owner looking at their own unpublished tour, which is
+ * exactly when showing the draft is the right answer.
+ */
+export const getPublishedTour = async (
+  tourId: string,
+): Promise<{ tour: Tour; zones: Zone[] } | null> => {
+  const tour = await getTourById(tourId);
+  if (!tour) return null;
+
+  const snapshot = tour.published_snapshot;
+  if (!snapshot || !snapshot.tour) {
+    const zones = await getZonesByTourId(tourId);
+    return { tour, zones };
+  }
+
+  // The snapshot deliberately omits live visibility fields, so they come from
+  // the row. Unlisting or going private takes effect immediately and does not
+  // wait for a re-review — those are preferences about an approved version, not
+  // changes to it.
+  return {
+    tour: {
+      ...(snapshot.tour as Tour),
+      id: tour.id,
+      owner_id: tour.owner_id,
+      is_public: tour.is_public,
+      is_listed: tour.is_listed,
+      created_at: tour.created_at,
+    },
+    zones: Array.isArray(snapshot.zones) ? snapshot.zones : [],
+  };
+};
+
 export const createTour = async (partial: Partial<Tour>): Promise<Tour | null> => {
   const { data, error } = await supabase
     .from('tours')

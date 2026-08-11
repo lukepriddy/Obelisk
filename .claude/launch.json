@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "obelisk",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-c", "cd /Users/lukepriddy/Obelisk/Obelisk-main && npm run dev -- --port 3100 --strictPort"],
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "--port", "3100", "--strictPort"],
       "port": 3100
     }
   ]
