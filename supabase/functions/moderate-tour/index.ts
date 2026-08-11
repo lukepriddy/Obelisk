@@ -1,21 +1,35 @@
 /**
  * moderate-tour edge function
  *
- * The publish gate. A creator flipping a tour public calls this; it runs one
- * AI safety pass and — as the service role — writes both the verdict and
- * `is_public` itself. The `enforce_moderation_gate` trigger on `tours` means
- * this is the ONLY way an ordinary creator's tour can become public, so
- * bypassing the UI (calling PostgREST straight from devtools) doesn't work.
+ * The publish gate, and the promotion step of draft/live publishing.
  *
- * Deliberate design choices:
+ * A creator submits a tour for review; this builds an immutable candidate
+ * snapshot, reviews THAT, and — as the service role — promotes exactly that
+ * snapshot if it passes. The `enforce_moderation_gate` trigger on `tours` means
+ * this is the ONLY way an ordinary creator's tour can become public or gain a
+ * published snapshot, so bypassing the UI (calling PostgREST straight from
+ * devtools) doesn't work.
+ *
+ * The shape that matters:
+ *   • Saving never moderates. Only this does. The previously approved snapshot
+ *     stays live until a new one passes, so a false positive can never take
+ *     down a running experience mid-campaign.
+ *   • The candidate snapshot is built BEFORE the model call and promoted
+ *     afterwards without re-reading the draft. Otherwise an edit made during
+ *     review would leak into approved content.
+ *   • A failed or borderline review writes only the DRAFT review fields. It
+ *     never touches is_public, moderation_status, or the live snapshot.
+ *
+ * Deliberate design choices carried over:
  *   • Uses the PLATFORM Gemini key, never the creator's BYOK key. Moderation
  *     must not be performed with a key controlled by the party under review.
- *   • Re-reads all content from the database rather than trusting anything in
- *     the request body — the client only supplies a tour id.
+ *   • Builds content from the database rather than trusting anything in the
+ *     request body — the client only supplies a tour id.
  *   • Fails to `pending_review`, never to `approved`. An API outage must not
  *     become an open publish gate.
- *   • Platform admins skip the check entirely (their tours are exempt by
- *     product decision), matching the trigger's own admin exemption.
+ *   • Platform admins skip the model call, matching the trigger's own admin
+ *     exemption — but they still get a snapshot, because a public tour without
+ *     one would be invisible to the readers that serve the public.
  */
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
@@ -35,6 +49,18 @@ const MAX_IMAGES = 6;
 const IMAGE_FETCH_TIMEOUT_MS = 6000;
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const GEMINI_TIMEOUT_MS = 45000;
+
+const COOLDOWN_SECONDS = 60;
+const LOCK_TTL_SECONDS = 120;
+
+/**
+ * Rough per-token prices for the log's cost estimate, in USD per token.
+ * These are an ESTIMATE for spotting runaway spend, not an invoice — the
+ * authoritative number is Google's billing. The token counts stored beside it
+ * come from Gemini's own usage metadata and are exact.
+ */
+const COST_PER_INPUT_TOKEN  = 0.30 / 1_000_000;
+const COST_PER_OUTPUT_TOKEN = 2.50 / 1_000_000;
 
 const SYSTEM_INSTRUCTION = `
 You review user-created walking tours for a location-based storytelling app
@@ -89,8 +115,23 @@ const RESPONSE_SCHEMA = {
   required: ['verdict', 'reason', 'flagged_categories'],
 };
 
-/** Collect every creator-authored string on the tour, labelled for context. */
-function textForReview(tour: Record<string, unknown>, zones: Record<string, unknown>[]) {
+type Snapshot = {
+  version: number;
+  tour: Record<string, unknown>;
+  zones: Record<string, unknown>[];
+};
+
+/**
+ * Collect every creator-authored string in the CANDIDATE SNAPSHOT.
+ *
+ * Reads the snapshot rather than the database on purpose: the snapshot is what
+ * gets promoted, so it must also be what gets reviewed. Reading the draft here
+ * would mean an edit landing mid-review could be approved without being seen.
+ */
+function textForReview(snap: Snapshot) {
+  const tour = snap.tour ?? {};
+  const zones = Array.isArray(snap.zones) ? snap.zones : [];
+
   const lines: string[] = [
     `TOUR TITLE: ${tour.title ?? ''}`,
     `TOUR DESCRIPTION: ${tour.description ?? ''}`,
@@ -114,6 +155,16 @@ function textForReview(tour: Record<string, unknown>, zones: Record<string, unkn
 
   // Guard against a pathologically large tour blowing the context window.
   return lines.join('\n').slice(0, 100_000);
+}
+
+function imageUrlsFrom(snap: Snapshot): string[] {
+  const tour = snap.tour ?? {};
+  const zones = Array.isArray(snap.zones) ? snap.zones : [];
+  return [
+    tour.welcome_image_url,
+    ...zones.flatMap(z => [z.zone_image_url, z.character_image_url]),
+  ].filter((u): u is string => typeof u === 'string' && /^https?:\/\//.test(u))
+   .slice(0, MAX_IMAGES);
 }
 
 /** Fetch an image and return it as a Gemini inline_data part, or null. */
@@ -151,6 +202,17 @@ Deno.serve(async (req) => {
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
   let tourId = '';
+  let uid = '';
+  let lockHeld = false;
+  let quotaTaken = false;
+
+  /** Always run, so a crashed review doesn't wedge the tour until the TTL. */
+  const releaseLock = async () => {
+    if (!lockHeld) return;
+    lockHeld = false;
+    try { await admin.rpc('end_moderation_attempt', { p_tour_id: tourId }); }
+    catch { /* the TTL is the backstop */ }
+  };
 
   try {
     const body = await req.json().catch(() => ({}));
@@ -160,12 +222,12 @@ Deno.serve(async (req) => {
     // ── Caller must own the tour ────────────────────────────────────────────
     const jwt = (req.headers.get('Authorization') ?? '').replace('Bearer ', '');
     const { data: userRes } = await admin.auth.getUser(jwt);
-    const uid = userRes?.user?.id;
+    uid = userRes?.user?.id ?? '';
     if (!uid) return json({ error: 'Not signed in.' }, 401);
 
     const { data: tour } = await admin
       .from('tours')
-      .select('id, owner_id, title, description, welcome_subtitle, welcome_image_url')
+      .select('id, owner_id, is_public')
       .eq('id', tourId)
       .maybeSingle();
     if (!tour) return json({ error: 'Experience not found.' }, 404);
@@ -190,48 +252,133 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── Admin exemption (mirrors the DB trigger) ────────────────────────────
-    const { data: adminRow } = await admin
-      .from('platform_admins').select('user_id').eq('user_id', uid).maybeSingle();
-    if (adminRow) {
-      await admin.from('tours').update({
+    // ── One review at a time, and not too often ─────────────────────────────
+    // Before any work: this also covers the attempts the cache would answer for
+    // free, so holding the button down cannot become a hot loop.
+    const { data: attempt } = await admin.rpc('begin_moderation_attempt', {
+      p_tour_id: tourId,
+      p_cooldown_seconds: COOLDOWN_SECONDS,
+      p_lock_ttl_seconds: LOCK_TTL_SECONDS,
+    });
+    if (attempt !== 'ok') {
+      return json({
+        verdict: 'borderline',
+        status: 'cooldown',
+        is_public: tour.is_public,
+        reason: attempt === 'busy'
+          ? 'This experience is being reviewed right now. Give it a moment.'
+          : 'You just submitted this experience. Try again in a minute.',
+      }, 429);
+    }
+    lockHeld = true;
+
+    // ── Build the candidate ─────────────────────────────────────────────────
+    // Everything from here on reviews and promotes THIS value. The draft is
+    // never read again, so edits made during review cannot leak into the
+    // approved content.
+    const { data: policyVersion } = await admin.rpc('current_moderation_policy_version');
+    const { data: snapshot, error: snapErr } =
+      await admin.rpc('build_tour_snapshot', { p_tour_id: tourId });
+    if (snapErr || !snapshot) {
+      console.error('moderate-tour: snapshot build failed', snapErr);
+      throw new Error('snapshot_failed');
+    }
+    const { data: contentHash } = await admin.rpc('tour_snapshot_hash', {
+      p_snapshot: snapshot, p_policy_version: policyVersion,
+    });
+
+    const snap = snapshot as Snapshot;
+
+    /** Promote the candidate. Writes the exact snapshot reviewed. */
+    const promote = async (logRow: Record<string, unknown>) => {
+      const { error } = await admin.from('tours').update({
+        published_snapshot: snapshot,
+        published_hash: contentHash,
         moderation_status: 'approved',
         moderation_reason: null,
         moderation_categories: null,
         moderated_at: new Date().toISOString(),
         is_public: true,
+        // The draft is now the live version, so there is no outstanding
+        // verdict about it.
+        draft_review_status: null,
+        draft_review_reason: null,
+        draft_review_categories: null,
+        draft_reviewed_at: null,
       }).eq('id', tourId);
+      if (error) throw new Error(`promote_failed: ${error.message}`);
+      await admin.from('moderation_runs').insert({
+        tour_id: tourId, creator_id: uid, content_hash: contentHash,
+        policy_version: policyVersion, promoted: true, ...logRow,
+      });
+    };
+
+    /** Record a verdict about the DRAFT. Never touches the live version. */
+    const recordDraftVerdict = async (
+      status: 'rejected' | 'pending_review', reason: string, categories: string[],
+    ) => {
+      await admin.from('tours').update({
+        draft_review_status: status,
+        draft_review_reason: reason,
+        draft_review_categories: categories.length ? categories : null,
+        draft_reviewed_at: new Date().toISOString(),
+      }).eq('id', tourId);
+    };
+
+    // ── Platform admin exemption (mirrors the DB trigger) ───────────────────
+    const { data: adminRow } = await admin
+      .from('platform_admins').select('user_id').eq('user_id', uid).maybeSingle();
+    if (adminRow) {
+      // Logged as 'exempt', not 'pass'. approval_is_reusable only accepts
+      // 'pass', so an admin's unreviewed content never becomes a cached
+      // approval that a non-admin could ride through the gate by copying it.
+      await promote({ model: 'admin-exempt', verdict: 'exempt', reason: null });
+      await releaseLock();
       return json({ verdict: 'pass', status: 'approved', is_public: true, exempt: true });
     }
 
-    if (!GEMINI_API_KEY) {
-      // No key configured is an outage, not a pass.
-      await admin.from('tours').update({
-        moderation_status: 'pending_review',
-        moderation_reason: 'Automatic review is temporarily unavailable. This experience is queued for a manual check.',
-        moderated_at: new Date().toISOString(),
-      }).eq('id', tourId);
-      return json({ verdict: 'borderline', status: 'pending_review', is_public: false });
+    // ── Has this exact content already been approved? ───────────────────────
+    // Two separate questions, deliberately. A matching fingerprint says the
+    // content is identical; it does not say the content is allowed. A tour that
+    // was rejected or taken down has its past approvals revoked, so it comes
+    // back through the gate even though nothing changed.
+    const { data: reusable } = await admin.rpc('approval_is_reusable', {
+      p_hash: contentHash, p_policy_version: policyVersion,
+    });
+    if (reusable) {
+      await promote({ model: 'cache', verdict: 'pass', reason: null, estimated_cost_usd: 0 });
+      await releaseLock();
+      return json({ verdict: 'pass', status: 'approved', is_public: true, cached: true });
     }
 
-    const { data: zones } = await admin
-      .from('zones')
-      .select('type, title, description, entry_message, character_prompt, greeting_message, character_bio, lock_hint, zone_image_url, character_image_url')
-      .eq('tour_id', tourId);
+    if (!GEMINI_API_KEY) {
+      // No key configured is an outage, not a pass. The live version stands.
+      await recordDraftVerdict('pending_review',
+        'Automatic review is temporarily unavailable. This experience is queued for a manual check.', []);
+      await releaseLock();
+      return json({ verdict: 'borderline', status: 'pending_review', is_public: tour.is_public });
+    }
 
-    const zoneList = zones ?? [];
+    // ── Daily ceiling ───────────────────────────────────────────────────────
+    // Taken last, immediately before the only step that costs money. Everything
+    // above is free, so a cache hit or a cooldown must not burn a slot.
+    const { data: gotQuota } = await admin.rpc('consume_moderation_quota', { p_user: uid });
+    if (!gotQuota) {
+      await recordDraftVerdict('pending_review',
+        'You have submitted a lot of updates today. Try again tomorrow.', []);
+      await releaseLock();
+      return json({
+        verdict: 'borderline',
+        status: 'pending_review',
+        is_public: tour.is_public,
+        reason: 'You have submitted a lot of updates today. Try again tomorrow.',
+      }, 429);
+    }
+    quotaTaken = true;
 
-    // ── Build the multimodal request ────────────────────────────────────────
-    const imageUrls = [
-      tour.welcome_image_url,
-      ...zoneList.flatMap(z => [z.zone_image_url, z.character_image_url]),
-    ].filter((u): u is string => typeof u === 'string' && /^https?:\/\//.test(u))
-     .slice(0, MAX_IMAGES);
-
-    const parts: Record<string, unknown>[] = [
-      { text: textForReview(tour, zoneList) },
-    ];
-    for (const part of await Promise.all(imageUrls.map(imagePart))) {
+    // ── The review ──────────────────────────────────────────────────────────
+    const parts: Record<string, unknown>[] = [{ text: textForReview(snap) }];
+    for (const part of await Promise.all(imageUrlsFrom(snap).map(imagePart))) {
       if (part) parts.push(part);
     }
 
@@ -264,6 +411,10 @@ Deno.serve(async (req) => {
       throw new Error('gemini_failed');
     }
 
+    // Past this point Gemini produced a billable response, so the slot stays
+    // spent whatever the verdict turns out to be.
+    quotaTaken = false;
+
     const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text;
     const parsed = JSON.parse(raw);
     const verdict = parsed?.verdict;
@@ -276,48 +427,80 @@ Deno.serve(async (req) => {
       : [];
     const reason = typeof parsed.reason === 'string' ? parsed.reason.slice(0, 600) : '';
 
-    const status = verdict === 'pass' ? 'approved'
-      : verdict === 'fail' ? 'rejected'
-      : 'pending_review';
-
-    const update: Record<string, unknown> = {
-      moderation_status: status,
-      moderation_reason: verdict === 'pass' ? null : (reason || 'This experience needs a manual review.'),
-      moderation_categories: categories.length ? categories : null,
-      moderated_at: new Date().toISOString(),
+    const usage = data?.usageMetadata ?? {};
+    const promptTokens = Number(usage.promptTokenCount) || 0;
+    const outputTokens = Number(usage.candidatesTokenCount) || 0;
+    const logRow = {
+      model: MODEL,
+      verdict,
+      reason: reason || null,
+      categories: categories.length ? categories : null,
+      prompt_tokens: promptTokens,
+      output_tokens: outputTokens,
+      total_tokens: Number(usage.totalTokenCount) || promptTokens + outputTokens,
+      estimated_cost_usd:
+        promptTokens * COST_PER_INPUT_TOKEN + outputTokens * COST_PER_OUTPUT_TOKEN,
     };
-    // Only a pass publishes. Everything else leaves the tour private.
-    if (verdict === 'pass') update.is_public = true;
 
-    const { error: upErr } = await admin.from('tours').update(update).eq('id', tourId);
-    if (upErr) {
-      console.error('moderate-tour: update failed', upErr);
-      return json({ error: 'Could not save the review result.' }, 500);
+    if (verdict === 'pass') {
+      await promote(logRow);
+      await releaseLock();
+      return json({ verdict, status: 'approved', is_public: true, categories });
     }
 
+    // Failed or borderline. The live version is untouched — same snapshot, same
+    // is_public, same moderation_status. Only the draft carries the verdict.
+    const draftStatus = verdict === 'fail' ? 'rejected' : 'pending_review';
+    const message = reason || (verdict === 'fail'
+      ? 'This update cannot be published as written.'
+      : 'This update needs a manual review.');
+
+    await admin.from('moderation_runs').insert({
+      tour_id: tourId, creator_id: uid, content_hash: contentHash,
+      policy_version: policyVersion, promoted: false, ...logRow,
+    });
+    await recordDraftVerdict(draftStatus, message, categories);
+
+    // A rejection invalidates every past approval for this tour, so the same
+    // content cannot be re-submitted later and wave through on the cache.
+    if (verdict === 'fail') {
+      await admin.rpc('revoke_tour_approvals', { p_tour_id: tourId });
+    }
+
+    await releaseLock();
     return json({
       verdict,
-      status,
-      is_public: verdict === 'pass',
-      reason: verdict === 'pass' ? null : update.moderation_reason,
+      status: draftStatus,
+      is_public: tour.is_public,
+      reason: message,
       categories,
     });
   } catch (err) {
-    // Fail safe: anything unexpected queues for a human, never auto-publishes.
+    // Fail safe: anything unexpected leaves the live version exactly as it was
+    // and queues the draft for a human. An outage must never publish, and must
+    // never unpublish either.
     console.error('moderate-tour: falling back to pending_review', err);
+
+    // The model call never produced a billable response, so give the slot back.
+    if (quotaTaken && uid) {
+      try { await admin.rpc('release_moderation_quota', { p_user: uid }); }
+      catch { /* best effort */ }
+    }
+
     if (UUID_RE.test(tourId)) {
       try {
         await admin.from('tours').update({
-          moderation_status: 'pending_review',
-          moderation_reason: 'Automatic review could not be completed. This experience is queued for a manual check.',
-          moderated_at: new Date().toISOString(),
+          draft_review_status: 'pending_review',
+          draft_review_reason: 'Automatic review could not be completed. This experience is queued for a manual check.',
+          draft_reviewed_at: new Date().toISOString(),
         }).eq('id', tourId);
       } catch { /* best effort */ }
     }
+    await releaseLock();
+
     return json({
       verdict: 'borderline',
       status: 'pending_review',
-      is_public: false,
       reason: 'Automatic review could not be completed. This experience is queued for a manual check.',
     });
   }
