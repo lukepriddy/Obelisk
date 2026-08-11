@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getTourById, getZonesByTourId, createZone as dbCreateZone, updateZone as dbUpdateZone, deleteZone as dbDeleteZone, updateTour as dbUpdateTour, requestPublish, acceptTerms } from '../services/db';
+import { getTourById, getZonesByTourId, createZone as dbCreateZone, updateZone as dbUpdateZone, deleteZone as dbDeleteZone, updateTour as dbUpdateTour, requestPublish, acceptTerms, getPublishState } from '../services/db';
 import { TermsDialog } from '../components/TermsDialog';
 import { ZoneForm } from '../components/ZoneForm';
 import { TourInfoPanel } from '../components/TourInfoPanel';
@@ -418,6 +418,10 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
     // else — rejected or queued — lands on the draft fields and leaves whatever
     // is live exactly as it was.
     const approved = result.status === 'approved';
+    if (approved) {
+      const state = await getPublishState(tourId);
+      if (state) setTour(prev => prev && ({ ...prev, ...state }));
+    }
     publishedRef.current = result.is_public;
     setTour(prev => prev && ({
       ...prev,
@@ -529,6 +533,12 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
       setHasUnsavedChanges(false);
       setSavedOk(true);
       setTimeout(() => setSavedOk(false), 2000);
+
+      // The fingerprints are trigger-maintained, so local state is stale the
+      // moment the save lands. Without this the header would keep claiming the
+      // draft matches what players see.
+      const state = await getPublishState(tour.id);
+      if (state) setTour(prev => prev && ({ ...prev, ...state }));
     } catch (err) {
       console.error('saveTour failed:', err);
       setSaveError('Save failed — check your connection and try again.');
@@ -680,6 +690,16 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
                    )}
                    {savedOk && !hasUnsavedChanges && !saveError && (
                      <span className="hidden sm:inline text-xs text-emerald-400 font-medium">Saved ✓</span>
+                   )}
+                   {/* Saved, but players are still on the previous approved
+                       version. Sits behind the unsaved/error states rather
+                       than beside them: "not saved" and "saved but not
+                       published" are different problems, and showing both at
+                       once reads as noise. */}
+                   {!hasUnsavedChanges && !saveError && !savedOk
+                     && tour.is_public && tour.draft_hash
+                     && tour.draft_hash !== tour.published_content_hash && (
+                     <span className="hidden sm:inline text-xs text-sky-400 font-medium">Changes not published</span>
                    )}
                    <button
                      onClick={() => saveTour()}

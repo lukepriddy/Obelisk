@@ -177,6 +177,28 @@ export const getPublishedTour = async (
   };
 };
 
+/**
+ * Re-read just the publication fingerprints for one tour.
+ *
+ * The editor holds a Tour object in local state, but these two columns are
+ * maintained by database triggers, so they go stale the moment anything is
+ * saved. Two short columns is cheap enough to refetch after every save, and
+ * the alternative — recomputing the hash in the browser — would be a second
+ * definition of "what counts as a change", which is the exact duplication the
+ * database-side builder exists to avoid.
+ */
+export const getPublishState = async (
+  tourId: string,
+): Promise<{ draft_hash: string | null; published_content_hash: string | null } | null> => {
+  const { data, error } = await supabase
+    .from('tours')
+    .select('draft_hash, published_content_hash')
+    .eq('id', tourId)
+    .maybeSingle();
+  if (error) { console.error('getPublishState:', error); return null; }
+  return data ?? null;
+};
+
 export const createTour = async (partial: Partial<Tour>): Promise<Tour | null> => {
   const { data, error } = await supabase
     .from('tours')

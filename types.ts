@@ -41,6 +41,14 @@ export interface Tour {
   published_snapshot?: TourSnapshot | null;
   published_hash?: string | null;
 
+  // Content fingerprints, maintained by database triggers on tours and zones.
+  // `draft_hash !== published_content_hash` is the exact test for "this creator
+  // has saved changes that players are not seeing yet". Content only, with no
+  // policy version mixed in, so bumping the moderation policy does not make
+  // every tour claim to have unpublished changes.
+  draft_hash?: string | null;
+  published_content_hash?: string | null;
+
   // Creator's estimate of typical completion time. Planning information, so it
   // has to appear before someone commits — twenty minutes and ninety minutes
   // are different afternoons. Distance and route shape are derived instead

@@ -17,7 +17,7 @@ import {
   MapPin, LogOut, BarChart2, Globe, Lock, Copy, Search,
   ChevronDown, Layers, Clock, SortAsc, TrendingUp, Users, Timer,
   ChevronRight, Sparkles, Settings, KeyRound, Eye, EyeOff, Loader2,
-  Tag as TagIcon,
+  Tag as TagIcon, Pencil,
 } from 'lucide-react';
 import { GenerateExperienceModal } from '../components/GenerateExperienceModal';
 
@@ -631,6 +631,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
                               ? 'Private'
                               : tour.is_listed === false ? 'Unlisted' : 'Public'}
                           </span>
+
+                          {/* Saving no longer changes what players get, so
+                              "edited but not published" is a state a creator
+                              can sit in indefinitely without noticing. Only
+                              meaningful once a tour is live: on a private tour
+                              nothing is published for the draft to differ
+                              from. The two hashes are maintained by the
+                              database, so this cannot drift out of step with
+                              what is actually being served. */}
+                          {tour.is_public && tour.draft_hash
+                            && tour.draft_hash !== tour.published_content_hash && (
+                            <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg backdrop-blur-sm bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                              <Pencil size={9} />
+                              Changes not published
+                            </span>
+                          )}
                         </div>
 
                         {/* Zone count + play count */}
