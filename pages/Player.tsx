@@ -4,6 +4,7 @@ import { PlayerMap } from '../components/PlayerMap';
 import { WelcomePreviewMap, WelcomePreviewHandle } from '../components/WelcomePreviewMap';
 import { getTourById, getZonesByTourId, getPublishedTour, startSession, endSession, recordZoneVisit } from '../services/db';
 import { supabase } from '../services/supabaseClient';
+import { setNowPlaying, clearNowPlaying } from '../services/mediaSession';
 import { audioService } from '../services/audioService';
 import {
   canMeetProgressionRequirements,
@@ -953,6 +954,34 @@ export const Player: React.FC = () => {
   useEffect(() => {
     if (showAudioResume && activeZones.length === 0) setShowAudioResume(false);
   }, [showAudioResume, activeZones.length]);
+
+  // Keep the OS lock screen honest about what is playing.
+  //
+  // Driven by activeZones, the same state as the on-screen Now Playing card, so
+  // the two cannot disagree. The case worth fixing is the empty one: priming
+  // touches every zone's audio on Begin, which is enough for iOS to register a
+  // media session, and with nothing ever retiring it the lock screen kept
+  // offering the tour — paused at 0:00 — long after the player had left every
+  // zone. Clearing when no zone is audible is what removes it.
+  //
+  // A zone marked replayable has finished; it is still listed on the card so it
+  // can be replayed, but nothing is coming out of it.
+  useEffect(() => {
+    if (!audioStarted) { clearNowPlaying(); return; }
+    const audible = activeZones.find(zone => !zone.replayable);
+    if (!audible) { clearNowPlaying(); return; }
+
+    const zone = zones.find(z => z.id === audible.id);
+    setNowPlaying({
+      title: audible.title || 'Audio',
+      artist: tour?.title || 'Obelisk',
+      artwork: zone?.zone_image_url || tour?.welcome_image_url || null,
+      playing: !audioService.isInterruptionPaused(),
+    });
+  }, [audioStarted, activeZones, zones, tour?.title, tour?.welcome_image_url, showAudioResume]);
+
+  // Leaving the player must not leave a widget behind.
+  useEffect(() => () => clearNowPlaying(), []);
 
   useEffect(() => {
     if (!showAudioResume) return;
