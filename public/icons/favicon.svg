@@ -1,21 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="32" height="32">
   <!--
-    Tab icon: the bare mark on transparency.
+    Tab icon: emerald MapPin on the app's own dark square.
 
-    No tile behind it, deliberately. A rounded rectangle reads as an outline
-    around the pin at tab size, and the browser already draws the icon on its
-    own background — one more edge is just noise.
+    Full bleed, no corner radius, no transparent pixel anywhere. That is
+    deliberate. Browsers put a light chip behind a favicon that has transparent
+    corners so it stays visible on a dark toolbar, and that chip showing around
+    a rounded tile is indistinguishable from a white border drawn around the
+    icon. Leaving nothing transparent leaves the chip nothing to show through;
+    browsers that round icons round this one themselves.
 
     Geometry is lucide's MapPin verbatim, the same mark the dashboard header
-    and the sign-in screen render. Filled rather than stroked: an outline loses
-    its stroke at 16px, while a solid pin stays readable. The head is a second
-    subpath in the same element, so fill-rule="evenodd" punches it out as a
-    hole instead of painting over it — which keeps the icon transparent there
-    rather than assuming a background colour.
+    and the sign-in screen render. Filled rather than stroked, because a stroke
+    disappears at 16px. The head is a second subpath so fill-rule="evenodd"
+    punches it out, letting the dark tile show through the hole rather than
+    painting a second colour there.
 
-    scripts/make-icons.py draws the PNG fallback from the same shape. Change
+    scripts/make-icons.py draws the PNG and ICO from the same shape. Change
     one, run the other.
   -->
+  <rect width="24" height="24" fill="#09090b"/>
   <path fill="#34d399" fill-rule="evenodd"
         d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z
            M15 10a3 3 0 1 0-6 0 3 3 0 0 0 6 0Z"/>

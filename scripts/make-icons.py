@@ -51,12 +51,19 @@ def pin(cx, cy, head_r, tip_y, hole_r):
     return inside
 
 
-def render(size, tile=True):
-    """Return RGBA bytes for one square icon."""
+def render(size, tile=True, radius=7):
+    """Return RGBA bytes for one square icon.
+
+    `radius` is in 32x32 units. Zero means a full-bleed square, which is what
+    the tab icon wants: browsers draw a light chip behind an icon that has
+    transparent corners, and that chip peeking out around a rounded tile is
+    indistinguishable from a white border drawn around the icon itself. Leaving
+    no transparent pixel leaves the chip nothing to show through.
+    """
     s = size
     # Geometry in 32x32 space, scaled up. Matches favicon.svg's proportions.
     k = s / 32.0
-    bgtest = rounded_rect(0, 0, s, s, 7 * k)
+    bgtest = rounded_rect(0, 0, s, s, radius * k)
     pintest = pin(cx=16 * k, cy=13 * k, head_r=7.2 * k, tip_y=27 * k, hole_r=2.8 * k)
 
     rows = []
@@ -96,8 +103,8 @@ def render(size, tile=True):
     return b''.join(rows)
 
 
-def write_png(path, size, tile=True):
-    raw = render(size, tile)
+def write_png(path, size, tile=True, radius=7):
+    raw = render(size, tile, radius)
 
     def chunk(tag, data):
         c = struct.pack('>I', len(data)) + tag + data
@@ -116,8 +123,9 @@ def write_png(path, size, tile=True):
 import os
 BASE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'public', 'icons')
 os.makedirs(BASE, exist_ok=True)
-# Tab icon: bare mark, no tile, so nothing draws an edge around it.
-write_png(f'{BASE}/favicon-32.png', 32, tile=False)
+# Tab icon: opaque, full-bleed, square. No transparent corners for a browser
+# contrast chip to show through, which is what read as a white border.
+write_png(f'{BASE}/favicon-32.png', 32, radius=0)
 # Home-screen icons keep the tile. iOS composites a transparent PNG onto
 # whatever it likes, and a bare green pin on white looks broken.
 write_png(f'{BASE}/apple-touch-icon.png', 180)
