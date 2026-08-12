@@ -145,6 +145,26 @@ Deno.serve(async (req) => {
         return json({ error: 'upload_failed', message: 'Audio generated but saving failed. Try again.' }, 500);
       }
 
+      // Record it in the same ledger client uploads write to.
+      //
+      // This was missed when TTS was built, and the gap was not theoretical:
+      // the ledger held 106 rows against 133 objects in storage, and all 27
+      // missing files were generated here. `uploads` is what getStorageQuota()
+      // sums, so generated audio was costing storage while counting as free —
+      // and it is the easiest kind of file to produce a lot of.
+      //
+      // Best effort, like recordUpload() in storageService.ts: a bookkeeping
+      // failure must not lose a creator the audio they just paid to generate.
+      const { error: ledgerError } = await admin.from('uploads').insert({
+        user_id: userId,
+        tour_id: tourId,
+        bucket: 'audio',
+        path,
+        size_bytes: audioBytes.byteLength,
+        mime_type: 'audio/mpeg',
+      });
+      if (ledgerError) console.error('uploads ledger:', ledgerError.message);
+
       const { data: urlData } = admin.storage.from('audio').getPublicUrl(path);
       return json({ url: urlData.publicUrl });
     }
