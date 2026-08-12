@@ -69,16 +69,25 @@ def render(size, tile=True):
                 for sx in range(SS):
                     fx = px + (sx + 0.5) / SS
                     fy = py + (sy + 0.5) / SS
-                    if not tile or bgtest(fx, fy):
+                    if pintest(fx, fy):
+                        fg_hits += 1
+                    if bgtest(fx, fy):
                         bg_hits += 1
-                        if pintest(fx, fy):
-                            fg_hits += 1
             total = SS * SS
+
+            if not tile:
+                # Bare mark on transparency: no tile means no tile edge, which
+                # is what a browser tab wants. Colour stays constant and only
+                # alpha varies, so the antialiased rim never picks up a halo of
+                # whatever is behind it.
+                row += bytes((FG[0], FG[1], FG[2], round(255 * fg_hits / total)))
+                continue
+
             if bg_hits == 0:
                 row += bytes((0, 0, 0, 0))
                 continue
             # Composite mark over tile, then apply tile coverage as alpha.
-            mark = fg_hits / bg_hits
+            mark = fg_hits / bg_hits if bg_hits else 0
             r = round(BG[0] * (1 - mark) + FG[0] * mark)
             g = round(BG[1] * (1 - mark) + FG[1] * mark)
             b = round(BG[2] * (1 - mark) + FG[2] * mark)
@@ -107,7 +116,10 @@ def write_png(path, size, tile=True):
 import os
 BASE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'public', 'icons')
 os.makedirs(BASE, exist_ok=True)
-write_png(f'{BASE}/favicon-32.png', 32)
+# Tab icon: bare mark, no tile, so nothing draws an edge around it.
+write_png(f'{BASE}/favicon-32.png', 32, tile=False)
+# Home-screen icons keep the tile. iOS composites a transparent PNG onto
+# whatever it likes, and a bare green pin on white looks broken.
 write_png(f'{BASE}/apple-touch-icon.png', 180)
 write_png(f'{BASE}/icon-192.png', 192)
 write_png(f'{BASE}/icon-512.png', 512)

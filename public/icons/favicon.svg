@@ -1,20 +1,22 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="32" height="32">
   <!--
-    Tab icon. The brand mark is lucide's MapPin, the same shape the app draws
-    in the dashboard header and on the sign-in screen, so the tab matches what
-    a creator sees inside the product.
+    Tab icon: the bare mark on transparency.
 
-    Drawn as a path rather than imported from lucide because this file is
-    fetched by the browser before any JavaScript exists. The geometry is
-    lucide's own 24x24 MapPin, translated and scaled to sit in a 32x32 tile.
+    No tile behind it, deliberately. A rounded rectangle reads as an outline
+    around the pin at tab size, and the browser already draws the icon on its
+    own background — one more edge is just noise.
 
-    Colours are the app's: zinc-950 tile, emerald-400 mark.
+    Geometry is lucide's MapPin verbatim, the same mark the dashboard header
+    and the sign-in screen render. Filled rather than stroked: an outline loses
+    its stroke at 16px, while a solid pin stays readable. The head is a second
+    subpath in the same element, so fill-rule="evenodd" punches it out as a
+    hole instead of painting over it — which keeps the icon transparent there
+    rather than assuming a background colour.
+
+    scripts/make-icons.py draws the PNG fallback from the same shape. Change
+    one, run the other.
   -->
-  <rect width="32" height="32" rx="7" fill="#09090b"/>
-  <g transform="translate(4 4) scale(1.0)"
-     fill="none" stroke="#34d399" stroke-width="2"
-     stroke-linecap="round" stroke-linejoin="round">
-    <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
-    <circle cx="12" cy="10" r="3"/>
-  </g>
+  <path fill="#34d399" fill-rule="evenodd"
+        d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z
+           M15 10a3 3 0 1 0-6 0 3 3 0 0 0 6 0Z"/>
 </svg>
