@@ -126,11 +126,15 @@ os.makedirs(BASE, exist_ok=True)
 # Tab icon: opaque, full-bleed, square. No transparent corners for a browser
 # contrast chip to show through, which is what read as a white border.
 write_png(f'{BASE}/favicon-32.png', 32, radius=0)
-# Home-screen icons keep the tile. iOS composites a transparent PNG onto
-# whatever it likes, and a bare green pin on white looks broken.
-write_png(f'{BASE}/apple-touch-icon.png', 180)
-write_png(f'{BASE}/icon-192.png', 192)
-write_png(f'{BASE}/icon-512.png', 512)
+# Home-screen and lock-screen artwork: opaque, full bleed, square.
+#
+# radius=0 is the point. iOS does not honour transparency in app artwork — it
+# composites it onto white — so a rounded tile with transparent corners renders
+# as an icon with four white triangles cut into it. Leaving no transparent pixel
+# and letting the OS apply its own mask is the only way to get clean corners.
+write_png(f'{BASE}/apple-touch-icon.png', 180, radius=0)
+write_png(f'{BASE}/icon-192.png', 192, radius=0)
+write_png(f'{BASE}/icon-512.png', 512, radius=0)
 
 # /favicon.ico at the site root.
 #
