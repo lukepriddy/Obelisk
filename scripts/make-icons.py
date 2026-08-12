@@ -123,3 +123,24 @@ write_png(f'{BASE}/favicon-32.png', 32, tile=False)
 write_png(f'{BASE}/apple-touch-icon.png', 180)
 write_png(f'{BASE}/icon-192.png', 192)
 write_png(f'{BASE}/icon-512.png', 512)
+
+# /favicon.ico at the site root.
+#
+# Not optional, and not redundant with the <link> tags. Browsers request
+# /favicon.ico by convention whatever the HTML says, and vercel.json rewrites
+# every unmatched path to index.html — so that request was answered with 17KB
+# of HTML, which browsers treat as a broken icon and then cache as a failure.
+# A real file here is served before the rewrite runs.
+#
+# ICO is a thin container: 6-byte header, one 16-byte directory entry, then the
+# image. Since Vista that image may be a PNG verbatim, so this reuses the 32px
+# tab icon byte for byte instead of re-rendering it as a bitmap.
+import struct
+png = open(f'{BASE}/favicon-32.png', 'rb').read()
+ico = (struct.pack('<HHH', 0, 1, 1)
+       + struct.pack('<BBBBHHII', 32, 32, 0, 0, 1, 32, len(png), 22)
+       + png)
+root_ico = os.path.join(os.path.dirname(BASE), 'favicon.ico')
+with open(root_ico, 'wb') as f:
+    f.write(ico)
+print(f'{root_ico}  32x32  {len(ico)} bytes')
