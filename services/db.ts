@@ -147,17 +147,40 @@ export const getTourById = async (tourId: string): Promise<Tour | null> => {
  * on every promotion including the admin-exempt path). So the fallback is
  * reachable only by the owner looking at their own unpublished tour, which is
  * exactly when showing the draft is the right answer.
+ *
+ * Names its columns rather than selecting `*`, and that is load-bearing rather
+ * than tidiness. Draft/live changed what the player reads but not what the API
+ * exposes: `tours_select` hands an anonymous caller the whole row of a public
+ * tour, draft included, so unpublished edits and rejection reasons were
+ * readable by anyone. The database grant is being narrowed to exactly the
+ * columns below, and a `select('*')` on this path would start failing the
+ * moment it is. See docs/platform-audit-2026-08-11.md, finding 1.
  */
+const PUBLIC_TOUR_COLUMNS = 'id,is_public,is_listed,published_snapshot';
+
 export const getPublishedTour = async (
   tourId: string,
 ): Promise<{ tour: Tour; zones: Zone[] } | null> => {
-  const tour = await getTourById(tourId);
-  if (!tour) return null;
+  const { data, error } = await withRetry<Tour>(() =>
+    supabase.from('tours').select(PUBLIC_TOUR_COLUMNS).eq('id', tourId).single()
+  );
 
-  const snapshot = tour.published_snapshot;
+  if (error) {
+    console.error('getPublishedTour:', error);
+    if (error.code !== 'PGRST116') {
+      logClientEvent('tour_fetch_failed', error.message || 'unknown', { tourId });
+    }
+    return null;
+  }
+  if (!data) return null;
+
+  const snapshot = data.published_snapshot;
   if (!snapshot || !snapshot.tour) {
-    const zones = await getZonesByTourId(tourId);
-    return { tour, zones };
+    // No approved version. Only an owner can reach this — see above — so the
+    // draft is both readable and the right thing to show.
+    const tour = await getTourById(tourId);
+    if (!tour) return null;
+    return { tour, zones: await getZonesByTourId(tourId) };
   }
 
   // The snapshot deliberately omits live visibility fields, so they come from
@@ -167,11 +190,9 @@ export const getPublishedTour = async (
   return {
     tour: {
       ...(snapshot.tour as Tour),
-      id: tour.id,
-      owner_id: tour.owner_id,
-      is_public: tour.is_public,
-      is_listed: tour.is_listed,
-      created_at: tour.created_at,
+      id: data.id,
+      is_public: data.is_public,
+      is_listed: data.is_listed,
     },
     zones: Array.isArray(snapshot.zones) ? snapshot.zones : [],
   };
