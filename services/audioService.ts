@@ -71,6 +71,9 @@ const routeKeeperEnabled = (): boolean => {
 
 export class AudioService {
   public context: AudioContext | null = null;
+  /** Has THIS context ever reported Apple's 'interrupted' state? See
+   *  attachContextListeners. Reset whenever the context is replaced. */
+  private contextEverInterrupted = false;
   private nodes: Map<string, NodeData> = new Map();
   private isUnlocked = false;
   private interruptionPaused = false;
@@ -97,6 +100,12 @@ export class AudioService {
     ctx.addEventListener?.('statechange', () => {
       if ((ctx.state as string) === 'interrupted') {
         this.interruptionPaused = true;
+        // Sticky for the life of this context. 'interrupted' is Apple's audio
+        // session state, and once a context has been through it iOS can leave
+        // the graph reporting "running" while producing silence — a state no
+        // amount of resuming fixes and only a rebuild clears. Recording it is
+        // what lets the cheap resume-first path stay off that case entirely.
+        this.contextEverInterrupted = true;
       }
     });
   }
@@ -376,7 +385,14 @@ export class AudioService {
     // leave construction failing. Resuming first avoids spending a context on
     // the common case, and the rebuild below is still there for when it is
     // genuinely needed.
-    if (this.context && (this.context.state as string) !== 'closed') {
+    // Only for a context that has never been interrupted.
+    //
+    // On iOS the graph can report "running" and advance its clock while
+    // producing silence, so the checks below would call that a success and skip
+    // the rebuild that is the only real cure. Gating on the interrupted flag
+    // keeps this shortcut to the desktop case it was written for and leaves
+    // Apple's path exactly as it was.
+    if (!this.contextEverInterrupted && this.context && (this.context.state as string) !== 'closed') {
       const resumed = await this.resumeContext();
       if (resumed) {
         const stillAdvancing = await this.verifyActiveAudioAdvancing();
@@ -397,6 +413,7 @@ export class AudioService {
     }
     if (newContext) this.attachContextListeners(newContext);
     this.context = newContext;
+    this.contextEverInterrupted = false;
 
     // Rebuild every media element and connection. iOS can leave the old graph
     // reporting "running" while producing silence after a lock-screen interruption.
