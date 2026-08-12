@@ -108,7 +108,12 @@ const ApiKeyRow: React.FC<{
   };
 
   return (
-    <div className="border-t border-zinc-800 pt-4">
+    // The divider is this row's top border, so the space above it has to come
+    // from this row's margin — padding alone sits inside the border and leaves
+    // the line flush against whatever came before, which put it hard against
+    // the previous provider's Save button. mt-5 and pt-5 are the same 20px, so
+    // each line sits centred between the two sections it separates.
+    <div className="border-t border-zinc-800 mt-5 pt-5">
       <div className="flex items-center justify-between mb-1">
         <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider">{label}</label>
         {saved && (
@@ -924,7 +929,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
                   </div>
                   <h2 className="font-bold text-white text-sm">API Keys</h2>
                 </div>
-                <p className="text-xs text-zinc-500 mb-5 leading-relaxed">
+                {/* No bottom margin: the first provider row's mt-5 supplies the
+                    gap above the first divider, so both dividers get the same
+                    20px on each side rather than the first one getting double. */}
+                <p className="text-xs text-zinc-500 leading-relaxed">
                   Your keys are stored securely and only used server-side — they never reach players' browsers.
                   Usage is billed to your own provider accounts.
                 </p>
