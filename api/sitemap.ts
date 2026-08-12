@@ -57,14 +57,12 @@ async function fetchPublicTours(): Promise<TourRow[]> {
       // the player or the share preview to serve, so listing it would publish
       // a URL that renders an empty shell. That failure is silent and only
       // shows up as 404s in Search Console months later.
-      // Only `id` is selected. created_at was being fetched and never used,
-      // and the anonymous grant on `tours` is being narrowed to the columns a
-      // public reader genuinely needs — anything selected here that is not in
-      // that list would start failing. moderation_status stays in the filter
-      // and so stays in the grant: filtering on a column needs SELECT on it.
-      `${SUPABASE_URL}/rest/v1/tours` +
-        `?select=id&is_public=eq.true&is_listed=eq.true` +
-        `&moderation_status=eq.approved&published_snapshot=not.is.null`,
+      // public_tours already restricts itself to published rows that have an
+      // approved snapshot, so the only filter left here is the listing
+      // preference. That is not just tidiness: the view is what keeps drafts
+      // out of reach, and a query against the table would need SELECT on every
+      // column it filters on.
+      `${SUPABASE_URL}/rest/v1/public_tours?select=id&is_listed=eq.true`,
       {
         headers: { apikey: SUPABASE_ANON_KEY, authorization: `Bearer ${SUPABASE_ANON_KEY}` },
         signal: controller.signal,

@@ -148,21 +148,20 @@ export const getTourById = async (tourId: string): Promise<Tour | null> => {
  * reachable only by the owner looking at their own unpublished tour, which is
  * exactly when showing the draft is the right answer.
  *
- * Names its columns rather than selecting `*`, and that is load-bearing rather
- * than tidiness. Draft/live changed what the player reads but not what the API
- * exposes: `tours_select` hands an anonymous caller the whole row of a public
- * tour, draft included, so unpublished edits and rejection reasons were
- * readable by anyone. The database grant is being narrowed to exactly the
- * columns below, and a `select('*')` on this path would start failing the
- * moment it is. See docs/platform-audit-2026-08-11.md, finding 1.
+ * Reads `public_tours`, a view, rather than the `tours` table — and that is
+ * load-bearing rather than tidiness. Draft/live changed what the player reads
+ * but not what the API exposes: the table hands any reader the whole row of a
+ * public tour, draft included, so unpublished edits and rejection reasons were
+ * readable. Column grants closed that for anonymous callers but could not close
+ * it for signed-in ones, because the editor legitimately needs every column of
+ * its own tours and Postgres cannot vary column visibility by row. The view can:
+ * fixed columns, fixed rows. See docs/platform-audit-2026-08-11.md, finding 1.
  */
-const PUBLIC_TOUR_COLUMNS = 'id,is_public,is_listed,published_snapshot';
-
 export const getPublishedTour = async (
   tourId: string,
 ): Promise<{ tour: Tour; zones: Zone[] } | null> => {
   const { data, error } = await withRetry<Tour>(() =>
-    supabase.from('tours').select(PUBLIC_TOUR_COLUMNS).eq('id', tourId).single()
+    supabase.from('public_tours').select('*').eq('id', tourId).maybeSingle()
   );
 
   if (error) {
@@ -172,12 +171,12 @@ export const getPublishedTour = async (
     }
     return null;
   }
-  if (!data) return null;
-
-  const snapshot = data.published_snapshot;
-  if (!snapshot || !snapshot.tour) {
-    // No approved version. Only an owner can reach this — see above — so the
-    // draft is both readable and the right thing to show.
+  const snapshot = data?.published_snapshot;
+  if (!data || !snapshot || !snapshot.tour) {
+    // Absent from the public view: either nothing has been approved yet, or
+    // the tour is private. Fall back to the draft, which only an owner can
+    // read — so this resolves to their own work for them, and to "not found"
+    // for everyone else, without this code needing to know which case it is.
     const tour = await getTourById(tourId);
     if (!tour) return null;
     return { tour, zones: await getZonesByTourId(tourId) };

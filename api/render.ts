@@ -96,9 +96,12 @@ async function fetchTour(tourId: string): Promise<{ tour: TourRow; zones: { lat:
     // is_listed comes from the live row rather than the snapshot: unlisting is
     // a preference about an approved version, and must take effect at once
     // rather than waiting for a re-review.
+    // public_tours, not tours: the view carries only approved content and only
+    // published rows, so a share preview cannot describe a draft even by
+    // accident. See docs/platform-audit-2026-08-11.md, finding 1.
     const columns = 'is_listed,published_snapshot';
     const tourRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/tours?id=eq.${encodeURIComponent(tourId)}&select=${columns}`,
+      `${SUPABASE_URL}/rest/v1/public_tours?id=eq.${encodeURIComponent(tourId)}&select=${columns}`,
       { headers, signal: controller.signal },
     );
     if (!tourRes.ok) return null;
