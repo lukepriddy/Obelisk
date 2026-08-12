@@ -976,9 +976,16 @@ export const Player: React.FC = () => {
       title: audible.title || 'Audio',
       artist: tour?.title || 'Obelisk',
       artwork: zone?.zone_image_url || tour?.welcome_image_url || null,
+      // Creators upload transparent PNGs constantly, and iOS composites
+      // transparency onto white — a character portrait arrives sitting in a
+      // white box. Flattened against the experience's own background instead.
+      background: tour?.bg_color || '#09090b',
       playing: !audioService.isInterruptionPaused(),
     });
-  }, [audioStarted, activeZones, zones, tour?.title, tour?.welcome_image_url, showAudioResume]);
+  }, [
+    audioStarted, activeZones, zones,
+    tour?.title, tour?.welcome_image_url, tour?.bg_color, showAudioResume,
+  ]);
 
   // Leaving the player must not leave a widget behind.
   useEffect(() => () => clearNowPlaying(), []);
