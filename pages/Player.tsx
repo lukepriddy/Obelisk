@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { PlayerMap } from '../components/PlayerMap';
 import { WelcomePreviewMap, WelcomePreviewHandle } from '../components/WelcomePreviewMap';
 import { getTourById, getZonesByTourId, getPublishedTour, startSession, endSession, recordZoneVisit } from '../services/db';
+import { supabase } from '../services/supabaseClient';
 import { audioService } from '../services/audioService';
 import {
   canMeetProgressionRequirements,
@@ -17,7 +18,7 @@ import { trailStats, trailSummary, formatDistance } from '../utils/trail';
 import { PLAYER_TERMS_VERSION } from '../constants/playerTerms';
 import { PlayerProgress, ProgressionReward, Tour, Zone } from '../types';
 import { FONT_STYLES, MAP_STYLES, DEFAULT_MAP_STYLE } from '../constants';
-import { Loader2, PlayCircle, Volume2, MessageCircle, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu, Layers, Locate, RotateCcw, ZoomIn, ZoomOut, Backpack, Gem, Trash2, Info, RefreshCw, LogOut, Bug, Navigation, ChevronRight, Camera, Flag } from 'lucide-react';
+import { Loader2, PlayCircle, Volume2, MessageCircle, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu, Layers, Locate, RotateCcw, ZoomIn, ZoomOut, Backpack, Gem, Trash2, Info, RefreshCw, LogOut, Bug, Navigation, ChevronRight, Camera, Flag, Eye } from 'lucide-react';
 import { ChatInterface } from '../components/ChatInterface';
 import { ARCameraOverlay } from '../components/ARCameraOverlay';
 import { CalibrationScreen } from '../components/CalibrationScreen';
@@ -128,6 +129,9 @@ export const Player: React.FC = () => {
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  /** Preview shows the draft, which only the owner may read. Distinct from
+   *  notFound so the message can say what is actually wrong. */
+  const [previewNeedsAuth, setPreviewNeedsAuth] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [gpsDebugLog, setGpsDebugLog] = useState<string[]>([]);
   const [showGpsRetry, setShowGpsRetry] = useState(false);
@@ -1150,10 +1154,29 @@ export const Player: React.FC = () => {
     // creator edits, until a new version passes.
     const loaded = isPreview
       ? await (async () => {
+          // Wait for the session before asking for the draft.
+          //
+          // supabase-js restores the session from localStorage asynchronously,
+          // and preview opens in a fresh tab, so this load reliably lost that
+          // race — the request went out with the anon key. It used to not
+          // matter: tours were readable by anyone when is_public was true, so
+          // the draft came back regardless. Now that the table is owner-only
+          // the same race returns nothing, and the creator sees "Experience
+          // not found" for a tour they own.
+          const { data: { session } } = await supabase.auth.getSession();
+          if (!session) return 'needs-auth' as const;
           const t = await getTourById(id);
           return t ? { tour: t, zones: await getZonesByTourId(id) } : null;
         })()
       : await getPublishedTour(id);
+
+    // Previewing a draft requires being the owner, so "not signed in" is a
+    // different problem from "no such experience" and deserves saying so.
+    if (loaded === 'needs-auth') {
+      setPreviewNeedsAuth(true);
+      setLoading(false);
+      return;
+    }
 
     if (!loaded) { setNotFound(true); setLoading(false); return; }
     const { tour: t, zones: z } = loaded;
@@ -1261,6 +1284,26 @@ export const Player: React.FC = () => {
       startSession(tour.id, PLAYER_TERMS_VERSION).then(id => { sessionIdRef.current = id; });
     }
   };
+
+  if (previewNeedsAuth) return (
+    <div className="flex flex-col h-screen items-center justify-center bg-zinc-950 px-6 text-center gap-4">
+      <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center">
+        <Eye size={28} className="text-zinc-600" />
+      </div>
+      <h2 className="text-white font-bold text-lg">Sign in to preview</h2>
+      <p className="text-zinc-500 text-sm max-w-xs leading-relaxed">
+        Preview shows your unpublished draft, so it is only visible to you.
+        Sign in and try again, or open the experience without the preview link
+        to see the published version.
+      </p>
+      <button
+        onClick={() => navigate('/')}
+        className="mt-1 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-semibold text-sm transition-colors"
+      >
+        Sign in
+      </button>
+    </div>
+  );
 
   if (notFound) return (
     <div className="flex flex-col h-screen items-center justify-center bg-zinc-950 px-6 text-center gap-4">
