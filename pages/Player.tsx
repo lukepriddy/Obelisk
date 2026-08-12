@@ -132,9 +132,6 @@ export const Player: React.FC = () => {
   /** Preview shows the draft, which only the owner may read. Distinct from
    *  notFound so the message can say what is actually wrong. */
   const [previewNeedsAuth, setPreviewNeedsAuth] = useState(false);
-  /** Polled only while the preview debug panel is open, so a diagnostic costs
-   *  nothing on a real walk. */
-  const [audioDebug, setAudioDebug] = useState(() => audioService.getDebugSnapshot());
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [gpsDebugLog, setGpsDebugLog] = useState<string[]>([]);
   const [showGpsRetry, setShowGpsRetry] = useState(false);
@@ -956,13 +953,6 @@ export const Player: React.FC = () => {
   useEffect(() => {
     if (showAudioResume && activeZones.length === 0) setShowAudioResume(false);
   }, [showAudioResume, activeZones.length]);
-
-  // Poll the audio snapshot only while the debug panel is actually open.
-  useEffect(() => {
-    if (!(isPreview && showDebug)) return;
-    const tick = window.setInterval(() => setAudioDebug(audioService.getDebugSnapshot()), 500);
-    return () => window.clearInterval(tick);
-  }, [isPreview, showDebug]);
 
   useEffect(() => {
     if (!showAudioResume) return;
@@ -2399,27 +2389,6 @@ export const Player: React.FC = () => {
               <span className="text-right font-semibold truncate" style={{ color: th.cardText }}>
                 {activeZones.length > 0 ? activeZones.map(zone => zone.title).join(', ') : 'None'}
               </span>
-
-              {/* Audio state. The failure worth catching here is silent
-                  playback: the element runs, the tab shows an audio indicator,
-                  and the graph feeding the speakers is dead. "Context" not
-                  running while a zone shows playing with a moving clock IS that
-                  failure, and nothing else in the UI can tell you. */}
-              <span>Audio ctx</span>
-              <span
-                className="text-right font-semibold"
-                style={{ color: audioDebug.contextState === 'running' ? th.cardText : '#f87171' }}
-              >
-                {audioDebug.contextState}{audioDebug.interruptionPaused ? ' · latched' : ''}
-              </span>
-              {audioDebug.zones.map(zone => (
-                <React.Fragment key={zone.zoneId}>
-                  <span className="truncate">{zone.routed === 'graph' ? 'graph' : 'element'} · gain {zone.gain}</span>
-                  <span className="text-right font-mono" style={{ color: th.cardText }}>
-                    {zone.playing ? 'play' : 'paused'} {zone.time}s{zone.prefetched ? ' · local' : ''}
-                  </span>
-                </React.Fragment>
-              ))}
               <ViewportStats labelColor={th.cardMuted} valueColor={th.cardText} />
             </div>
           </div>

@@ -71,9 +71,6 @@ const routeKeeperEnabled = (): boolean => {
 
 export class AudioService {
   public context: AudioContext | null = null;
-  /** Has THIS context ever reported Apple's 'interrupted' state? See
-   *  attachContextListeners. Reset whenever the context is replaced. */
-  private contextEverInterrupted = false;
   private nodes: Map<string, NodeData> = new Map();
   private isUnlocked = false;
   private interruptionPaused = false;
@@ -100,12 +97,6 @@ export class AudioService {
     ctx.addEventListener?.('statechange', () => {
       if ((ctx.state as string) === 'interrupted') {
         this.interruptionPaused = true;
-        // Sticky for the life of this context. 'interrupted' is Apple's audio
-        // session state, and once a context has been through it iOS can leave
-        // the graph reporting "running" while producing silence — a state no
-        // amount of resuming fixes and only a rebuild clears. Recording it is
-        // what lets the cheap resume-first path stay off that case entirely.
-        this.contextEverInterrupted = true;
       }
     });
   }
@@ -313,95 +304,12 @@ export class AudioService {
   }
 
   /**
-   * Do the tracks that should be playing actually have a moving clock?
-   *
-   * Deliberately measures currentTime rather than trusting `paused`. A media
-   * element feeding a suspended Web Audio graph reports itself as playing and
-   * advances nothing — the exact failure this whole recovery path exists for.
-   */
-  private async verifyActiveAudioAdvancing(): Promise<boolean> {
-    const active = [...this.nodes.values()].filter(
-      nodeData => nodeData.isInside && nodeData.hasStarted && !nodeData.played && !nodeData.destroyed,
-    );
-    if (active.length === 0) return true;
-
-    const before = active.map(nodeData => nodeData.audioEl.currentTime);
-    active.forEach(nodeData => {
-      if (nodeData.audioEl.paused) void nodeData.audioEl.play().catch(() => {});
-    });
-    await new Promise<void>(resolve => window.setTimeout(resolve, 350));
-    return active.every((nodeData, i) =>
-      !nodeData.audioEl.paused && nodeData.audioEl.currentTime > before[i] + 0.03,
-    );
-  }
-
-  /**
-   * Snapshot for the preview debug panel.
-   *
-   * Exists because this class can fail in a way nothing visible reveals: the
-   * element plays, the tab shows an audio indicator, "Now playing" appears, and
-   * the graph feeding the speakers is silent. Without a readout, diagnosing
-   * that is guesswork — which is exactly how a Safari-only report went several
-   * rounds before anyone knew whether audio was even running.
-   */
-  getDebugSnapshot() {
-    return {
-      contextState: this.context ? (this.context.state as string) : 'none',
-      unlocked: this.isUnlocked,
-      interruptionPaused: this.interruptionPaused,
-      zones: [...this.nodes.entries()]
-        .filter(([, nodeData]) => nodeData.isInside || nodeData.hasStarted)
-        .map(([zoneId, nodeData]) => ({
-          zoneId,
-          playing: !nodeData.audioEl.paused,
-          time: Number(nodeData.audioEl.currentTime.toFixed(1)),
-          gain: nodeData.gainNode
-            ? Number(nodeData.gainNode.gain.value.toFixed(2))
-            : Number(nodeData.audioEl.volume.toFixed(2)),
-          routed: nodeData.gainNode ? 'graph' : 'element',
-          prefetched: nodeData.prefetched,
-        })),
-    };
-  }
-
-  /**
    * User-gesture fallback for iOS. Restart active zone audio from the beginning
    * so the player never returns halfway through a clip after unlocking.
    */
   async restartActiveAudioFromBeginning(): Promise<boolean> {
     if (!this.isUnlocked) return false;
     this.interruptionPaused = false;
-
-    // Try simply resuming before rebuilding anything.
-    //
-    // This function was written for the iOS lock-screen case, where the old
-    // graph reports "running" while producing silence and only a fresh context
-    // recovers it. A tab switch on desktop is a milder thing: the context is
-    // suspended and a resume() inside a user gesture is all it needs.
-    //
-    // Rebuilding regardless was costly there. Every tap constructs another
-    // AudioContext, and Safari caps how many a page may hold — the old ones are
-    // closed without awaiting, so a few tab switches can exhaust the budget and
-    // leave construction failing. Resuming first avoids spending a context on
-    // the common case, and the rebuild below is still there for when it is
-    // genuinely needed.
-    // Only for a context that has never been interrupted.
-    //
-    // On iOS the graph can report "running" and advance its clock while
-    // producing silence, so the checks below would call that a success and skip
-    // the rebuild that is the only real cure. Gating on the interrupted flag
-    // keeps this shortcut to the desktop case it was written for and leaves
-    // Apple's path exactly as it was.
-    if (!this.contextEverInterrupted && this.context && (this.context.state as string) !== 'closed') {
-      const resumed = await this.resumeContext();
-      if (resumed) {
-        const stillAdvancing = await this.verifyActiveAudioAdvancing();
-        if (stillAdvancing) {
-          this.interruptionPaused = false;
-          return true;
-        }
-      }
-    }
 
     const AudioContextClass = (window.AudioContext || (window as any).webkitAudioContext);
     const oldContext = this.context;
@@ -413,7 +321,6 @@ export class AudioService {
     }
     if (newContext) this.attachContextListeners(newContext);
     this.context = newContext;
-    this.contextEverInterrupted = false;
 
     // Rebuild every media element and connection. iOS can leave the old graph
     // reporting "running" while producing silence after a lock-screen interruption.
