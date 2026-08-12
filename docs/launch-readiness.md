@@ -169,10 +169,12 @@ silently gets the paid benefit.
   publishing. Saving never moderates, the approved snapshot stays live until a
   new one passes, and a failed check leaves the live version untouched. See
   `docs/handoff-publishing.md`.
-- **3D models are not reviewed at all**, and are now the largest remaining
-  hole in review coverage, since narration scripts, voice direction and HUD
-  resource names were added to the pass on 2026-08-11. `moderate-tour` reads
-  text and images.
+- **3D models are not reviewed, by decision** — the same position as audio,
+  settled 2026-08-12. Reviewing a GLB means rendering it from some angle first,
+  which is real cost for a rare risk, and notice-and-takedown already covers
+  it. `moderate-tour` reads text and images; audio files and 3D models are
+  covered by `/report` and fast unpublish instead. State it that way rather
+  than implying uploads are reviewed.
   A GLB uploaded as an AR object passes through unexamined, and unlike an image
   there is no cheap way to look at one — it has to be rendered from some angle
   first. This became a live gap when AR shipped rather than a theoretical one.

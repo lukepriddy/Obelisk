@@ -264,9 +264,18 @@ Item 4 is the one that matters. It is the case the old design got wrong.
 
 ## Also pending
 
-**#68 — terms hash.** Acceptances record which version was accepted but not what
-it said. Store a hash of the terms text alongside the version so a record proves
-the content. Small, and impossible to add retroactively.
+**#68 — terms hash.** Done 2026-08-12. `tos_acceptances.content_hash` is
+stamped by a trigger from `tos_terms_versions`, so an acceptance proves the text
+rather than repeating a label. The two existing acceptances were backfilled,
+which was honest rather than assumed: `constants/terms.ts` last changed before
+both of them.
+
+**When you change the terms, this now matters:** run `node scripts/terms-hash.mjs`
+and insert the version and hash into `tos_terms_versions`. Acceptance of an
+unregistered version is refused, which blocks publishing with an explicit error
+naming the script. That is deliberate — an acceptance nobody can prove is the
+thing #68 existed to fix — but it does mean bumping `TERMS_VERSION` is now a
+two-part change.
 
 **#69 — refresh `docs/launch-readiness.md`.** Done 2026-08-11.
 
@@ -274,11 +283,16 @@ the content. Small, and impossible to add retroactively.
 2026-08-12 — all seven findings, each verified against production. Nothing from
 it is outstanding.
 
-**Still open, from the older soft-spots list:** 3D models are never reviewed,
-which is now the largest hole in review coverage; the moderation fail-safe has
-never been exercised by a real outage; and the platform Gemini key is handed to
-any creator without their own, which must become conditional before Managed
-exists.
+**Still open, from the older soft-spots list:** the moderation fail-safe has
+never been exercised by a real outage, and the platform Gemini key is handed to
+any creator without their own. The second is deferred rather than forgotten —
+note that in `gemini-chat` the fallback is per player conversation, not per
+creator, so a keyless creator's popular tour spends the platform key at up to
+500 chats a day per tour. Worth lowering that ceiling when it is picked up.
+
+**Settled 2026-08-12: 3D models are not reviewed, and that is the decision, not
+a gap.** Same position as audio. Rendering a GLB to look at it is real cost for
+a rare risk, and notice-and-takedown covers it.
 
 **Not blocked on engineering:** LLC, counsel review, DMCA agent registration
 (~$6, cheapest item on the list), and inviting one real creator — which is the
