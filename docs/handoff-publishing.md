@@ -5,8 +5,8 @@ rather than from a chat log.
 
 Draft/live publishing was the open task when this document was first written.
 It shipped on 2026-08-11 and the section below now describes what exists rather
-than what to build. The open work is in "Also pending" and in
-`docs/platform-audit-2026-08-11.md`.
+than what to build. The platform audit that followed it is fully closed. The
+open work is in "Also pending".
 
 ---
 
@@ -83,11 +83,13 @@ to be wrong, including some in the project's own docs.
 
 ## Current state
 
-**Everything is committed and deployed. Nothing is pushed.** As of
-2026-08-11 the local `main` is 12 commits ahead of `origin/main`, which still
-sits at `d1a4d39`. GitHub does not have any of the draft/live work. Vercel has
-it because `vercel --prod` uploads local files and stamps local commit metadata,
-which makes the dashboard look like a Git deploy when it is not.
+**Everything is committed, pushed and deployed** as of 2026-08-12.
+
+Worth knowing anyway: `vercel --prod` uploads local files and stamps them with
+the local commit, so the Vercel dashboard shows a commit SHA and looks like a
+Git deploy even when nothing has been pushed. For most of 11 August it was
+showing SHAs that existed on one laptop and nowhere else. Check `git status`
+rather than the dashboard.
 
 - `obelisk.place` is live with a valid certificate, pointed at this Vercel
   project via a Cloudflare CNAME (proxy off).
@@ -108,6 +110,11 @@ welcome screen; an AR placement map replacing a radial pad; SEO plumbing
 public `/report` takedown path with a 15-day response commitment; unlisted
 experiences; and on 2026-08-11 draft/live publishing, a within-tour media
 picker, a "Changes not published" badge, and the app's first favicon.
+
+**2026-08-12: the platform audit was closed**, all seven findings. The one that
+matters structurally: public reads now go through the `public_tours` view and
+the `tours` table is owner-only, so drafts and review verdicts are private to
+their creator. Anything new that serves the public should read the view.
 
 **Also fixed 2026-08-11, and worth knowing because it was invisible:** every
 edge function except `submit-takedown` was refusing requests from
@@ -240,11 +247,12 @@ Item 4 is the one that matters. It is the case the old design got wrong.
 
 ### Known gaps, carried forward
 
-- **The public API still serves drafts.** `tours_select` grants anonymous
-  callers the whole row of a public tour, which includes the draft the player
-  is deliberately not being shown, plus `lock_passphrase` and
-  `character_prompt`. See `docs/platform-audit-2026-08-11.md`, finding 1. This
-  is the most important loose end in the feature.
+- ~~**The public API still serves drafts.**~~ Closed 2026-08-12, and worth
+  keeping as a lesson: draft/live changed what the PLAYER reads and nobody
+  changed what the API serves, so for a day the feature looked correct in the
+  app while the drafts it exists to protect were one request away. Public reads
+  now go through the `public_tours` view and `tours` is owner-only. **If you
+  add a public surface, ask what it reads from — the view, not the table.**
 - **Images referenced by a snapshot must survive the creator replacing them in
   the draft.** `delete-tour` removes everything under the tour's storage
   prefix, which is correct on deletion — but any future "clean up unused
@@ -262,18 +270,15 @@ the content. Small, and impossible to add retroactively.
 
 **#69 — refresh `docs/launch-readiness.md`.** Done 2026-08-11.
 
-**From the audit (`docs/platform-audit-2026-08-11.md`), highest first:**
+**The audit (`docs/platform-audit-2026-08-11.md`) is fully closed** as of
+2026-08-12 — all seven findings, each verified against production. Nothing from
+it is outstanding.
 
-1. The public API still serves drafts, passphrases and character personas to
-   anonymous callers on any public tour. Dropping anonymous `SELECT` on `zones`
-   is the cheapest large win — nothing anonymous reads that table any more.
-2. Four account helpers (`is_platform_admin`, `storage_used_by`,
-   `storage_limit_for`, `tour_cap_for`) accept an arbitrary user id and are
-   callable by anyone. Check policies before revoking: one RLS policy calls
-   `is_platform_admin` as the invoking role.
-3. `search_path` is unpinned on ten functions including `enforce_moderation_gate`.
-4. The uploads ledger undercounts, because `elevenlabs-tts` writes to storage
-   without recording. 27 of 133 files are unaccounted for in the quota.
+**Still open, from the older soft-spots list:** 3D models are never reviewed,
+which is now the largest hole in review coverage; the moderation fail-safe has
+never been exercised by a real outage; and the platform Gemini key is handed to
+any creator without their own, which must become conditional before Managed
+exists.
 
 **Not blocked on engineering:** LLC, counsel review, DMCA agent registration
 (~$6, cheapest item on the list), and inviting one real creator — which is the

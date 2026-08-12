@@ -6,7 +6,8 @@ and what's deliberately not done yet.
 Last refreshed 2026-08-11. Several claims in the previous version had gone
 stale, which matters because this document is used to decide what to do next
 and it was overstating risk in some places while understating it in others.
-Security posture is audited separately in `docs/platform-audit-2026-08-11.md`.
+Security posture is audited separately in `docs/platform-audit-2026-08-11.md`;
+all seven findings from that audit were closed on 2026-08-12.
 
 ## Already in place
 
@@ -185,8 +186,9 @@ silently gets the paid benefit.
   state and every live tour currently uses it, so nothing is discoverable today
   even by a crawler following a shared link.
 
-- **The public API is looser than the player.** Anonymous callers can read the
-  draft of a public tour, plus zone passphrases and character personas. Fix and
-  ordering in `docs/platform-audit-2026-08-11.md`, finding 1. This is the
-  highest-priority item on that list and it should be closed before a stranger
-  publishes.
+- ~~**The public API is looser than the player.**~~ Closed 2026-08-12. Public
+  reads now go through the `public_tours` view, which carries the approved
+  snapshot and the two visibility flags and nothing else; `tours` itself is
+  readable only by its owner. Drafts, review verdicts, passphrases and
+  character personas are no longer reachable by anyone but the creator, signed
+  in or not. Every finding in `docs/platform-audit-2026-08-11.md` is closed.
