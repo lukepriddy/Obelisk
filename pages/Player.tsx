@@ -968,8 +968,29 @@ export const Player: React.FC = () => {
   // can be replayed, but nothing is coming out of it.
   useEffect(() => {
     if (!audioStarted) { clearNowPlaying(); return; }
+
     const audible = activeZones.find(zone => !zone.replayable);
-    if (!audible) { clearNowPlaying(); return; }
+    if (!audible) {
+      // Between zones, describe the EXPERIENCE rather than clearing.
+      //
+      // Clearing does not remove the widget — iOS keeps a session for any
+      // loaded audio element and simply falls back to the page title and the
+      // site icon, which is where the bare app-logo card came from. Since it
+      // is going to show something regardless, it may as well show the tour
+      // and its cover, marked paused, which is the truth.
+      if (tour?.title) {
+        setNowPlaying({
+          title: tour.title,
+          artist: tour.welcome_subtitle || 'Obelisk',
+          artwork: tour.welcome_image_url || null,
+          background: tour.bg_color || '#09090b',
+          playing: false,
+        });
+      } else {
+        clearNowPlaying();
+      }
+      return;
+    }
 
     const zone = zones.find(z => z.id === audible.id);
     setNowPlaying({
@@ -983,8 +1004,8 @@ export const Player: React.FC = () => {
       playing: !audioService.isInterruptionPaused(),
     });
   }, [
-    audioStarted, activeZones, zones,
-    tour?.title, tour?.welcome_image_url, tour?.bg_color, showAudioResume,
+    audioStarted, activeZones, zones, tour?.title, tour?.welcome_image_url,
+    tour?.welcome_subtitle, tour?.bg_color, showAudioResume,
   ]);
 
   // Leaving the player must not leave a widget behind.

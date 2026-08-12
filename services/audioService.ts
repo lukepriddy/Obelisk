@@ -389,6 +389,30 @@ export class AudioService {
             console.warn(`Tapped zone audio restart failed (${zoneId}):`, error);
           }),
         );
+      } else {
+        // Prime the zones the player is NOT standing in.
+        //
+        // Every element above is brand new, and an element only becomes freely
+        // playable once a real user gesture has played it — that is the entire
+        // reason loadAudio/primeLoadedAudio run from the Begin tap. This
+        // rebuild replaced all of them and played only the active one, so every
+        // zone still ahead on the walk was left in the state Begin exists to
+        // avoid, silently, from one tap on a recovery button.
+        //
+        // Started here rather than after the awaits below: the gesture that
+        // authorises playback is the tap that called this function, and it does
+        // not survive an await. Muted, so priming is inaudible; the element is
+        // paused and rewound as soon as it starts.
+        audioEl.muted = true;
+        playAttempts.push(
+          audioEl.play()
+            .then(() => {
+              audioEl.pause();
+              try { audioEl.currentTime = 0; } catch { /* not seekable yet */ }
+            })
+            .catch(() => { /* priming is best effort, exactly as at Begin */ })
+            .finally(() => { audioEl.muted = false; }),
+        );
       }
     });
 
