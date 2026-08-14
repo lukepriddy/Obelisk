@@ -219,8 +219,24 @@ export const PlayerMap: React.FC<PlayerMapProps> = (props) => {
     accuracyDataRef.current = buildAccuracyData();
     (map.getSource('accuracy') as maplibregl.GeoJSONSource | undefined)?.setData(accuracyDataRef.current);
 
+    // Only animate when the player has actually moved somewhere.
+    //
+    // GPS delivers a fix about once a second and the reported position jitters
+    // by a metre or two even standing still, so an unconditional easeTo meant a
+    // 500ms camera animation running roughly half the time the phone was out —
+    // continuous WebGL repaint, and one of the larger heat sources on a walk.
+    //
+    // Below the threshold the camera is simply left alone; the user marker has
+    // already been moved above, so the dot still tracks the jitter and only the
+    // map stops chasing it. The threshold is in degrees of latitude: 1e-5 is
+    // about 1.1m, comfortably inside GPS noise and far below anything a walker
+    // would notice as the map failing to follow.
     if (!simulationMode && followUser && userPos) {
-      map.easeTo({ center: [userPos[1], userPos[0]], duration: 500 });
+      const centre = map.getCenter();
+      const movedFar =
+        Math.abs(centre.lat - userPos[0]) > 1e-5 ||
+        Math.abs(centre.lng - userPos[1]) > 1e-5;
+      if (movedFar) map.easeTo({ center: [userPos[1], userPos[0]], duration: 500 });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userPos, gpsAccuracy, followUser, simulationMode]);

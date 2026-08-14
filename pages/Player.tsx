@@ -828,7 +828,20 @@ export const Player: React.FC = () => {
           }
         }
       }
-    }, 200);
+    // 500ms, not 200ms.
+    //
+    // At walking pace 200ms is 28cm of movement, against zone radii measured in
+    // metres — five samples per second decide nothing that one or two would not.
+    // The cost is real: this loop runs continuously for the length of a walk,
+    // measuring distance to every zone, rebuilding the active-zone payload and
+    // driving audio volumes, and it is one of the reasons the phone gets warm.
+    //
+    // Not slower than this on purpose. The loop is also what fires zone entry,
+    // grants rewards and starts audio, so its period is the worst-case delay
+    // before a player standing in a zone is noticed. Half a second is
+    // imperceptible next to the deliberate 2s entry delay; a full second starts
+    // to eat into it.
+    }, 500);
 
     return () => {
       clearInterval(interval);

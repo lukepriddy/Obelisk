@@ -11,7 +11,18 @@
 
 import * as THREE from 'three';
 
-const ENGINE_SRC = 'https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1/dist/xr.js';
+// Pinned to an exact version, not a floating major.
+//
+// `@1` resolves to the newest 1.x at request time, which meant Niantic could
+// ship a new build straight into production AR with no deploy here — and the
+// first anyone would know is a field report about tracking. AR is the most
+// fragile subsystem in the product and the hardest to test; it should change
+// when we decide it changes.
+//
+// Verified before pinning: 1.0.0 is byte-for-byte what `@1` was already
+// serving, so this changed nothing on the day it landed. When bumping, diff the
+// new build the same way and re-run a real placement outdoors.
+const ENGINE_SRC = 'https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1.0.0/dist/xr.js';
 
 declare global {
   interface Window {

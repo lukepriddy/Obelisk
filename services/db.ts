@@ -410,15 +410,26 @@ export const endSession = async (sessionId: string): Promise<void> => {
   if (error) console.error('endSession:', error);
 };
 
-/** Records a single zone visit (call once per zone per session). */
+/**
+ * Records a single zone visit (call once per zone per session).
+ *
+ * Goes through an RPC rather than inserting directly, matching startSession.
+ * The direct insert was validated by a policy that read `zones`, which in turn
+ * checks ownership against `tours` — so when `tours` became owner-only, every
+ * anonymous player's visit started failing with "permission denied for table
+ * tours" and analytics quietly stopped. An analytics WRITE should not depend on
+ * a content READ permission; the function owns that check instead.
+ */
 export const recordZoneVisit = async (
   sessionId: string,
   zoneId: string,
   tourId: string,
 ): Promise<void> => {
-  const { error } = await supabase
-    .from('zone_visits')
-    .insert({ session_id: sessionId, zone_id: zoneId, tour_id: tourId });
+  const { error } = await supabase.rpc('record_zone_visit', {
+    p_session_id: sessionId,
+    p_zone_id: zoneId,
+    p_tour_id: tourId,
+  });
   if (error) console.error('recordZoneVisit:', error);
 };
 
