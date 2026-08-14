@@ -56,6 +56,14 @@ interface Takedown {
   created_at: string;
 }
 
+interface ClientEvent {
+  id: string;
+  created_at: string;
+  kind: string;
+  message: string | null;
+  ua: string | null;
+}
+
 export const AdminModeration: React.FC = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -64,6 +72,9 @@ export const AdminModeration: React.FC = () => {
   const [reports, setReports] = useState<Report[]>([]);
   const [accessRequests, setAccessRequests] = useState<AccessRequest[]>([]);
   const [takedowns, setTakedowns] = useState<Takedown[]>([]);
+  /** Read straight from the table, not through the edge function: it is a plain
+   *  read and an admin-only policy already governs it. */
+  const [errors, setErrors] = useState<ClientEvent[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -90,6 +101,17 @@ export const AdminModeration: React.FC = () => {
         setAccessRequests(data.accessRequests ?? []);
         setTakedowns(data.takedowns ?? []);
       }
+
+      // Errors players actually hit. This log had collected 200+ entries that
+      // nobody could read — it had an insert policy and no select policy — and
+      // it had already caught a real bug on older iPhones that nothing else
+      // surfaced. Failure here must not take the moderation queue down with it.
+      const { data: events } = await supabase
+        .from('client_events')
+        .select('id, created_at, kind, message, ua')
+        .order('created_at', { ascending: false })
+        .limit(50);
+      setErrors((events ?? []) as ClientEvent[]);
     } catch {
       setError('Could not load the queue. Check your connection and try again.');
     } finally {
@@ -387,6 +409,52 @@ export const AdminModeration: React.FC = () => {
                   </div>
                 </article>
               ))}
+            </div>
+          )}
+        </section>
+
+        {/* Errors players hit. Grouped by message rather than listed raw: the
+            same failure repeating 60 times is one problem, and a flat list of
+            60 rows hides the other three. */}
+        <section className="mt-8">
+          <h2 className="text-xs font-bold uppercase tracking-wide text-zinc-500 mb-3">
+            Recent errors ({errors.length})
+          </h2>
+          {errors.length === 0 ? (
+            <p className="text-sm text-zinc-500">Nothing logged.</p>
+          ) : (
+            <div className="space-y-2">
+              {Object.values(
+                errors.reduce<Record<string, { message: string; kind: string; count: number; latest: string }>>(
+                  (acc, e) => {
+                    const message = e.message || '(no message)';
+                    const key = `${e.kind}|${message}`;
+                    if (!acc[key]) acc[key] = { message, kind: e.kind, count: 0, latest: e.created_at };
+                    acc[key].count += 1;
+                    if (e.created_at > acc[key].latest) acc[key].latest = e.created_at;
+                    return acc;
+                  }, {},
+                ),
+              )
+                .sort((a, b) => b.count - a.count)
+                .map(group => (
+                  <article
+                    key={`${group.kind}-${group.message}`}
+                    className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="text-xs text-zinc-300 leading-relaxed break-words min-w-0">
+                        {group.message}
+                      </p>
+                      <span className="shrink-0 text-[11px] font-bold text-zinc-400 tabular-nums">
+                        &times;{group.count}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-zinc-600 mt-1">
+                      {group.kind} · {new Date(group.latest).toLocaleString()}
+                    </p>
+                  </article>
+                ))}
             </div>
           )}
         </section>
