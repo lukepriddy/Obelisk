@@ -117,6 +117,16 @@ const SheetSkirt: React.FC<{ color: string; radius?: number }> = ({ color, radiu
   />
 );
 
+/**
+ * Ceiling on how much a poor GPS fix may widen a zone, in metres.
+ *
+ * Zone slack scales with the reported accuracy, but unbounded that becomes
+ * absurd: a 300m fix would make every zone in a tour "possible". 15m is about
+ * the worst fix still worth acting on for zones measured in single-digit
+ * metres, and it caps entry slack at 7.5m and exit margin at 22.5m.
+ */
+const ACCURACY_SLACK_CAP = 15;
+
 export const Player: React.FC = () => {
   const { tourId } = useParams<{ tourId: string }>();
   const navigate = useNavigate();
@@ -632,8 +642,30 @@ export const Player: React.FC = () => {
         // Once inside, the player doesn't count as "out" until they're a
         // margin BEYOND the edge (4–12 m, scaled to the zone's size).
         const wasInside = prevZoneIdsRef.current.has(zone.id);
-        const exitMargin = Math.max(4, Math.min(12, zone.radius * 0.15));
-        const effectiveRadius = zone.radius + (wasInside ? exitMargin : 0);
+
+        // Both edges are widened by how sure the phone is of where it is.
+        //
+        // The old rule compared the reported point against the zone and nothing
+        // else, which quietly assumed the point was correct. Simulated against
+        // the real pipeline, a player standing dead centre in a 4m zone with an
+        // ordinary 10m fix registered as inside only 30% of the time — and with
+        // the deliberate 2s entry delay, a zone that flickers like that often
+        // never starts at all. The same assumption pushed players out of zones
+        // they were standing still in, which is the dropout that started this.
+        //
+        // Entry asks whether the player COULD be inside; exit asks whether they
+        // are clearly out. Slack is capped so a hopeless fix cannot reach across
+        // a street, and exit is always the wider of the two, or the hysteresis
+        // would invert and flap faster than before.
+        const fixAccuracy = simulationMode
+          ? 0
+          : Math.min(gpsFixRef.current?.accuracy ?? ACCURACY_SLACK_CAP, ACCURACY_SLACK_CAP);
+        const entrySlack = fixAccuracy * 0.5;
+        const exitMargin = Math.max(
+          Math.max(4, Math.min(12, zone.radius * 0.15)),
+          fixAccuracy * 1.5,
+        );
+        const effectiveRadius = zone.radius + (wasInside ? exitMargin : entrySlack);
         const insideZone = dist < effectiveRadius;
         const prereqMet = !zone.requires_zone_id || visitedZoneIdsRef.current.has(zone.requires_zone_id);
         const progressionMet =
