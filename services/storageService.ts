@@ -125,6 +125,90 @@ async function recordUpload(
 interface UploadOptions {
   /** Receives a specific, user-facing reason when an upload is refused. */
   onError?: (message: string) => void;
+  /** Longest edge to keep, in pixels. See downscaleImage. */
+  maxEdge?: number;
+}
+
+/**
+ * Default longest edge for uploaded images, in pixels.
+ *
+ * Sized for the largest place an image is actually shown — a welcome screen or
+ * character portrait on a high-DPI phone — with headroom. Measured before
+ * choosing it: 62 stored images averaged 1.7MB and reached 5.9MB, 101MB in
+ * total across twelve tours, all displayed at a few hundred pixels or less.
+ */
+const DEFAULT_MAX_EDGE = 1600;
+
+/** Icons are rendered at 20-44px. A 2.4MB PNG for a 20px chip is why the HUD
+ *  icon appeared not to load: it had not finished downloading. */
+export const ICON_MAX_EDGE = 256;
+
+/** Below this, resizing is not worth the quality loss of a re-encode. */
+const RESIZE_FLOOR_BYTES = 150 * 1024;
+
+let webpSupport: boolean | null = null;
+function supportsWebp(): boolean {
+  if (webpSupport !== null) return webpSupport;
+  try {
+    const probe = document.createElement('canvas');
+    probe.width = probe.height = 1;
+    webpSupport = probe.toDataURL('image/webp').startsWith('data:image/webp');
+  } catch {
+    webpSupport = false;
+  }
+  return webpSupport;
+}
+
+/**
+ * Shrink an image in the browser before it is uploaded.
+ *
+ * Supabase can resize on delivery, but that is a paid feature and it is off for
+ * this project — the render endpoint answers 403 FeatureNotEnabled — so the
+ * only place this can happen is here, once, at upload.
+ *
+ * WebP because it keeps transparency, which matters: character portraits and
+ * resource icons are routinely cut-out PNGs, and re-encoding those to JPEG
+ * would put them on a white box. Falls back to the original file whenever it
+ * cannot do better — an unsupported format, a decode failure, an already-small
+ * file, or a result that came out larger than what it started with.
+ *
+ * Animated GIFs are passed through untouched. A canvas only ever sees the first
+ * frame, so "optimising" one would silently throw the animation away.
+ */
+async function downscaleImage(file: File, maxEdge: number): Promise<File> {
+  if (file.type === 'image/gif') return file;
+  if (!supportsWebp()) return file;
+
+  let bitmap: ImageBitmap | null = null;
+  try {
+    bitmap = await createImageBitmap(file);
+    const { width, height } = bitmap;
+    const scale = Math.min(1, maxEdge / Math.max(width, height));
+
+    // Already small in both senses: leave it exactly as the creator made it.
+    if (scale === 1 && file.size <= RESIZE_FLOOR_BYTES) return file;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(width * scale));
+    canvas.height = Math.max(1, Math.round(height * scale));
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return file;
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+
+    const blob = await new Promise<Blob | null>(resolve =>
+      canvas.toBlob(resolve, 'image/webp', 0.85),
+    );
+    if (!blob || blob.size >= file.size) return file;
+
+    const base = file.name.replace(/\.[^.]+$/, '') || 'image';
+    return new File([blob], `${base}.webp`, { type: 'image/webp' });
+  } catch {
+    // HEIC and anything else the browser will not decode lands here. The
+    // original is returned and validateFile gives the creator the real reason.
+    return file;
+  } finally {
+    bitmap?.close?.();
+  }
 }
 
 async function upload(
@@ -171,8 +255,17 @@ export async function uploadAudio(
 export async function uploadImage(
   file: File, folder: string, opts?: UploadOptions,
 ): Promise<string | null> {
-  const path = `${folder}/${Date.now()}.${extOf(file, 'jpg')}`;
-  return upload('images', path, file, 'image', folder.split('/')[0] || null, opts);
+  // Validate the ORIGINAL first. Downscaling turns a HEIC into a failed decode
+  // and hands back the untouched file, so checking afterwards would report
+  // something vague instead of the specific "export as JPEG" advice.
+  const invalid = validateFile(file, 'image');
+  if (invalid) { opts?.onError?.(invalid); return null; }
+
+  const prepared = await downscaleImage(file, opts?.maxEdge ?? DEFAULT_MAX_EDGE);
+  // Extension comes from the prepared file: it may now be .webp, and the stored
+  // path has to say so — mediaSession guesses artwork type from the extension.
+  const path = `${folder}/${Date.now()}.${extOf(prepared, 'jpg')}`;
+  return upload('images', path, prepared, 'image', folder.split('/')[0] || null, opts);
 }
 
 /** Upload a GLB model to the "models" bucket. */

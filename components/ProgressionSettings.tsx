@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { Gem, ImageIcon, KeyRound, Loader2, Plus, Trash2, Upload } from 'lucide-react';
 import { ProgressionResource, Tour } from '../types';
-import { uploadImage } from '../services/storageService';
+import { uploadImage, ICON_MAX_EDGE } from '../services/storageService';
 import { safeUUID } from '../utils/uuid';
 
 interface ProgressionSettingsProps {
@@ -57,7 +57,13 @@ export const ProgressionSettings: React.FC<ProgressionSettingsProps> = ({ tour, 
     }
 
     setUploading(true);
-    const url = await uploadImage(file, `${tour.id}/progression`, { onError: setUploadError });
+    // Resource icons render at 20px in the HUD and 44px in the inventory
+    // sheet, so they are capped far tighter than a cover image. One of these
+    // was a 2.4MB PNG, which is why the HUD icon looked like it never loaded.
+    const url = await uploadImage(file, `${tour.id}/progression`, {
+      onError: setUploadError,
+      maxEdge: ICON_MAX_EDGE,
+    });
     setUploading(false);
     if (url) updateResource(resourceId, { image_url: url });
   };
