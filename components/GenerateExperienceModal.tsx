@@ -40,6 +40,35 @@ interface DraftZone {
   voice_instructions: string | null;
   lock_hint: string | null;
   lock_passphrase: string | null;
+
+  // ── Import only ──────────────────────────────────────────────────────────
+  /** The creator's own words, sliced out of their document on the server.
+   *  Present only on imports; never touched by the model. */
+  script?: string;
+  /** Which of the fields above the model wrote, so the UI can mark them. */
+  generated_fields?: string[];
+  /** Where the coordinates came from. */
+  placement?: 'from_document' | 'interpolated' | 'laid_out';
+  /** Reads as a character even though imports land on audio. */
+  suggested_type?: 'audio' | 'character';
+  speaker_name?: string | null;
+  source_lines?: [number, number];
+}
+
+/** How the model read the document, shown so the creator can correct the
+ *  reasoning rather than fixing twenty zones one at a time. */
+interface ImportReading {
+  convention: string;
+  interpretation: string;
+  mechanics: string[];
+  speakers: { name: string; description: string; zones: number }[];
+}
+
+interface SetAsideBlock {
+  kind: string;
+  label: string;
+  lines: [number, number];
+  text: string;
 }
 
 interface ExperienceDraft {
@@ -48,6 +77,10 @@ interface ExperienceDraft {
   description: string;
   summary: string;
   zones: DraftZone[];
+  // Import only.
+  reading?: ImportReading;
+  set_aside?: SetAsideBlock[];
+  flags?: string[];
 }
 
 interface Props {
@@ -57,6 +90,16 @@ interface Props {
 }
 
 type Phase = 'input' | 'generating' | 'review';
+
+/**
+ * Two different jobs behind one modal.
+ *
+ * 'generate' invents an experience from a brief and the map around you.
+ * 'import' takes a script that is already written and does the tedious part:
+ * cutting it into zones, filling in the scaffolding, dropping pins. Import is
+ * the default because it is the one that saves a week of work.
+ */
+type Mode = 'import' | 'generate';
 
 // ── Generating steps ──────────────────────────────────────────────────────────
 
@@ -68,6 +111,18 @@ const STEPS = [
   'Placing characters and zones…',
   'Finalizing your experience…',
 ];
+
+const IMPORT_STEPS = [
+  'Reading your script end to end…',
+  'Working out how it is sectioned…',
+  'Finding the speakers…',
+  'Cutting it into zones…',
+  'Writing the parts you left blank…',
+  'Placing the zones…',
+];
+
+/** Matches the editor's own cap on a voiceover script. */
+const MAX_SCRIPT_CHARS = 10000;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -100,6 +155,12 @@ const ZoneTypeIcon: React.FC<{ type: 'audio' | 'character'; locked: boolean; siz
 export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBuilt }) => {
   // ── Phase ────────────────────────────────────────────────────────────────
   const [phase, setPhase] = useState<Phase>('input');
+  const [mode, setMode]   = useState<Mode>('import');
+
+  // ── Import ───────────────────────────────────────────────────────────────
+  const [docText, setDocText]   = useState('');
+  const [isImport, setIsImport] = useState(false);
+  const docInputRef             = useRef<HTMLInputElement>(null);
 
   // ── Input ────────────────────────────────────────────────────────────────
   const [startPin, setStartPin]     = useState<[number, number] | null>(null);
@@ -225,7 +286,7 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
       clearInterval(stepTimerRef.current!);
 
       if (fnError || !data?.draft) {
-        setError('Generation failed — please try again. If you pasted a lot of text, try a shorter brief.');
+        setError('Generation failed. Please try again, and if you pasted a lot of text, try a shorter brief.');
         setPhase('input');
         return;
       }
@@ -234,9 +295,59 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
       setPhase('review');
     } catch {
       clearInterval(stepTimerRef.current!);
-      setError('Something went wrong — please try again.');
+      setError('Something went wrong. Please try again.');
       setPhase('input');
     }
+  };
+
+  // ── Import ───────────────────────────────────────────────────────────────
+  const runImport = async () => {
+    if (docText.trim().length < 40) return;
+    setError(null);
+    setPhase('generating');
+    setGenStep(0);
+
+    stepTimerRef.current = setInterval(() => {
+      setGenStep(prev => Math.min(prev + 1, IMPORT_STEPS.length - 1));
+    }, 3600);
+
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke('generate-experience', {
+        body: {
+          type: 'import',
+          document: docText,
+          // Only used for scripts with no coordinates of their own. Where the
+          // creator wrote coordinates, those win.
+          startLat: startPin?.[0],
+          startLng: startPin?.[1],
+        },
+      });
+
+      clearInterval(stepTimerRef.current!);
+
+      if (fnError || !data?.draft) {
+        // The edge function returns a specific message for the cases a creator
+        // can act on — no start point, nothing that reads as zone content, a
+        // script too long for one pass. Prefer it over a generic apology.
+        const fromFn = (data as { error?: string } | null)?.error;
+        setError(fromFn || 'Import failed. Please try again.');
+        setPhase('input');
+        return;
+      }
+
+      setDraft(data.draft as ExperienceDraft);
+      setIsImport(true);
+      setPhase('review');
+    } catch {
+      clearInterval(stepTimerRef.current!);
+      setError('Something went wrong. Please try again.');
+      setPhase('input');
+    }
+  };
+
+  const loadDocFile = async (file: File) => {
+    const text = await file.text();
+    setDocText(text);
   };
 
   // ── Refine ───────────────────────────────────────────────────────────────
@@ -251,14 +362,14 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
       });
 
       if (fnError || !data?.draft) {
-        setError('Refinement failed — please try again.');
+        setError('Refinement failed. Please try again.');
       } else {
         setDraft(data.draft as ExperienceDraft);
         setFeedback('');
         setExpandedZone(null);
       }
     } catch {
-      setError('Something went wrong — please try again.');
+      setError('Something went wrong. Please try again.');
     }
 
     setRefining(false);
@@ -266,13 +377,15 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
 
   // ── Build ─────────────────────────────────────────────────────────────────
   const buildExperience = async () => {
-    if (!draft || !startPin) return;
+    // An imported script may carry its own coordinates, in which case no start
+    // pin was ever needed — so the pin is only required for generation.
+    if (!draft || (!startPin && !isImport)) return;
     setBuilding(true);
     setError(null);
 
     const sortedZones = [...draft.zones].sort((a, b) => a.order - b.order);
-    const tourLat = sortedZones[0]?.lat ?? startPin[0];
-    const tourLng = sortedZones[0]?.lng ?? startPin[1];
+    const tourLat = sortedZones[0]?.lat ?? startPin?.[0] ?? 0;
+    const tourLng = sortedZones[0]?.lng ?? startPin?.[1] ?? 0;
 
     const tour = await createTour({
       owner_id:  userId,
@@ -286,7 +399,7 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
     });
 
     if (!tour) {
-      setError('Failed to create experience — please try again.');
+      setError('Failed to create experience. Please try again.');
       setBuilding(false);
       return;
     }
@@ -311,6 +424,10 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
         greeting_message:  dz.greeting_message  ?? undefined,
         voice_style:       dz.voice_style       ?? undefined,
         voice_enabled:     false,
+        // The imported script lands in the voiceover field, which is what the
+        // zone editor reads to open on its AI-voiceover tab with the text
+        // already in place — one button from here to finished audio.
+        voiceover_script:  dz.script ? dz.script.slice(0, MAX_SCRIPT_CHARS) : undefined,
         lock_type:         dz.locked ? 'passphrase' : 'none',
         lock_hint:         dz.lock_hint         ?? undefined,
         lock_passphrase:   dz.lock_passphrase   ?? undefined,
@@ -343,12 +460,18 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
           </div>
           <div className="flex-1 min-w-0">
             <h2 className="font-bold text-white text-base leading-tight">
-              {phase === 'review' ? draft?.title || 'Review Draft' : 'Generate Experience'}
+              {phase === 'review'
+                ? draft?.title || 'Review Draft'
+                : mode === 'import' ? 'Import a Script' : 'Generate Experience'}
             </h2>
             <p className="text-xs text-zinc-500 mt-0.5">
-              {phase === 'input'      && 'Search your start location, then drag pins to fine-tune'}
-              {phase === 'generating' && 'Building your experience…'}
-              {phase === 'review'     && 'Review zones, give feedback, then build'}
+              {phase === 'input' && (mode === 'import'
+                ? 'Paste what you have written. Your words are kept exactly'
+                : 'Search your start location, then drag pins to fine-tune')}
+              {phase === 'generating' && (mode === 'import' ? 'Reading your script…' : 'Building your experience…')}
+              {phase === 'review'     && (isImport
+                ? 'Check how it was read, then build'
+                : 'Review zones, give feedback, then build')}
             </p>
           </div>
           <button
@@ -373,11 +496,89 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
           <>
             <div className="flex-1 overflow-y-auto">
 
+              {/* ── Mode ── */}
+              <div className="px-5 pt-5">
+                <div className="grid grid-cols-2 gap-2 p-1 bg-zinc-900 border border-zinc-800 rounded-2xl">
+                  {([
+                    ['import',   'I have a script', 'Paste it, I cut the zones'],
+                    ['generate', 'Start from scratch', 'Invent one from a brief'],
+                  ] as [Mode, string, string][]).map(([m, label, sub]) => (
+                    <button
+                      key={m}
+                      onClick={() => { setMode(m); setError(null); }}
+                      className={`px-3 py-2.5 rounded-xl text-left transition-colors ${
+                        mode === m
+                          ? 'bg-indigo-600/20 border border-indigo-500/50'
+                          : 'border border-transparent hover:bg-zinc-800/60'
+                      }`}
+                    >
+                      <span className={`block text-sm font-bold ${mode === m ? 'text-indigo-300' : 'text-zinc-400'}`}>
+                        {label}
+                      </span>
+                      <span className="block text-[10px] text-zinc-500 mt-0.5 leading-tight">{sub}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* ── Import: the script itself ── */}
+              {mode === 'import' && (
+                <div className="px-5 pt-5">
+                  <div className="flex items-baseline justify-between mb-2">
+                    <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
+                      Your script
+                    </label>
+                    <span className="text-[10px] tabular-nums text-zinc-600 ml-2 shrink-0">
+                      {docText.length.toLocaleString()} characters
+                    </span>
+                  </div>
+                  <textarea
+                    value={docText}
+                    onChange={e => setDocText(e.target.value)}
+                    rows={10}
+                    placeholder={'Paste the whole thing: headings, dialogue, coordinates, puzzle keys and all.\n\nYour words are copied across exactly as written. Nothing is rewritten.'}
+                    className="w-full bg-zinc-900 border border-zinc-800 text-zinc-200 text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-zinc-600 resize-y placeholder-zinc-600 leading-relaxed font-mono"
+                  />
+                  <input
+                    ref={docInputRef}
+                    type="file"
+                    accept=".txt,.md,.markdown,text/plain,text/markdown"
+                    className="hidden"
+                    onChange={e => { const f = e.target.files?.[0]; if (f) loadDocFile(f); }}
+                  />
+                  <div className="flex items-center gap-3 mt-2">
+                    <button
+                      onClick={() => docInputRef.current?.click()}
+                      className="flex items-center gap-1.5 text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors"
+                    >
+                      <Upload size={12} /> Load a .txt or .md file
+                    </button>
+                    {docText && (
+                      <button
+                        onClick={() => setDocText('')}
+                        className="flex items-center gap-1.5 text-[11px] text-zinc-600 hover:text-red-400 transition-colors ml-auto"
+                      >
+                        <Trash2 size={12} /> Clear
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-zinc-600 mt-2 leading-relaxed">
+                    Paste plain text rather than a PDF. Text keeps your exact characters:
+                    hieroglyphs, ciphers, spaced letters, where PDF extraction mangles them.
+                  </p>
+                </div>
+              )}
+
               {/* ── Start location search (above the map, not on it) ── */}
               <div className="px-5 pt-5 pb-3">
                 <label className="flex items-center gap-1.5 text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2">
                   <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  Start location
+                  {mode === 'import' ? 'Where to lay the zones out' : 'Start location'}
+                  {mode === 'import' && (
+                    <span className="text-zinc-600 font-normal normal-case tracking-normal">
+                      (only used for zones with no coordinates in your script)
+                    </span>
+                  )}
                 </label>
 
                 {startPin ? (
@@ -403,7 +604,7 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
                         onKeyDown={e => e.key === 'Enter' && runSearch(query)}
                         onBlur={() => setTimeout(() => setDropdownOpen(false), 150)}
                         onFocus={() => results.length > 0 && setDropdownOpen(true)}
-                        placeholder="Search address or place — e.g. Washington Square Park"
+                        placeholder="Search address or place, e.g. Washington Square Park"
                         className="flex-1 bg-transparent text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none"
                         autoFocus
                       />
@@ -444,13 +645,19 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
                     <div className="absolute inset-0 z-[700] flex items-center justify-center pointer-events-none bg-black/30">
                       <div className="bg-zinc-900/90 backdrop-blur border border-zinc-700 rounded-2xl px-5 py-3 text-center shadow-xl">
                         <p className="text-white font-semibold text-sm">Search for your start location above</p>
+                        {mode === 'import' && (
+                          <p className="text-zinc-400 text-xs mt-1">
+                            Skip this if your script already has coordinates
+                          </p>
+                        )}
                       </div>
                     </div>
                   )}
                 </div>
 
-                {/* End point row */}
-                <div className="flex items-center gap-3 mt-3">
+                {/* End point row — routing is a generate-mode concern. An
+                    import follows the order the script is written in. */}
+                <div className={`items-center gap-3 mt-3 ${mode === 'generate' ? 'flex' : 'hidden'}`}>
                   {endPin ? (
                     <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-indigo-500/50 bg-indigo-500/10 flex-1 min-w-0">
                       <CheckCircle2 size={14} className="text-indigo-400 shrink-0" />
@@ -479,18 +686,20 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
 
                 {startPin && (
                   <p className="text-[11px] text-zinc-600 mt-2">
-                    Zoom in and drag the pins to set exact spots.
-                    {!endPin && ' Adding an end point drops a pin at the center of the map view.'}
+                    {mode === 'import'
+                      ? 'Zones without coordinates are spaced out from here in script order. Drag them wherever you like afterwards.'
+                      : <>Zoom in and drag the pins to set exact spots.
+                         {!endPin && ' Adding an end point drops a pin at the center of the map view.'}</>}
                   </p>
                 )}
               </div>
 
-              <div className="px-5 pb-5 mt-5 flex flex-col gap-5">
+              <div className={`px-5 pb-5 mt-5 flex-col gap-5 ${mode === 'generate' ? 'flex' : 'hidden'}`}>
 
                 {/* Radius */}
                 <div>
                   <label className="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2">
-                    Search radius — <span className="text-zinc-300">{formatDistance(radiusMeters)}</span>
+                    Search radius: <span className="text-zinc-300">{formatDistance(radiusMeters)}</span>
                     <span className="text-zinc-600 font-normal normal-case ml-1">(shown as circle on map)</span>
                   </label>
                   <input
@@ -508,7 +717,7 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
                 <div>
                   <div className="flex items-baseline justify-between mb-2">
                     <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
-                      Brief <span className="text-zinc-600 font-normal normal-case">(optional — theme, characters, tone, story beats)</span>
+                      Brief <span className="text-zinc-600 font-normal normal-case">(optional: theme, characters, tone, story beats)</span>
                     </label>
                     <span className={`text-[10px] tabular-nums ml-2 shrink-0 ${brief.length > 2800 ? 'text-amber-400' : 'text-zinc-600'}`}>
                       {brief.length}/3000
@@ -526,7 +735,7 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
                 {/* PDF */}
                 <div>
                   <label className="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2">
-                    Reference document <span className="text-zinc-600 font-normal normal-case">(optional — script, research, character bible…)</span>
+                    Reference document <span className="text-zinc-600 font-normal normal-case">(optional: script, research, character bible…)</span>
                   </label>
                   <input
                     ref={pdfInputRef}
@@ -562,15 +771,18 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
             {/* Footer */}
             <div className="px-5 py-4 border-t border-zinc-800 shrink-0">
               <button
-                onClick={generate}
-                disabled={!startPin}
+                onClick={mode === 'import' ? runImport : generate}
+                disabled={mode === 'import' ? docText.trim().length < 40 : !startPin}
                 className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-bold text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg"
               >
-                <Sparkles size={16} />
-                Generate Experience
+                {mode === 'import' ? <FileText size={16} /> : <Sparkles size={16} />}
+                {mode === 'import' ? 'Build zones from my script' : 'Generate Experience'}
               </button>
-              {!startPin && (
+              {mode === 'generate' && !startPin && (
                 <p className="text-center text-xs text-zinc-600 mt-2">Set a start location to continue</p>
+              )}
+              {mode === 'import' && docText.trim().length < 40 && (
+                <p className="text-center text-xs text-zinc-600 mt-2">Paste your script to continue</p>
               )}
             </div>
           </>
@@ -589,9 +801,11 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
               </div>
             </div>
             <div className="text-center">
-              <p className="text-white font-semibold text-base mb-1">{STEPS[genStep]}</p>
+              <p className="text-white font-semibold text-base mb-1">
+                {(mode === 'import' ? IMPORT_STEPS : STEPS)[genStep]}
+              </p>
               <div className="flex items-center justify-center gap-1.5 mt-3">
-                {STEPS.map((_, i) => (
+                {(mode === 'import' ? IMPORT_STEPS : STEPS).map((_, i) => (
                   <div
                     key={i}
                     className={`h-1 rounded-full transition-all duration-500 ${
@@ -602,7 +816,9 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
               </div>
             </div>
             <p className="text-zinc-600 text-xs text-center max-w-xs">
-              Researching real local history and crafting your narrative. This usually takes 20–40 seconds.
+              {mode === 'import'
+                ? 'Reading the whole script before cutting anything, so the sectioning matches what you meant. Usually 20 to 40 seconds.'
+                : 'Researching real local history and crafting your narrative. This usually takes 20–40 seconds.'}
             </p>
           </div>
         )}
@@ -614,11 +830,106 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
           <>
             <div className="flex-1 overflow-y-auto">
 
+              {/* ── How the script was read ──
+                  Shown before the zones on purpose. If the reading is wrong,
+                  correcting the reading is one decision; correcting twenty
+                  zones one at a time is an afternoon. */}
+              {isImport && draft.reading && (
+                <div className="px-5 pt-5">
+                  <div className="bg-indigo-500/5 border border-indigo-500/30 rounded-2xl p-4">
+                    <p className="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-2">How I read it</p>
+                    {draft.reading.convention && (
+                      <p className="text-xs text-zinc-400 mb-2">
+                        <span className="text-zinc-500">Sectioning: </span>{draft.reading.convention}
+                      </p>
+                    )}
+                    <p className="text-sm text-zinc-300 leading-relaxed">{draft.reading.interpretation}</p>
+
+                    {draft.reading.mechanics.length > 0 && (
+                      <ul className="mt-3 space-y-1">
+                        {draft.reading.mechanics.map((m, i) => (
+                          <li key={i} className="text-xs text-zinc-400 flex gap-2">
+                            <span className="text-indigo-400 shrink-0">·</span>{m}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+
+                    {draft.reading.speakers.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-indigo-500/20">
+                        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Speakers</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {draft.reading.speakers.map((s, i) => (
+                            <span
+                              key={i}
+                              title={s.description}
+                              className="text-[11px] px-2 py-1 rounded-lg bg-zinc-800 text-zinc-300 border border-zinc-700"
+                            >
+                              {s.name}
+                              {s.zones > 1 && <span className="text-zinc-500"> ×{s.zones}</span>}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Things worth a second look before building. */}
+              {isImport && !!draft.flags?.length && (
+                <div className="px-5 pt-3">
+                  <div className="bg-amber-500/5 border border-amber-500/30 rounded-2xl p-4">
+                    <p className="text-xs font-bold text-amber-400 uppercase tracking-wider mb-2">Worth checking</p>
+                    <ul className="space-y-1.5">
+                      {draft.flags.map((f, i) => (
+                        <li key={i} className="text-xs text-amber-200/80 leading-relaxed flex gap-2">
+                          <span className="text-amber-500 shrink-0">·</span>{f}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
+
+              {/* Blocks that were deliberately NOT made into zones. Listed so
+                  nothing the creator wrote can disappear without them seeing. */}
+              {isImport && !!draft.set_aside?.length && (
+                <div className="px-5 pt-3">
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+                    <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-1">
+                      Set aside, not turned into zones
+                    </p>
+                    <p className="text-[11px] text-zinc-600 mb-3">
+                      Kept out of the walk on purpose. Copy anything you still need.
+                    </p>
+                    <div className="space-y-2">
+                      {draft.set_aside.map((b, i) => (
+                        <details key={i} className="group">
+                          <summary className="cursor-pointer text-xs text-zinc-300 flex items-center gap-2 list-none">
+                            <ChevronDown size={12} className="text-zinc-600 group-open:rotate-180 transition-transform shrink-0" />
+                            <span className="font-medium">{b.label}</span>
+                            <span className="text-[10px] text-zinc-600">
+                              {b.kind.replace(/_/g, ' ')} · lines {b.lines[0]} to {b.lines[1]}
+                            </span>
+                          </summary>
+                          <pre className="mt-2 ml-5 text-[11px] text-zinc-400 bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 overflow-x-auto whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
+                            {b.text}
+                          </pre>
+                        </details>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Summary */}
               <div className="px-5 pt-5 pb-3">
                 <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
-                  <p className="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-1">AI Summary</p>
-                  <p className="text-sm text-zinc-300 leading-relaxed">{draft.summary}</p>
+                  <p className="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-1">
+                    {isImport ? 'Experience' : 'AI Summary'}
+                  </p>
+                  {!isImport && <p className="text-sm text-zinc-300 leading-relaxed">{draft.summary}</p>}
                   {draft.subtitle && (
                     <p className="text-xs text-zinc-500 mt-2 italic">"{draft.subtitle}"</p>
                   )}
@@ -667,10 +978,30 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
                               <ZoneTypeIcon type={zone.type} locked={zone.locked} size={9} />
                               {zone.locked ? 'Locked' : zone.type}
                             </span>
+                            {/* Imports always land on audio: a first-person
+                                monologue reads the same whether it is a
+                                recording or someone to talk to, so guessing
+                                wrong would mean undoing work. The suggestion
+                                shows here and the character fields are already
+                                filled, so switching is one tap in the editor. */}
+                            {zone.suggested_type === 'character' && (
+                              <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border text-indigo-400 bg-indigo-400/10 border-indigo-400/30">
+                                reads as character
+                              </span>
+                            )}
+                            {zone.placement === 'from_document' && (
+                              <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border text-emerald-400 bg-emerald-400/10 border-emerald-400/30">
+                                <MapPin size={8} /> your coordinates
+                              </span>
+                            )}
                           </div>
-                          <p className="text-xs text-zinc-500 mt-0.5 truncate">{zone.location_name}</p>
+                          <p className="text-xs text-zinc-500 mt-0.5 truncate">
+                            {zone.speaker_name ? `${zone.speaker_name} · ` : ''}{zone.location_name}
+                          </p>
                           {!isOpen && (
-                            <p className="text-xs text-zinc-400 mt-1 line-clamp-2 leading-relaxed">{zone.description}</p>
+                            <p className="text-xs text-zinc-400 mt-1 line-clamp-2 leading-relaxed">
+                              {zone.script || zone.description}
+                            </p>
                           )}
                         </div>
                         {isOpen
@@ -680,8 +1011,39 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
 
                       {isOpen && (
                         <div className="px-4 pb-4 pt-1 border-t border-zinc-800 space-y-3">
+                          {/* The creator's own words, first and unstyled —
+                              sliced from their document by line number and
+                              never passed through the model. */}
+                          {zone.script && (
+                            <div>
+                              <div className="flex items-baseline justify-between mb-1">
+                                <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
+                                  Your script, kept exactly
+                                </p>
+                                {zone.source_lines && (
+                                  <span className="text-[10px] text-zinc-600 tabular-nums">
+                                    lines {zone.source_lines[0]} to {zone.source_lines[1]}
+                                  </span>
+                                )}
+                              </div>
+                              <pre className="text-xs text-zinc-200 bg-zinc-950 border border-emerald-500/20 rounded-lg p-3 whitespace-pre-wrap break-words leading-relaxed max-h-56 overflow-y-auto">
+                                {zone.script}
+                              </pre>
+                              <p className="text-[10px] text-zinc-600 mt-1">
+                                Goes into the zone's voiceover script, ready to generate audio from.
+                              </p>
+                            </div>
+                          )}
+
                           <div>
-                            <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Description</p>
+                            <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1">
+                              Description
+                              {zone.generated_fields?.includes('description') && (
+                                <span className="ml-1.5 text-indigo-400/70 font-normal normal-case tracking-normal">
+                                  written for you
+                                </span>
+                              )}
+                            </p>
                             <p className="text-xs text-zinc-300 leading-relaxed">{zone.description}</p>
                           </div>
                           {zone.entry_message && (
@@ -747,7 +1109,25 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
                 })}
               </div>
 
-              {/* Feedback */}
+              {/* Refine is GENERATE-ONLY, and deliberately so.
+                  Refining sends the whole draft to the model and asks for the
+                  whole draft back. On an import that would push the creator's
+                  script through the model — the one thing this pipeline exists
+                  to prevent — and a paraphrased cipher or transposed glyph
+                  would be invisible until a player was stuck in a park. Fixes
+                  to an import belong in the zone editor, where the text is
+                  only ever edited by hand. */}
+              {isImport ? (
+                <div className="px-5 pb-6">
+                  <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl px-4 py-3">
+                    <p className="text-xs text-zinc-400 leading-relaxed">
+                      Imports aren't refined by the AI, because that would mean sending your script
+                      back through it. Build now and edit anything you want in the zone editor,
+                      or go back and adjust the script itself.
+                    </p>
+                  </div>
+                </div>
+              ) : (
               <div className="px-5 pb-6">
                 <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">Request changes</p>
                 <div className="flex gap-2">
@@ -769,12 +1149,13 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
                   </button>
                 </div>
               </div>
+              )}
             </div>
 
             {/* Footer */}
             <div className="px-5 py-4 border-t border-zinc-800 shrink-0 flex gap-3">
               <button
-                onClick={() => { setPhase('input'); setDraft(null); setError(null); }}
+                onClick={() => { setPhase('input'); setDraft(null); setIsImport(false); setError(null); }}
                 className="px-4 py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-semibold transition-colors"
               >
                 Start over

@@ -21,6 +21,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { corsFor } from '../_shared/cors.ts';
 import { checkAndRecordUsage, rateLimited } from '../_shared/usage.ts';
+import { importDocument } from './import.ts';
 
 const GEMINI_API_KEY   = Deno.env.get('GEMINI_API_KEY') ?? '';
 const SUPABASE_URL     = Deno.env.get('SUPABASE_URL') ?? '';
@@ -322,7 +323,7 @@ Deno.serve(async (req) => {
 
     // Generation is the most expensive path in the product (Overpass lookup
     // plus multiple Gemini calls), so it gets the tightest ceiling.
-    if (type === 'generate' || type === 'refine') {
+    if (type === 'generate' || type === 'refine' || type === 'import') {
       const uid = await callerId(req);
       if (!uid) {
         return new Response(JSON.stringify({ error: 'Not signed in.' }), {
@@ -330,13 +331,47 @@ Deno.serve(async (req) => {
         });
       }
       const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
-      const usage = await checkAndRecordUsage(
-        admin,
-        `generate-experience:${type}`,
-        uid,
-        type === 'generate' ? { perHour: 5, perDay: 20 } : { perHour: 15 },
-      );
+      const limits = type === 'refine' ? { perHour: 15 } : { perHour: 5, perDay: 20 };
+      const usage = await checkAndRecordUsage(admin, `generate-experience:${type}`, uid, limits);
       if (!usage.allowed) return rateLimited(usage, cors);
+    }
+
+    // ── IMPORT ──────────────────────────────────────────────────────────────
+    // A finished script becomes zones. The creator's words are sliced by line
+    // on the server and never pass through the model — see import.ts.
+    if (type === 'import') {
+      const { document, startLat, startLng } = body as {
+        document?: string; startLat?: number; startLng?: number;
+      };
+
+      if (typeof document !== 'string' || document.trim().length < 40) {
+        return new Response(JSON.stringify({ error: 'Paste your script to import it.' }), {
+          status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
+        });
+      }
+
+      try {
+        const result = await importDocument(apiKey, document, startLat, startLng);
+        return new Response(JSON.stringify({ draft: result }), {
+          headers: { ...cors, 'Content-Type': 'application/json' },
+        });
+      } catch (e) {
+        const code = e instanceof Error ? e.message : 'import_failed';
+        const message =
+          code === 'import_needs_start_point'
+            ? 'Your script has no coordinates in it, so pick a starting point on the map and the zones will be laid out from there.'
+          : code === 'import_no_zones_found'
+            ? 'Nothing in this document reads as zone content. Check that you pasted the script itself.'
+          : code === 'import_document_too_short'
+            ? 'That looks too short to split into zones.'
+          : code.endsWith('_truncated')
+            ? 'The script was too long to process in one pass. Try importing it in two halves.'
+            : 'Import failed.';
+        console.error('Import error:', code);
+        return new Response(JSON.stringify({ error: message, code }), {
+          status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
+        });
+      }
     }
 
     // ── GENERATE ────────────────────────────────────────────────────────────
