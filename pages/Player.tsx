@@ -3042,7 +3042,7 @@ export const Player: React.FC = () => {
               pointer-events-none so an absolute overlay can never swallow a tap
               meant for the buttons underneath it. */}
           <div className="absolute inset-x-0 flex items-center justify-center gap-2 pointer-events-none">
-            <BrandMark size={18} className="shrink-0" />
+            <BrandMark size={18} color={accent} className="shrink-0" />
             <span className="font-bold tracking-tight" style={{ color: th.barText }}>Obelisk</span>
           </div>
 

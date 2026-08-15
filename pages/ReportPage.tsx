@@ -123,7 +123,7 @@ export const ReportPage: React.FC = () => {
         </button>
 
         <div className="flex items-center gap-2 mb-2">
-          <BrandMark size={20} />
+          <BrandMark size={20} color="#10b981" />
           <span className="font-bold text-white">Obelisk</span>
         </div>
 

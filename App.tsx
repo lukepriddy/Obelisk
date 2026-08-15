@@ -36,7 +36,7 @@ const AppShell: React.FC<{ user: User | null; onLogout: () => void }> = ({ user,
             : 'bg-zinc-950 text-white border-b border-zinc-800'
         }`}>
           <div className="flex items-center gap-2 font-bold text-lg tracking-tight">
-            <BrandMark size={20} />
+            <BrandMark size={20} color="#10b981" />
             <span className="text-white hidden sm:inline">Obelisk</span>
           </div>
           <div className="flex items-center gap-3">

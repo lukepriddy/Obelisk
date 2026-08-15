@@ -77,42 +77,96 @@ def read_png_rgba(path):
     return width, height, rows
 
 
-def resize_onto_background(width, height, rows, size):
-    """Box-filter down to size x size, flattened onto BG. Returns RGBA bytes."""
+def mark_bounds(width, height, rows):
+    """Bounding box of the visible mark, ignoring transparent margin.
+
+    The supplied file is not centred: the pin sits 104px from each side but 22px
+    from the top and 15px from the bottom, so scaling the whole square makes the
+    mark touch top and bottom while floating in horizontal margin. That reads as
+    squeezed. Measuring the mark and recomposing it fixes the framing without
+    touching the artwork.
+    """
+    minx, miny, maxx, maxy = width, height, -1, -1
+    for y in range(height):
+        row = rows[y]
+        for x in range(width):
+            if row[x * 4 + 3] > 8:
+                if x < minx: minx = x
+                if x > maxx: maxx = x
+                if y < miny: miny = y
+                if y > maxy: maxy = y
+    if maxx < 0:
+        return 0, 0, width - 1, height - 1
+    return minx, miny, maxx, maxy
+
+
+def render_icon(width, height, rows, size, background, fill=0.72):
+    """Recompose the mark, centred, at `fill` of the tile.
+
+    0.72 is chosen, not arbitrary. The mark is measured and scaled by its LONGER
+    edge, and this pin is taller than it is wide (0.79:1), so a 0.72 fill puts
+    72% of the tile's height and only 57% of its width to use. Filling more made
+    the icon read as crowded: the supplied pin is proportionally fatter than the
+    one it replaced (0.79 against 0.68), and at 0.78 the extra width had nowhere
+    to go. Scaling is uniform in both axes at every fill value — the mark is
+    never distorted, only framed.
+
+    background=None leaves the tile transparent, which is what a browser tab
+    wants: the icon then sits correctly on a light or a dark toolbar. App icons
+    pass a colour instead, because iOS composites transparency onto white.
+    """
+    minx, miny, maxx, maxy = mark_bounds(width, height, rows)
+    mw, mh = maxx - minx + 1, maxy - miny + 1
+    target = size * fill
+    scale = min(target / mw, target / mh)
+    dw, dh = max(1, round(mw * scale)), max(1, round(mh * scale))
+    ox0, oy0 = (size - dw) // 2, (size - dh) // 2
+
     out = bytearray()
     for oy in range(size):
         out.append(0)  # PNG filter type 0
-        y0, y1 = oy * height // size, max(oy * height // size + 1, (oy + 1) * height // size)
         for ox in range(size):
-            x0, x1 = ox * width // size, max(ox * width // size + 1, (ox + 1) * width // size)
-            # Premultiplied accumulation: colour is only meaningful where alpha
-            # is, so weight each sample by its own alpha before averaging.
-            r = g = b = a = n = 0
-            for y in range(y0, y1):
-                row = rows[y]
-                for x in range(x0, x1):
-                    p = x * 4
-                    pa = row[p + 3]
-                    r += row[p] * pa
-                    g += row[p + 1] * pa
-                    b += row[p + 2] * pa
-                    a += pa
-                    n += 1
-            if n == 0:
-                out += bytes((BG[0], BG[1], BG[2], 255))
+            if not (ox0 <= ox < ox0 + dw and oy0 <= oy < oy0 + dh):
+                out += (bytes((background[0], background[1], background[2], 255))
+                        if background else bytes((0, 0, 0, 0)))
                 continue
-            mean_a = a / (n * 255)
-            if a == 0:
-                out += bytes((BG[0], BG[1], BG[2], 255))
-                continue
-            sr, sg, sb = r / a, g / a, b / a
-            out += bytes((
-                round(BG[0] * (1 - mean_a) + sr * mean_a),
-                round(BG[1] * (1 - mean_a) + sg * mean_a),
-                round(BG[2] * (1 - mean_a) + sb * mean_a),
-                255,
-            ))
+            # Source window for this destination pixel, inside the mark's box.
+            sx0 = minx + (ox - ox0) * mw // dw
+            sx1 = max(sx0 + 1, minx + (ox - ox0 + 1) * mw // dw)
+            sy0 = miny + (oy - oy0) * mh // dh
+            sy1 = max(sy0 + 1, miny + (oy - oy0 + 1) * mh // dh)
+            out += sample(rows, sx0, sx1, sy0, sy1, background)
     return bytes(out)
+
+
+def sample(rows, x0, x1, y0, y1, background):
+    """Average a source rectangle in premultiplied alpha."""
+    r = g = b = a = n = 0
+    for y in range(y0, y1):
+        row = rows[y]
+        for x in range(x0, x1):
+            p = x * 4
+            pa = row[p + 3]
+            r += row[p] * pa
+            g += row[p + 1] * pa
+            b += row[p + 2] * pa
+            a += pa
+            n += 1
+    if n == 0 or a == 0:
+        return (bytes((background[0], background[1], background[2], 255))
+                if background else bytes((0, 0, 0, 0)))
+    mean_a = a / (n * 255)
+    sr, sg, sb = r / a, g / a, b / a
+    if background is None:
+        # Straight alpha, colour held constant so the antialiased rim cannot
+        # pick up a halo of whatever sits behind the icon.
+        return bytes((round(sr), round(sg), round(sb), round(255 * mean_a)))
+    return bytes((
+        round(background[0] * (1 - mean_a) + sr * mean_a),
+        round(background[1] * (1 - mean_a) + sg * mean_a),
+        round(background[2] * (1 - mean_a) + sb * mean_a),
+        255,
+    ))
 
 
 def write_png(path, size, raw):
@@ -134,10 +188,23 @@ if __name__ == '__main__':
     print(f'source {os.path.relpath(SOURCE, ROOT)}  {w}x{h}')
 
     outputs = {}
-    for name, size in (('favicon-32.png', 32), ('apple-touch-icon.png', 180),
-                       ('icon-192.png', 192), ('icon-512.png', 512)):
+
+    # Tab icon: TRANSPARENT. A favicon sits on whatever the browser paints —
+    # dark toolbars, light toolbars, bookmark bars — so baking a background in
+    # means it looks wrong on half of them. The earlier white-border problem
+    # came from a rounded tile with transparent corners, which is a different
+    # thing: this has no tile at all.
+    outputs['favicon-32.png'] = write_png(
+        os.path.join(ICONS, 'favicon-32.png'), 32,
+        render_icon(w, h, rows, 32, background=None))
+
+    # Home-screen and store icons: OPAQUE. iOS does not honour transparency in
+    # app artwork; it composites onto white, so a transparent icon returns with
+    # white corners. Square and full bleed, because the OS applies its own mask.
+    for name, size in (('apple-touch-icon.png', 180), ('icon-192.png', 192),
+                       ('icon-512.png', 512)):
         outputs[name] = write_png(os.path.join(ICONS, name), size,
-                                  resize_onto_background(w, h, rows, size))
+                                  render_icon(w, h, rows, size, background=BG))
 
     # /favicon.ico at the site root. Browsers request it by convention whatever
     # the <link> tags say, and vercel.json rewrites unmatched paths to

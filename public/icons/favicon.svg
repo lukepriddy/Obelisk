@@ -1,23 +1,21 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="32" height="32">
   <!--
-    Tab icon: the Obelisk pin on the app's near-black.
+    Tab icon: the mark on transparency, no tile.
 
-    Matches components/BrandMark.tsx exactly — same lucide MapPin geometry, same
-    stroke weight, same #07b981 sampled from the supplied logo file. One shape,
-    one colour, everywhere the mark appears.
+    Transparent on purpose. A favicon is drawn on whatever the browser paints
+    behind it — a dark toolbar, a light one, a bookmark bar, a light-mode tab —
+    so baking in a background makes it wrong on half of them. A black square
+    behind a green pin looks deliberate on a dark tab and like a sticker on a
+    white one.
 
-    Full bleed and square, with no transparent pixel. Browsers put a light chip
-    behind an icon that has transparent corners so it stays visible on a dark
-    toolbar, and that chip showing around a rounded tile is indistinguishable
-    from a white border drawn around the logo.
+    The white-border problem from an earlier attempt was a different thing: a
+    ROUNDED tile whose transparent corners let the browser's contrast chip show
+    through. There is no tile here, so there is nothing to show around.
 
-    Outline rather than a filled silhouette, which is the riskier choice at
-    16px: a stroke can collapse and the hole stop resolving. Kept because the
-    logo is an outline and uniformity was the point. scripts/make-icons.py
-    renders the PNG fallbacks from the real logo file, so if this ever does turn
-    to mush at tab size, only this file and that script need to change.
+    Geometry is lucide's MapPin, matching components/BrandMark.tsx and the
+    supplied logo. #07b981 is sampled from that file.
+    scripts/make-icons.py renders the PNG fallbacks from the same source.
   -->
-  <rect width="24" height="24" fill="#09090b"/>
   <g fill="none" stroke="#07b981" stroke-width="2"
      stroke-linecap="round" stroke-linejoin="round">
     <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>

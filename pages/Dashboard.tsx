@@ -386,7 +386,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
         {/* Brand */}
         <div className="flex items-center gap-2.5 px-4 pt-5 pb-6">
           <div className="w-8 h-8 flex items-center justify-center shrink-0">
-            <BrandMark size={26} />
+            <BrandMark size={24} />
           </div>
           <span className="font-bold text-white tracking-tight text-base">Obelisk</span>
         </div>

@@ -12,16 +12,26 @@
  * for a mark that appears at 16-24px in a header. The PNG is still the source
  * of truth for the favicon and home-screen icons, where a real image is needed.
  *
- * BRAND_GREEN is sampled from the logo file itself, not guessed: #07b981 is the
- * dominant colour across its 183,497 opaque pixels. It is deliberately distinct
- * from the platform accent (#10b981, Tailwind emerald-500), which remains the
- * default a creator's experience inherits.
+ * BRAND_GREEN (#07b981) is sampled from the logo file itself — the dominant
+ * colour across its 183,497 opaque pixels — and is what the favicon and the
+ * home-screen icons use.
+ *
+ * On screen, inside the app, the mark is drawn in a LIGHTER green. That is not
+ * an inconsistency, it is the same adjustment a print mark gets for screen:
+ * against the app's near-black, #07b981 measures 7.8:1 contrast where
+ * emerald-400 measures 10.3:1, and the logo colour visibly dims at 18-24px.
+ * Each call site passes the colour it has always used, so this change unified
+ * the SHAPE without dimming anything.
  */
 
 import React from 'react';
 
-/** Sampled from public/icons/Obelisk Logo.png. */
+/** Sampled from brand/obelisk-logo.png. Used by the favicon and app icons. */
 export const BRAND_GREEN = '#07b981';
+
+/** What the mark is drawn in on screen. Brighter than the logo file, because
+ *  the logo colour goes muddy against near-black at small sizes. */
+export const BRAND_GREEN_ON_DARK = '#34d399';
 
 interface BrandMarkProps {
   /** Rendered box in px. Matches the size each call site already used. */
@@ -33,7 +43,7 @@ interface BrandMarkProps {
 
 export const BrandMark: React.FC<BrandMarkProps> = ({
   size = 24,
-  color = BRAND_GREEN,
+  color = BRAND_GREEN_ON_DARK,
   className,
 }) => (
   <svg
