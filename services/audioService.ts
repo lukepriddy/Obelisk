@@ -783,8 +783,19 @@ export class AudioService {
       // branch, so this only has to catch the frozen-clock case.
       if (nodeData.hasStarted && !nodeData.played && !nodeData.destroyed && !audioEl.paused) {
         const now = performance.now();
-        if (audioEl.currentTime > nodeData.lastPos + 0.05) {
-          nodeData.lastPos = audioEl.currentTime;
+        const pos = audioEl.currentTime;
+        // A loop wrapping back to the start looks identical to a frozen clock
+        // if you only ever check for FORWARD movement: currentTime returns to
+        // ~0 and can never again exceed the position it reached at the end of
+        // the previous pass, so lastPos sticks at the clip's duration and the
+        // 3s stall timer fires on a track that is playing perfectly. The audible
+        // result was a dip on the 2nd, 3rd and 4th passes and then silence from
+        // the watchdog, because healthRecoveries had hit its cap of 3 — the
+        // audio never recovered, the watchdog just gave up. Treat a backwards
+        // jump on a looping track as what it is: progress.
+        const wrapped = nodeData.loop && pos + 0.05 < nodeData.lastPos;
+        if (pos > nodeData.lastPos + 0.05 || wrapped) {
+          nodeData.lastPos = pos;
           nodeData.lastPosAt = now;
         } else if (nodeData.lastPosAt && now - nodeData.lastPosAt > 3000 && nodeData.healthRecoveries < 3) {
           nodeData.healthRecoveries += 1;
@@ -867,9 +878,22 @@ export class AudioService {
         nodeData.healthRecoveries >= 3
       ) return;
 
-      const currentPosition = nodeData.audioEl.currentTime || 0;
-      const playbackAdvanced = !nodeData.audioEl.paused && currentPosition > startPosition + 0.08;
-      if (playbackAdvanced) return;
+      const el = nodeData.audioEl;
+      const duration = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : 0;
+      const currentPosition = el.currentTime || 0;
+
+      // A looping clip that wrapped inside this window reads as having gone
+      // BACKWARDS. That is progress, not a freeze. See advancedWhileLooping.
+      let moved = currentPosition - startPosition;
+      if (nodeData.loop && duration > 0 && moved < 0) moved += duration;
+
+      // A loop shorter than the check window can land back on the position it
+      // started from, and one sample cannot tell that apart from a stall. A
+      // false restart is audible and a missed one is caught by the ongoing
+      // watchdog a moment later, so when the measurement is meaningless, trust
+      // the audio.
+      const measurable = !nodeData.loop || duration === 0 || duration > 1.4;
+      if (!measurable || (!el.paused && moved > 0.08)) return;
 
       nodeData.healthRecoveries += 1;
       console.warn(`Zone audio did not advance after start; retrying (${zoneId})`);
