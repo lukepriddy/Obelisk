@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
+import { BrandMark } from '../components/BrandMark';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { PlayerMap } from '../components/PlayerMap';
 import { WelcomePreviewMap, WelcomePreviewHandle } from '../components/WelcomePreviewMap';
@@ -3041,7 +3042,7 @@ export const Player: React.FC = () => {
               pointer-events-none so an absolute overlay can never swallow a tap
               meant for the buttons underneath it. */}
           <div className="absolute inset-x-0 flex items-center justify-center gap-2 pointer-events-none">
-            <MapPin size={18} style={{ color: accent }} className="shrink-0" />
+            <BrandMark size={18} className="shrink-0" />
             <span className="font-bold tracking-tight" style={{ color: th.barText }}>Obelisk</span>
           </div>
 

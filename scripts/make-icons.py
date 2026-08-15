@@ -1,158 +1,155 @@
 """
-Render the Obelisk pin to PNG without an image library.
+Build every app icon from the supplied logo.
 
-No rasteriser is installed on this machine (no ImageMagick, rsvg, cairo or
-Pillow), so this draws the mark with plain maths and writes the PNG bytes by
-hand: zlib-compressed RGBA scanlines wrapped in IHDR/IDAT/IEND.
+Source: brand/obelisk-logo.png — 859x859 RGBA, 75% transparent, mark
+colour #07b981. The accompanying .svg is not vector; it is a 431KB wrapper
+around this same raster, so there is nothing to gain by preferring it.
 
-The shape is a filled version of lucide's MapPin rather than its outline.
-Outlines lose their stroke at 16px and turn into mush; a solid silhouette with
-a punched-out hole stays legible at tab size, which is the whole point.
+No image library is installed on this machine (no ImageMagick, rsvg, cairo or
+Pillow), so this decodes, resamples and re-encodes PNG by hand. Box-filter
+downscale in premultiplied alpha — compositing after averaging would draw a
+dark halo around the mark, because a transparent pixel still carries a colour.
 
-4x supersampling for the edges.
+Every output is flattened onto the app's near-black. iOS does not honour
+transparency in app artwork: it composites onto white, so a transparent icon
+comes back with white corners. Full bleed and square for the same reason — the
+OS applies its own rounding, and a rounded tile with transparent corners shows
+those corners as white triangles.
 """
 
-import math, struct, zlib
+import os, struct, zlib
 
-BG = (0x09, 0x09, 0x0b)      # zinc-950, matches theme_color
-FG = (0x34, 0xd3, 0x99)      # emerald-400, matches the app's mark
-SS = 4                        # supersample factor
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(HERE)
+ICONS = os.path.join(ROOT, 'public', 'icons')
+# Kept out of public/ deliberately: it is a build input, and anything under
+# public/ is copied into dist and shipped to every visitor. The logo png and its
+# svg wrapper are 717KB together, for files no browser ever needs.
+SOURCE = os.path.join(ROOT, 'brand', 'obelisk-logo.png')
 
-
-def rounded_rect(x, y, w, h, r):
-    """Signed coverage test for a rounded rectangle."""
-    def inside(px, py):
-        cx = min(max(px, x + r), x + w - r)
-        cy = min(max(py, y + r), y + h - r)
-        if x + r <= px <= x + w - r or y + r <= py <= y + h - r:
-            return x <= px <= x + w and y <= py <= y + h
-        return (px - cx) ** 2 + (py - cy) ** 2 <= r * r
-    return inside
+BG = (0x09, 0x09, 0x0b)  # zinc-950, matches theme_color and the app shell
 
 
-def pin(cx, cy, head_r, tip_y, hole_r):
-    """MapPin silhouette: head circle, tapering tail to a point, hole punched."""
-    def inside(px, py):
-        # Head
-        in_head = (px - cx) ** 2 + (py - cy) ** 2 <= head_r * head_r
-        # Tail: a triangle from the circle's widest useful span down to the tip.
-        # Half-width shrinks linearly from the head to the point.
-        in_tail = False
-        if cy <= py <= tip_y:
-            t = (py - cy) / (tip_y - cy)
-            half = head_r * (1.0 - t) ** 0.85
-            in_tail = abs(px - cx) <= half
-        if not (in_head or in_tail):
-            return False
-        # Hole
-        if (px - cx) ** 2 + (py - cy) ** 2 <= hole_r * hole_r:
-            return False
-        return True
-    return inside
+def read_png_rgba(path):
+    """Decode an 8-bit RGBA PNG to (width, height, list-of-rows)."""
+    data = open(path, 'rb').read()
+    pos, idat = 8, bytearray()
+    width = height = 0
+    while pos < len(data):
+        length = struct.unpack('>I', data[pos:pos + 4])[0]
+        tag = data[pos + 4:pos + 8]
+        if tag == b'IHDR':
+            width, height, depth, colour = (*struct.unpack('>II', data[pos + 8:pos + 16]),
+                                            data[pos + 16], data[pos + 17])
+            if depth != 8 or colour != 6:
+                raise SystemExit(f'expected 8-bit RGBA, got depth {depth} colour type {colour}')
+        elif tag == b'IDAT':
+            idat += data[pos + 8:pos + 8 + length]
+        pos += 12 + length
+
+    raw = zlib.decompress(bytes(idat))
+    stride = width * 4
+    rows, prev, i = [], bytearray(stride), 0
+    for _ in range(height):
+        f = raw[i]; i += 1
+        line = bytearray(raw[i:i + stride]); i += stride
+        if f == 1:
+            for x in range(4, stride):
+                line[x] = (line[x] + line[x - 4]) & 255
+        elif f == 2:
+            for x in range(stride):
+                line[x] = (line[x] + prev[x]) & 255
+        elif f == 3:
+            for x in range(stride):
+                a = line[x - 4] if x >= 4 else 0
+                line[x] = (line[x] + ((a + prev[x]) >> 1)) & 255
+        elif f == 4:
+            for x in range(stride):
+                a = line[x - 4] if x >= 4 else 0
+                b = prev[x]
+                c = prev[x - 4] if x >= 4 else 0
+                p = a + b - c
+                pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                pr = a if (pa <= pb and pa <= pc) else (b if pb <= pc else c)
+                line[x] = (line[x] + pr) & 255
+        rows.append(bytes(line))
+        prev = line
+    return width, height, rows
 
 
-def render(size, tile=True, radius=7):
-    """Return RGBA bytes for one square icon.
-
-    `radius` is in 32x32 units. Zero means a full-bleed square, which is what
-    the tab icon wants: browsers draw a light chip behind an icon that has
-    transparent corners, and that chip peeking out around a rounded tile is
-    indistinguishable from a white border drawn around the icon itself. Leaving
-    no transparent pixel leaves the chip nothing to show through.
-    """
-    s = size
-    # Geometry in 32x32 space, scaled up. Matches favicon.svg's proportions.
-    k = s / 32.0
-    bgtest = rounded_rect(0, 0, s, s, radius * k)
-    pintest = pin(cx=16 * k, cy=13 * k, head_r=7.2 * k, tip_y=27 * k, hole_r=2.8 * k)
-
-    rows = []
-    for py in range(s):
-        row = bytearray()
-        row.append(0)  # PNG filter type 0 for this scanline
-        for px in range(s):
-            bg_hits = fg_hits = 0
-            for sy in range(SS):
-                for sx in range(SS):
-                    fx = px + (sx + 0.5) / SS
-                    fy = py + (sy + 0.5) / SS
-                    if pintest(fx, fy):
-                        fg_hits += 1
-                    if bgtest(fx, fy):
-                        bg_hits += 1
-            total = SS * SS
-
-            if not tile:
-                # Bare mark on transparency: no tile means no tile edge, which
-                # is what a browser tab wants. Colour stays constant and only
-                # alpha varies, so the antialiased rim never picks up a halo of
-                # whatever is behind it.
-                row += bytes((FG[0], FG[1], FG[2], round(255 * fg_hits / total)))
+def resize_onto_background(width, height, rows, size):
+    """Box-filter down to size x size, flattened onto BG. Returns RGBA bytes."""
+    out = bytearray()
+    for oy in range(size):
+        out.append(0)  # PNG filter type 0
+        y0, y1 = oy * height // size, max(oy * height // size + 1, (oy + 1) * height // size)
+        for ox in range(size):
+            x0, x1 = ox * width // size, max(ox * width // size + 1, (ox + 1) * width // size)
+            # Premultiplied accumulation: colour is only meaningful where alpha
+            # is, so weight each sample by its own alpha before averaging.
+            r = g = b = a = n = 0
+            for y in range(y0, y1):
+                row = rows[y]
+                for x in range(x0, x1):
+                    p = x * 4
+                    pa = row[p + 3]
+                    r += row[p] * pa
+                    g += row[p + 1] * pa
+                    b += row[p + 2] * pa
+                    a += pa
+                    n += 1
+            if n == 0:
+                out += bytes((BG[0], BG[1], BG[2], 255))
                 continue
-
-            if bg_hits == 0:
-                row += bytes((0, 0, 0, 0))
+            mean_a = a / (n * 255)
+            if a == 0:
+                out += bytes((BG[0], BG[1], BG[2], 255))
                 continue
-            # Composite mark over tile, then apply tile coverage as alpha.
-            mark = fg_hits / bg_hits if bg_hits else 0
-            r = round(BG[0] * (1 - mark) + FG[0] * mark)
-            g = round(BG[1] * (1 - mark) + FG[1] * mark)
-            b = round(BG[2] * (1 - mark) + FG[2] * mark)
-            row += bytes((r, g, b, round(255 * bg_hits / total)))
-        rows.append(bytes(row))
-    return b''.join(rows)
+            sr, sg, sb = r / a, g / a, b / a
+            out += bytes((
+                round(BG[0] * (1 - mean_a) + sr * mean_a),
+                round(BG[1] * (1 - mean_a) + sg * mean_a),
+                round(BG[2] * (1 - mean_a) + sb * mean_a),
+                255,
+            ))
+    return bytes(out)
 
 
-def write_png(path, size, tile=True, radius=7):
-    raw = render(size, tile, radius)
+def write_png(path, size, raw):
+    def chunk(tag, payload):
+        head = struct.pack('>I', len(payload)) + tag + payload
+        return head + struct.pack('>I', zlib.crc32(tag + payload) & 0xffffffff)
 
-    def chunk(tag, data):
-        c = struct.pack('>I', len(data)) + tag + data
-        return c + struct.pack('>I', zlib.crc32(tag + data) & 0xffffffff)
-
-    ihdr = struct.pack('>IIBBBBB', size, size, 8, 6, 0, 0, 0)  # 8-bit RGBA
     png = (b'\x89PNG\r\n\x1a\n'
-           + chunk(b'IHDR', ihdr)
+           + chunk(b'IHDR', struct.pack('>IIBBBBB', size, size, 8, 6, 0, 0, 0))
            + chunk(b'IDAT', zlib.compress(raw, 9))
            + chunk(b'IEND', b''))
-    with open(path, 'wb') as f:
-        f.write(png)
-    print(f'{path}  {size}x{size}  {len(png)} bytes')
+    open(path, 'wb').write(png)
+    print(f'{os.path.relpath(path, ROOT)}  {size}x{size}  {len(png)} bytes')
+    return png
 
 
-import os
-BASE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'public', 'icons')
-os.makedirs(BASE, exist_ok=True)
-# Tab icon: opaque, full-bleed, square. No transparent corners for a browser
-# contrast chip to show through, which is what read as a white border.
-write_png(f'{BASE}/favicon-32.png', 32, radius=0)
-# Home-screen and lock-screen artwork: opaque, full bleed, square.
-#
-# radius=0 is the point. iOS does not honour transparency in app artwork — it
-# composites it onto white — so a rounded tile with transparent corners renders
-# as an icon with four white triangles cut into it. Leaving no transparent pixel
-# and letting the OS apply its own mask is the only way to get clean corners.
-write_png(f'{BASE}/apple-touch-icon.png', 180, radius=0)
-write_png(f'{BASE}/icon-192.png', 192, radius=0)
-write_png(f'{BASE}/icon-512.png', 512, radius=0)
+if __name__ == '__main__':
+    w, h, rows = read_png_rgba(SOURCE)
+    print(f'source {os.path.relpath(SOURCE, ROOT)}  {w}x{h}')
 
-# /favicon.ico at the site root.
-#
-# Not optional, and not redundant with the <link> tags. Browsers request
-# /favicon.ico by convention whatever the HTML says, and vercel.json rewrites
-# every unmatched path to index.html — so that request was answered with 17KB
-# of HTML, which browsers treat as a broken icon and then cache as a failure.
-# A real file here is served before the rewrite runs.
-#
-# ICO is a thin container: 6-byte header, one 16-byte directory entry, then the
-# image. Since Vista that image may be a PNG verbatim, so this reuses the 32px
-# tab icon byte for byte instead of re-rendering it as a bitmap.
-import struct
-png = open(f'{BASE}/favicon-32.png', 'rb').read()
-ico = (struct.pack('<HHH', 0, 1, 1)
-       + struct.pack('<BBBBHHII', 32, 32, 0, 0, 1, 32, len(png), 22)
-       + png)
-root_ico = os.path.join(os.path.dirname(BASE), 'favicon.ico')
-with open(root_ico, 'wb') as f:
-    f.write(ico)
-print(f'{root_ico}  32x32  {len(ico)} bytes')
+    outputs = {}
+    for name, size in (('favicon-32.png', 32), ('apple-touch-icon.png', 180),
+                       ('icon-192.png', 192), ('icon-512.png', 512)):
+        outputs[name] = write_png(os.path.join(ICONS, name), size,
+                                  resize_onto_background(w, h, rows, size))
+
+    # /favicon.ico at the site root. Browsers request it by convention whatever
+    # the <link> tags say, and vercel.json rewrites unmatched paths to
+    # index.html — so without a real file the request is answered with HTML,
+    # which browsers cache as a broken icon. Static files win over rewrites.
+    #
+    # ICO is a 6-byte header, one 16-byte directory entry, then the image, which
+    # since Vista may be a PNG verbatim. Reuses the 32px output byte for byte.
+    png32 = outputs['favicon-32.png']
+    ico = (struct.pack('<HHH', 0, 1, 1)
+           + struct.pack('<BBBBHHII', 32, 32, 0, 0, 1, 32, len(png32), 22)
+           + png32)
+    ico_path = os.path.join(ROOT, 'public', 'favicon.ico')
+    open(ico_path, 'wb').write(ico)
+    print(f'{os.path.relpath(ico_path, ROOT)}  32x32  {len(ico)} bytes')

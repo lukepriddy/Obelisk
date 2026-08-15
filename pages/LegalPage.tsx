@@ -1,4 +1,5 @@
 import React from 'react';
+import { BrandMark } from '../components/BrandMark';
 import { useNavigate } from 'react-router-dom';
 import { MapPin, ArrowLeft } from 'lucide-react';
 import type { TermsSection } from '../constants/terms';
@@ -30,7 +31,7 @@ export const LegalPage: React.FC<LegalPageProps> = ({ title, intro, sections, ve
       <div className="w-full max-w-2xl mx-auto">
 
         <div className="flex items-center justify-center gap-2 mb-8">
-          <MapPin className="text-emerald-400" size={24} />
+          <BrandMark size={24} />
           <span className="text-white font-bold text-2xl tracking-tight">Obelisk</span>
         </div>
 

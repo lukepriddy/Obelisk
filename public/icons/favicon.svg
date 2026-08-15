@@ -1,25 +1,26 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="32" height="32">
   <!--
-    Tab icon: emerald MapPin on the app's own dark square.
+    Tab icon: the Obelisk pin on the app's near-black.
 
-    Full bleed, no corner radius, no transparent pixel anywhere. That is
-    deliberate. Browsers put a light chip behind a favicon that has transparent
-    corners so it stays visible on a dark toolbar, and that chip showing around
-    a rounded tile is indistinguishable from a white border drawn around the
-    icon. Leaving nothing transparent leaves the chip nothing to show through;
-    browsers that round icons round this one themselves.
+    Matches components/BrandMark.tsx exactly — same lucide MapPin geometry, same
+    stroke weight, same #07b981 sampled from the supplied logo file. One shape,
+    one colour, everywhere the mark appears.
 
-    Geometry is lucide's MapPin verbatim, the same mark the dashboard header
-    and the sign-in screen render. Filled rather than stroked, because a stroke
-    disappears at 16px. The head is a second subpath so fill-rule="evenodd"
-    punches it out, letting the dark tile show through the hole rather than
-    painting a second colour there.
+    Full bleed and square, with no transparent pixel. Browsers put a light chip
+    behind an icon that has transparent corners so it stays visible on a dark
+    toolbar, and that chip showing around a rounded tile is indistinguishable
+    from a white border drawn around the logo.
 
-    scripts/make-icons.py draws the PNG and ICO from the same shape. Change
-    one, run the other.
+    Outline rather than a filled silhouette, which is the riskier choice at
+    16px: a stroke can collapse and the hole stop resolving. Kept because the
+    logo is an outline and uniformity was the point. scripts/make-icons.py
+    renders the PNG fallbacks from the real logo file, so if this ever does turn
+    to mush at tab size, only this file and that script need to change.
   -->
   <rect width="24" height="24" fill="#09090b"/>
-  <path fill="#34d399" fill-rule="evenodd"
-        d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z
-           M15 10a3 3 0 1 0-6 0 3 3 0 0 0 6 0Z"/>
+  <g fill="none" stroke="#07b981" stroke-width="2"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
+    <circle cx="12" cy="10" r="3"/>
+  </g>
 </svg>

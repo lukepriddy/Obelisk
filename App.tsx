@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { BrandMark } from './components/BrandMark';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Dashboard } from './pages/Dashboard';
 import { Editor } from './pages/Editor';
@@ -15,7 +16,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { supabase } from './services/db';
 import { auth } from './services/db';
 import { User } from './types';
-import { MapPin, LogOut } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 
 const AppShell: React.FC<{ user: User | null; onLogout: () => void }> = ({ user, onLogout }) => {
   const location = useLocation();
@@ -35,7 +36,7 @@ const AppShell: React.FC<{ user: User | null; onLogout: () => void }> = ({ user,
             : 'bg-zinc-950 text-white border-b border-zinc-800'
         }`}>
           <div className="flex items-center gap-2 font-bold text-lg tracking-tight">
-            <MapPin className="text-emerald-500" size={20} />
+            <BrandMark size={20} />
             <span className="text-white hidden sm:inline">Obelisk</span>
           </div>
           <div className="flex items-center gap-3">
@@ -154,7 +155,7 @@ const App: React.FC = () => {
   if (loading) return (
     <div className="flex h-screen items-center justify-center bg-zinc-950">
       <div className="flex items-center gap-3 text-white">
-        <MapPin className="text-emerald-400 animate-pulse" size={24} />
+        <BrandMark size={24} className="animate-pulse" />
         <span className="font-bold text-lg">Loading Obelisk...</span>
       </div>
     </div>

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { BrandMark } from '../components/BrandMark';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { MapPin, ArrowLeft, Check, Loader2 } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
@@ -122,7 +123,7 @@ export const ReportPage: React.FC = () => {
         </button>
 
         <div className="flex items-center gap-2 mb-2">
-          <MapPin size={20} className="text-emerald-500" />
+          <BrandMark size={20} />
           <span className="font-bold text-white">Obelisk</span>
         </div>
 

@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
+import { BrandMark } from '../components/BrandMark';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   getToursByUser,
@@ -384,8 +385,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
 
         {/* Brand */}
         <div className="flex items-center gap-2.5 px-4 pt-5 pb-6">
-          <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center shrink-0">
-            <MapPin size={16} className="text-zinc-950" />
+          <div className="w-8 h-8 flex items-center justify-center shrink-0">
+            <BrandMark size={26} />
           </div>
           <span className="font-bold text-white tracking-tight text-base">Obelisk</span>
         </div>

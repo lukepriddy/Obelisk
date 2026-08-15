@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { BrandMark } from '../components/BrandMark';
 import { auth } from '../services/db';
 import { MapPin, Mail, ArrowLeft } from 'lucide-react';
 
@@ -97,7 +98,7 @@ export const Auth: React.FC = () => {
 
         {/* Logo */}
         <div className="flex items-center justify-center gap-2 mb-8">
-          <MapPin className="text-emerald-400" size={24} />
+          <BrandMark size={24} />
           <span className="text-white font-bold text-2xl tracking-tight">Obelisk</span>
         </div>
 
