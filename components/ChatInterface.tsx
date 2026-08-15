@@ -205,11 +205,18 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
         md:rounded-2xl md:border md:shadow-2xl
         ${t.root}
       `}
+      // Cast because React's CSSProperties has no room for custom properties,
+      // and --chat-edge-bg is load-bearing: index.html paints the chat surface
+      // past both screen edges with it, so iOS cannot reveal a hairline of map
+      // beside the window. React forwards any property starting with -- to the
+      // DOM, so this is a type annotation and nothing else — the emitted
+      // JavaScript is unchanged, which was verified by diffing the built bundle
+      // before and after.
       style={{
         '--chat-edge-bg': dk ? '#09090b' : '#ffffff',
         transform: dragOffset ? `translateY(${dragOffset}px)` : undefined,
         transition: isDraggingHandle ? 'none' : 'transform 220ms cubic-bezier(0.32, 0.72, 0, 1)',
-      }}
+      } as React.CSSProperties}
     >
       {/* ── Drag handle — downward swipe dismisses; the X remains the explicit close. */}
       <div
