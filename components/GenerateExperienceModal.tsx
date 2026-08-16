@@ -641,6 +641,47 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
                     Paste plain text rather than a PDF. Text keeps your exact characters:
                     hieroglyphs, ciphers, spaced letters, where PDF extraction mangles them.
                   </p>
+
+                  {/* The directive reference lives here, beside the script it
+                      applies to. It first sat under the zone-size slider,
+                      where a lone line of code read as a validation error
+                      rather than an example. */}
+                  <details className="mt-3 group">
+                    <summary className="cursor-pointer list-none text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors flex items-center gap-1.5">
+                      <ChevronDown size={11} className="group-open:rotate-180 transition-transform" />
+                      You can tell it what to do, right inside the script
+                    </summary>
+                    <div className="mt-2 pl-4 border-l border-zinc-800">
+                      <p className="text-[11px] text-zinc-500 leading-relaxed mb-2">
+                        Put any of these on their own line inside a section. They are
+                        stripped out before your words are used, so a player never hears them.
+                      </p>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                        {[
+                          ['[[character]]', 'someone to talk to'],
+                          ['[[discoverable]]', 'a collectible'],
+                          ['[[locked: PIER]]', 'needs a passphrase'],
+                          ['[[hint: shift back two]]', 'shown when locked'],
+                          ['[[loop]]', 'audio repeats'],
+                          ['[[on exit: keep]]', 'keeps playing'],
+                          ['[[hidden]]', 'not on the map'],
+                          ['[[mystery]]', 'unknown until found'],
+                          ['[[radius: 6]]', 'this zone only'],
+                          ['[[requires zone: 2]]', 'after zone 2'],
+                        ].map(([code, what]) => (
+                          <div key={code} className="flex items-baseline gap-2 min-w-0">
+                            <code className="text-[10px] font-mono text-zinc-300 bg-zinc-800 px-1 py-0.5 rounded shrink-0">
+                              {code}
+                            </code>
+                            <span className="text-[10px] text-zinc-600 truncate">{what}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-[11px] text-zinc-600 leading-relaxed mt-2">
+                        Plain English works too, it is just less certain to be caught.
+                      </p>
+                    </div>
+                  </details>
                 </div>
               )}
 
@@ -775,56 +816,54 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
                 )}
               </div>
 
-              {/* Zone size — import only.
-                  The circle on the map used to be the POI search radius, which
-                  import does not have, so it was drawn with no control to
-                  change it. Now it shows the real thing: how big one zone
-                  actually is, at the size these zones will be built. */}
-              {mode === 'import' && (
-                <div className="px-5 pt-4">
-                  <label className="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2">
-                    Zone size: <span className="text-zinc-300">{formatDistance(zoneRadius)}</span>
-                    <span className="text-zinc-600 font-normal normal-case ml-1">
-                      (the circle on the map, at this size)
-                    </span>
-                  </label>
-                  <input
-                    type="range" min={3} max={60} step={1}
-                    value={zoneRadius}
-                    onChange={e => setZoneRadius(Number(e.target.value))}
-                    className="w-full accent-emerald-500"
-                  />
-                  <div className="flex justify-between text-[10px] text-zinc-600 mt-1">
-                    <span>{formatDistance(3)}</span>
-                    <span>Your zones average {formatDistance(7)}</span>
-                    <span>{formatDistance(60)}</span>
-                  </div>
-                  <p className="text-[11px] text-zinc-600 mt-2">
-                    A <code className="text-zinc-500">[[radius: 6]]</code> line in your script overrides this for that zone.
-                  </p>
-                </div>
-              )}
+              <div className="px-5 pb-5 mt-5 flex flex-col gap-5">
 
-              <div className={`px-5 pb-5 mt-5 flex-col gap-5 ${mode === 'generate' ? 'flex' : 'hidden'}`}>
-
-                {/* Radius */}
+                {/* One slider, one slot, both modes.
+                    The circle on the map is the POI search area when
+                    generating and one zone at actual size when importing.
+                    Different meanings, but the same control in the same place,
+                    because a setting that moves between tabs reads as a bug. */}
                 <div>
                   <label className="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2">
-                    Search radius: <span className="text-zinc-300">{formatDistance(radiusMeters)}</span>
-                    <span className="text-zinc-600 font-normal normal-case ml-1">(shown as circle on map)</span>
+                    {mode === 'import' ? 'Zone size: ' : 'Search radius: '}
+                    <span className="text-zinc-300">
+                      {formatDistance(mode === 'import' ? zoneRadius : radiusMeters)}
+                    </span>
+                    <span className="text-zinc-600 font-normal normal-case ml-1">
+                      (shown as circle on map)
+                    </span>
                   </label>
-                  <input
-                    type="range" min={50} max={2000} step={25}
-                    value={radiusMeters}
-                    onChange={e => setRadiusMeters(Number(e.target.value))}
-                    className="w-full accent-emerald-500"
-                  />
-                  <div className="flex justify-between text-[10px] text-zinc-600 mt-1">
-                    <span>{formatDistance(50)}</span><span>Walking distance</span><span>{formatDistance(2000)}</span>
-                  </div>
+                  {mode === 'import' ? (
+                    <>
+                      <input
+                        type="range" min={3} max={60} step={1}
+                        value={zoneRadius}
+                        onChange={e => setZoneRadius(Number(e.target.value))}
+                        className="w-full accent-emerald-500"
+                      />
+                      <div className="flex justify-between text-[10px] text-zinc-600 mt-1">
+                        <span>{formatDistance(3)}</span>
+                        <span>Yours average {formatDistance(7)}</span>
+                        <span>{formatDistance(60)}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <input
+                        type="range" min={50} max={2000} step={25}
+                        value={radiusMeters}
+                        onChange={e => setRadiusMeters(Number(e.target.value))}
+                        className="w-full accent-emerald-500"
+                      />
+                      <div className="flex justify-between text-[10px] text-zinc-600 mt-1">
+                        <span>{formatDistance(50)}</span><span>Walking distance</span><span>{formatDistance(2000)}</span>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* Brief */}
+                {mode === 'generate' && (
                 <div>
                   <div className="flex items-baseline justify-between mb-2">
                     <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
@@ -843,7 +882,10 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
                   />
                 </div>
 
+                )}
+
                 {/* PDF */}
+                {mode === 'generate' && (
                 <div>
                   <label className="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2">
                     Reference document <span className="text-zinc-600 font-normal normal-case">(optional: script, research, character bible…)</span>
@@ -876,6 +918,7 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
                     </button>
                   )}
                 </div>
+                )}
               </div>
             </div>
 
