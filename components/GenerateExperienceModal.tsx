@@ -149,10 +149,14 @@ const MAX_SCRIPT_CHARS = 10000;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-// Display distances in US units; meters stay internal (Overpass + zone radii use meters)
+// Display distances in US units; meters stay internal (Overpass + zone radii use meters).
+// Feet all the way to a mile: a walking experience lives well inside that range,
+// and "1,050 ft" is a distance you can picture where "0.2 mi" is not.
 const formatDistance = (meters: number) => {
   const feet = meters * 3.28084;
+  if (feet < 100)  return `${Math.round(feet)} ft`;
   if (feet < 1000) return `${Math.round(feet / 10) * 10} ft`;
+  if (feet < 5280) return `${(Math.round(feet / 50) * 50).toLocaleString()} ft`;
   return `${(meters / 1609.34).toFixed(1)} mi`;
 };
 
@@ -186,6 +190,10 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
 
   // ── Import ───────────────────────────────────────────────────────────────
   const [docText, setDocText]   = useState('');
+  // Zone size for laid-out zones. Defaults to 10 m because the creator's own
+  // hand-built experiences average 6 to 7 m, not the 15 to 40 a generated one
+  // uses. A [[radius: n]] in the script overrides it per zone.
+  const [zoneRadius, setZoneRadius] = useState(10);
   const [isImport, setIsImport] = useState(false);
   const docInputRef             = useRef<HTMLInputElement>(null);
 
@@ -347,6 +355,9 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
           // creator wrote coordinates, those win.
           startLat: startPin?.[0],
           startLng: startPin?.[1],
+          endLat: endPin?.[0],
+          endLng: endPin?.[1],
+          defaultRadius: zoneRadius,
         },
       });
 
@@ -699,7 +710,7 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
                     ref={mapRef}
                     startPin={startPin}
                     endPin={endPin}
-                    radiusMeters={radiusMeters}
+                    radiusMeters={mode === 'import' ? zoneRadius : radiusMeters}
                     onStartMove={setStartPin}
                     onEndMove={setEndPin}
                   />
@@ -721,7 +732,7 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
 
                 {/* End point row — routing is a generate-mode concern. An
                     import follows the order the script is written in. */}
-                <div className={`items-center gap-3 mt-3 ${mode === 'generate' ? 'flex' : 'hidden'}`}>
+                <div className="flex items-center gap-3 mt-3">
                   {endPin ? (
                     <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-indigo-500/50 bg-indigo-500/10 flex-1 min-w-0">
                       <CheckCircle2 size={14} className="text-indigo-400 shrink-0" />
@@ -748,15 +759,51 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
                   )}
                 </div>
 
-                {startPin && (
+                {mode === 'import' && (
                   <p className="text-[11px] text-zinc-600 mt-2">
-                    {mode === 'import'
-                      ? 'Zones without coordinates are spaced out from here in script order. Drag them wherever you like afterwards.'
-                      : <>Zoom in and drag the pins to set exact spots.
-                         {!endPin && ' Adding an end point drops a pin at the center of the map view.'}</>}
+                    {endPin
+                      ? 'Zones without coordinates of their own are spread evenly from start to end, in script order.'
+                      : 'Add an end point and the zones will run evenly between the two. Without one they curve away from the start.'}
+                  </p>
+                )}
+
+                {startPin && mode === 'generate' && (
+                  <p className="text-[11px] text-zinc-600 mt-2">
+                    Zoom in and drag the pins to set exact spots.
+                    {!endPin && ' Adding an end point drops a pin at the center of the map view.'}
                   </p>
                 )}
               </div>
+
+              {/* Zone size — import only.
+                  The circle on the map used to be the POI search radius, which
+                  import does not have, so it was drawn with no control to
+                  change it. Now it shows the real thing: how big one zone
+                  actually is, at the size these zones will be built. */}
+              {mode === 'import' && (
+                <div className="px-5 pt-4">
+                  <label className="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2">
+                    Zone size: <span className="text-zinc-300">{formatDistance(zoneRadius)}</span>
+                    <span className="text-zinc-600 font-normal normal-case ml-1">
+                      (the circle on the map, at this size)
+                    </span>
+                  </label>
+                  <input
+                    type="range" min={3} max={60} step={1}
+                    value={zoneRadius}
+                    onChange={e => setZoneRadius(Number(e.target.value))}
+                    className="w-full accent-emerald-500"
+                  />
+                  <div className="flex justify-between text-[10px] text-zinc-600 mt-1">
+                    <span>{formatDistance(3)}</span>
+                    <span>Your zones average {formatDistance(7)}</span>
+                    <span>{formatDistance(60)}</span>
+                  </div>
+                  <p className="text-[11px] text-zinc-600 mt-2">
+                    A <code className="text-zinc-500">[[radius: 6]]</code> line in your script overrides this for that zone.
+                  </p>
+                </div>
+              )}
 
               <div className={`px-5 pb-5 mt-5 flex-col gap-5 ${mode === 'generate' ? 'flex' : 'hidden'}`}>
 
@@ -767,13 +814,13 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
                     <span className="text-zinc-600 font-normal normal-case ml-1">(shown as circle on map)</span>
                   </label>
                   <input
-                    type="range" min={200} max={2000} step={100}
+                    type="range" min={50} max={2000} step={25}
                     value={radiusMeters}
                     onChange={e => setRadiusMeters(Number(e.target.value))}
                     className="w-full accent-emerald-500"
                   />
                   <div className="flex justify-between text-[10px] text-zinc-600 mt-1">
-                    <span>{formatDistance(200)}</span><span>Walking distance</span><span>{formatDistance(2000)}</span>
+                    <span>{formatDistance(50)}</span><span>Walking distance</span><span>{formatDistance(2000)}</span>
                   </div>
                 </div>
 

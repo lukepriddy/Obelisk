@@ -340,8 +340,11 @@ Deno.serve(async (req) => {
     // A finished script becomes zones. The creator's words are sliced by line
     // on the server and never pass through the model — see import.ts.
     if (type === 'import') {
-      const { document, startLat, startLng } = body as {
-        document?: string; startLat?: number; startLng?: number;
+      const { document, startLat, startLng, endLat, endLng, defaultRadius } = body as {
+        document?: string;
+        startLat?: number; startLng?: number;
+        endLat?: number; endLng?: number;
+        defaultRadius?: number;
       };
 
       if (typeof document !== 'string' || document.trim().length < 40) {
@@ -351,7 +354,8 @@ Deno.serve(async (req) => {
       }
 
       try {
-        const result = await importDocument(apiKey, document, startLat, startLng);
+        const result = await importDocument(
+          apiKey, document, startLat, startLng, endLat, endLng, defaultRadius);
         return new Response(JSON.stringify({ draft: result }), {
           headers: { ...cors, 'Content-Type': 'application/json' },
         });

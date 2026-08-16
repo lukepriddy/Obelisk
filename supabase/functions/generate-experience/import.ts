@@ -585,6 +585,9 @@ function placeZones(
   count: number,
   anchors: Map<number, [number, number]>,
   fallback: [number, number] | null,
+  finish: [number, number] | null,
+  spacing: number,
+  notes: string[],
 ): Placed[] {
   const out: Placed[] = new Array(count);
   for (const [i, [lat, lng]] of anchors) {
@@ -595,11 +598,40 @@ function placeZones(
 
   if (known.length === 0) {
     const origin = fallback ?? [0, 0];
+
+    // With an end point, the walk has a shape the creator chose: run the
+    // zones evenly from one to the other. Without one, fall back to an arc,
+    // which is only there to make the sequence legible before they drag it.
+    if (finish && count > 1) {
+      const span = metersBetween(origin[0], origin[1], finish[0], finish[1]);
+      const needed = (count - 1) * spacing;
+      if (span >= needed) {
+        for (let i = 0; i < count; i++) {
+          const t = i / (count - 1);
+          out[i] = {
+            lat: origin[0] + (finish[0] - origin[0]) * t,
+            lng: origin[1] + (finish[1] - origin[1]) * t,
+            placement: 'laid_out',
+          };
+        }
+        return out;
+      }
+      // The route is too short to hold this many zones without them touching.
+      // Keep the bearing, overshoot the end, and say so rather than stacking.
+      notes.push(`Your start and end are ${Math.round(span)} m apart, which is not enough room for ${count} zones at this size. They were spaced out past the end point instead. Drag them where you want.`);
+      const bearing = bearingBetween(origin[0], origin[1], finish[0], finish[1]);
+      for (let i = 0; i < count; i++) {
+        const [lat, lng] = i === 0 ? origin : offsetPoint(origin[0], origin[1], bearing, i * spacing);
+        out[i] = { lat, lng, placement: 'laid_out' };
+      }
+      return out;
+    }
+
     let [lat, lng] = origin;
     let bearing = 45;
     for (let i = 0; i < count; i++) {
       out[i] = { lat, lng, placement: 'laid_out' };
-      [lat, lng] = offsetPoint(lat, lng, bearing, SPACING_M);
+      [lat, lng] = offsetPoint(lat, lng, bearing, spacing);
       bearing = (bearing + ARC_DEGREES_PER_STEP) % 360;
     }
     return out;
@@ -627,14 +659,14 @@ function placeZones(
   let bearing = 225;
   let [lat, lng] = [out[first].lat, out[first].lng];
   for (let i = first - 1; i >= 0; i--) {
-    [lat, lng] = offsetPoint(lat, lng, bearing, SPACING_M);
+    [lat, lng] = offsetPoint(lat, lng, bearing, spacing);
     out[i] = { lat, lng, placement: 'laid_out' };
     bearing = (bearing + ARC_DEGREES_PER_STEP) % 360;
   }
   bearing = 45;
   [lat, lng] = [out[last].lat, out[last].lng];
   for (let i = last + 1; i < count; i++) {
-    [lat, lng] = offsetPoint(lat, lng, bearing, SPACING_M);
+    [lat, lng] = offsetPoint(lat, lng, bearing, spacing);
     out[i] = { lat, lng, placement: 'laid_out' };
     bearing = (bearing + ARC_DEGREES_PER_STEP) % 360;
   }
@@ -642,8 +674,16 @@ function placeZones(
   return out;
 }
 
+function bearingBetween(aLat: number, aLng: number, bLat: number, bLng: number): number {
+  const dLng = ((bLng - aLng) * Math.PI) / 180;
+  const y = Math.sin(dLng) * Math.cos((bLat * Math.PI) / 180);
+  const x = Math.cos((aLat * Math.PI) / 180) * Math.sin((bLat * Math.PI) / 180) -
+    Math.sin((aLat * Math.PI) / 180) * Math.cos((bLat * Math.PI) / 180) * Math.cos(dLng);
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+}
+
 /** Nudge any pair closer than their radii apart, so nothing ever overlaps. */
-function separate(zones: ImportZone[]): number {
+function separate(zones: ImportZone[], spacing: number): number {
   let nudged = 0;
   for (let i = 1; i < zones.length; i++) {
     const prev = zones[i - 1];
@@ -653,7 +693,7 @@ function separate(zones: ImportZone[]): number {
     const have = metersBetween(prev.lat, prev.lng, cur.lat, cur.lng);
     if (have >= need) continue;
     const bearing = 45 + i * ARC_DEGREES_PER_STEP;
-    const [lat, lng] = offsetPoint(prev.lat, prev.lng, bearing, Math.max(need, SPACING_M));
+    const [lat, lng] = offsetPoint(prev.lat, prev.lng, bearing, Math.max(need, spacing));
     cur.lat = lat;
     cur.lng = lng;
     nudged += 1;
@@ -668,7 +708,19 @@ export async function importDocument(
   document: string,
   startLat?: number,
   startLng?: number,
+  endLat?: number,
+  endLng?: number,
+  defaultRadius?: number,
 ): Promise<ImportResult> {
+  // The creator sets the zone size on the way in, because theirs run small:
+  // their own hand-built experiences average 6 to 7 metres, not the 15 to 40
+  // a generated one uses. Anything a script asks for per zone overrides this.
+  const baseRadius = Number.isFinite(Number(defaultRadius)) && Number(defaultRadius) > 0
+    ? Math.min(120, Math.max(3, Math.round(Number(defaultRadius))))
+    : DEFAULT_RADIUS_M;
+  // Zones sit at least their own width apart, so a small zone size gives a
+  // tight walk and a large one spreads out, without ever overlapping.
+  const spacing = Math.max(SPACING_M, baseRadius * 4);
   const text = document.slice(0, MAX_DOCUMENT_CHARS);
   const lines = text.split('\n').slice(0, MAX_LINES);
   if (lines.filter(l => l.trim()).length < 3) throw new Error('import_document_too_short');
@@ -796,6 +848,8 @@ export async function importDocument(
 
   const fallback: [number, number] | null =
     typeof startLat === 'number' && typeof startLng === 'number' ? [startLat, startLng] : null;
+  const finish: [number, number] | null =
+    typeof endLat === 'number' && typeof endLng === 'number' ? [endLat, endLng] : null;
   if (anchors.size === 0 && !fallback) throw new Error('import_needs_start_point');
 
   // ── Fill the gaps ──────────────────────────────────────────────────────────
@@ -817,7 +871,7 @@ export async function importDocument(
     flags.push('Automatic titles and character setup were unavailable, so zones carry your text only. Everything you wrote is intact.');
   }
 
-  const placed = placeZones(zoneBlocks.length, anchors, fallback);
+  const placed = placeZones(zoneBlocks.length, anchors, fallback, finish, spacing, flags);
 
   const zones: ImportZone[] = zoneBlocks.map((b, i) => {
     const f = filled.get(i + 1);
@@ -888,8 +942,8 @@ export async function importDocument(
     const askedRadius = Number(b.radius);
     const radius = Number.isFinite(askedRadius) && askedRadius > 0
       ? Math.min(120, Math.max(3, Math.round(askedRadius)))
-      : DEFAULT_RADIUS_M;
-    if (radius !== DEFAULT_RADIUS_M) applied.push(`radius ${radius} m`);
+      : baseRadius;
+    if (radius !== baseRadius) applied.push(`radius ${radius} m`);
 
     // Gating points at a zone NUMBER here. Real ids do not exist until the
     // zones are created, so the client resolves it in a second pass.
@@ -949,7 +1003,7 @@ export async function importDocument(
     flags.push(`${ungettable.map(r => r.name).join(', ')} ${ungettable.length === 1 ? 'is' : 'are'} defined but never granted by any zone, so ${ungettable.length === 1 ? 'it' : 'they'} cannot be collected.`);
   }
 
-  const nudged = separate(zones);
+  const nudged = separate(zones, spacing);
   if (nudged) flags.push(`${nudged} zone${nudged === 1 ? '' : 's'} were moved slightly so no two overlap. Drag them where you want.`);
 
   // ── Nothing disappears quietly ─────────────────────────────────────────────
