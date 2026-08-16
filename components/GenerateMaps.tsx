@@ -133,7 +133,7 @@ export const GeneratePickerMap = forwardRef<PickerHandle, PickerProps>((props, r
 GeneratePickerMap.displayName = 'GeneratePickerMap';
 
 // ── Static draft preview ─────────────────────────────────────────────────────
-export interface PreviewZone { order: number; lat: number; lng: number; radius: number; type: 'audio' | 'character'; locked: boolean }
+export interface PreviewZone { order: number; lat: number; lng: number; radius: number; type: 'audio' | 'character' | 'discoverable'; locked: boolean }
 
 interface PreviewProps {
   zones: PreviewZone[];
@@ -152,7 +152,7 @@ export const GeneratePreviewMap: React.FC<PreviewProps> = ({ zones, startPin, en
   const zonesFC = (): GeoJSON.FeatureCollection => ({
     type: 'FeatureCollection',
     features: zones.map(z => circleFeature(z.lng, z.lat, z.radius, {
-      color: z.locked ? '#f59e0b' : z.type === 'character' ? '#6366f1' : '#10b981',
+      color: z.locked ? '#f59e0b' : z.type === 'character' ? '#6366f1' : z.type === 'discoverable' ? '#a78bfa' : '#10b981',
     })),
   });
 
@@ -192,7 +192,7 @@ export const GeneratePreviewMap: React.FC<PreviewProps> = ({ zones, startPin, en
     };
     if (startPin) add(startPin[1], startPin[0], pinHTML('S', '#10b981'));
     if (endPin) add(endPin[1], endPin[0], pinHTML('E', '#6366f1'));
-    zones.forEach(z => add(z.lng, z.lat, pinHTML(String(z.order), z.locked ? '#f59e0b' : z.type === 'character' ? '#6366f1' : '#10b981', 26)));
+    zones.forEach(z => add(z.lng, z.lat, pinHTML(String(z.order), z.locked ? '#f59e0b' : z.type === 'character' ? '#6366f1' : z.type === 'discoverable' ? '#a78bfa' : '#10b981', 26)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zones, startPin, endPin]);
 

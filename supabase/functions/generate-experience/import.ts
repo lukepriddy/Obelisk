@@ -59,14 +59,51 @@ export type BlockKind =
   | 'front_matter'
   | 'ignore';
 
+/** A resource the player collects. Defined once on the tour, referenced by
+ *  the zones that grant or require it. */
+interface ReadResource {
+  id: string;
+  name: string;
+  description: string;
+}
+
+interface ReadReward { resource_id: string; amount: number }
+interface ReadRequirement { resource_id: string; amount: number; consume: boolean }
+
 interface ReadingBlock {
   kind: BlockKind;
   start_line: number;
   end_line: number;
   label: string;
   speaker_id: string | null;
-  suggested_type: 'audio' | 'character';
+  suggested_type: 'audio' | 'character' | 'discoverable';
   reason: string;
+
+  /** Lines inside this block that are instructions TO US, not content.
+   *  Dropped before slicing, so a note like "[[locked: PIER]]" never ends up
+   *  in the voiceover script and gets read aloud to a player. */
+  directive_lines: number[];
+
+  /** True when the creator stated the type outright rather than us inferring
+   *  it. An explicit instruction is obeyed; an inference is only suggested. */
+  type_is_explicit: boolean;
+
+  locked: boolean;
+  lock_passphrase: string | null;
+  lock_hint: string | null;
+
+  on_end: 'loop' | 'stop' | 'destroy' | null;
+  on_exit: 'pause' | 'stop' | 'keep' | null;
+  is_visible: boolean | null;
+  is_mystery: boolean | null;
+  radius: number | null;
+
+  /** 1-based position of the zone that must be visited first. Resolved to a
+   *  real id after the zones exist. */
+  requires_zone: number | null;
+
+  rewards: ReadReward[];
+  requirements: ReadRequirement[];
 }
 
 interface Speaker {
@@ -84,6 +121,7 @@ interface Reading {
   description: string;
   blocks: ReadingBlock[];
   speakers: Speaker[];
+  resources: ReadResource[];
   mechanics: string[];
   concerns: string[];
 }
@@ -103,8 +141,10 @@ interface FilledZone {
 export interface ImportZone {
   order: number;
   title: string;
-  type: 'audio' | 'character';
-  suggested_type: 'audio' | 'character';
+  type: 'audio' | 'character' | 'discoverable';
+  suggested_type: 'audio' | 'character' | 'discoverable';
+  /** The type came from an instruction in the script, not from inference. */
+  type_is_explicit: boolean;
   locked: boolean;
   lat: number;
   lng: number;
@@ -121,13 +161,36 @@ export interface ImportZone {
   voice_instructions: string | null;
   lock_hint: string | null;
   lock_passphrase: string | null;
+
+  // ── Playback and visibility, set only when the script asked for them ──────
+  on_end: 'loop' | 'stop' | 'destroy' | null;
+  on_exit: 'pause' | 'stop' | 'keep' | null;
+  is_visible: boolean | null;
+  is_mystery: boolean | null;
+
+  // ── Progression ──────────────────────────────────────────────────────────
+  rewards: ReadReward[];
+  requirements: ReadRequirement[];
+  /** 1-based zone number that must be visited first. The client turns this
+   *  into requires_zone_id once the zones have real ids. */
+  requires_zone_order: number | null;
+
   /** Who speaks this zone, when the reading pass could tell. */
   speaker_name: string | null;
   /** Which fields above were written by the model rather than the creator. */
   generated_fields: string[];
+  /** Settings that came from an instruction you wrote, listed for review. */
+  applied_settings: string[];
   /** How this zone got its coordinates. */
   placement: 'from_document' | 'interpolated' | 'laid_out';
   source_lines: [number, number];
+}
+
+/** A collectible defined once for the whole experience. */
+export interface ImportResource {
+  id: string;
+  name: string;
+  description: string;
 }
 
 export interface ImportResult {
@@ -136,6 +199,8 @@ export interface ImportResult {
   description: string;
   summary: string;
   zones: ImportZone[];
+  /** Collectibles found in the script, to be defined on the tour. */
+  resources: ImportResource[];
   reading: {
     convention: string;
     interpretation: string;
@@ -269,7 +334,27 @@ SPEAKERS
 Identify who speaks each zone. Give each distinct speaker one stable id and reuse it everywhere they appear — a narrator who returns three times is ONE speaker with one voice, not three. Conversely, seven different statues each narrating once are seven speakers. Speakers may be named in a label ("Bishop:"), implied by a section title, or only revealed mid-paragraph. If you cannot tell whether two sections share a speaker, say so in "concerns" rather than guessing.
 
 TYPE
-"character" means the player can talk to them. "audio" means the player listens. First-person monologue reads the same either way, so when it is genuinely ambiguous choose "audio" and note it.
+"character" means the player can talk to them. "audio" means the player listens. "discoverable" is a small collectible the player picks up at a spot, granting them something. First-person monologue reads the same as audio or character either way, so when it is genuinely ambiguous choose "audio", set type_is_explicit false, and note it. When the creator states the type outright, set type_is_explicit true.
+
+INSTRUCTIONS TO US, MIXED INTO THE SCRIPT
+Creators annotate their own documents. A line may say "[[locked: PIER]]", "[[character]]", "make this one loop", "hidden zone", "radius 8m". These are instructions, NOT content, and this matters twice over: the setting has to be applied, and the line must never reach the player. Put every such line number in directive_lines so it is stripped before the text is used. A missed one gets read aloud by a text-to-speech voice.
+
+Set the matching field when you see an instruction, and leave it null when you do not. Never invent one:
+- locked / lock_passphrase / lock_hint. The passphrase must be copied EXACTLY as written. It is verified against the document and dropped if it does not match, so do not tidy it.
+- on_end: "loop" for audio that repeats, "destroy" for play-once-then-gone, "stop" otherwise.
+- on_exit: what happens when the player walks out ("pause", "stop", "keep").
+- is_visible: false for a zone hidden from the map. Lines like "do not look for me" are a hint, but only set this when the creator means the zone is hidden.
+- is_mystery: a collectible shown as an unknown glyph until picked up.
+- radius: in metres, only when a number is given.
+- requires_zone: the 1-based number of the zone that must be visited first, when the script gates one beat behind another.
+
+PROGRESSION
+Many scripts are built around collecting things: symbols, tokens, clues, an object carried from one place to another. Where that is happening, define it.
+- resources: one entry per collectible, with a short slug id, the creator's name for it, and a one-line description. A glossary block listing symbols and their meanings is exactly this. So is a prop introduced early and used late.
+- rewards: on the zone where the player GETS one, reference the resource id and an amount.
+- requirements: on a zone that cannot proceed without them. Set consume true only if the item is spent there.
+Only reference resource ids you defined. Anything dangling is dropped and reported.
+If the script has no collecting in it, return an empty list. Do not manufacture a mechanic.
 
 CONCERNS
 Report anything that looks inconsistent or that you had to guess: a stated count that does not match the content ("fourteen symbols" where you count sixteen), a speaker you could not resolve, a section that could be split either way. Be specific. This list is shown to the creator.
@@ -297,10 +382,53 @@ const READ_SCHEMA = {
           end_line: { type: 'INTEGER' },
           label: { type: 'STRING' },
           speaker_id: { type: 'STRING', nullable: true },
-          suggested_type: { type: 'STRING', enum: ['audio', 'character'] },
+          suggested_type: { type: 'STRING', enum: ['audio', 'character', 'discoverable'] },
           reason: { type: 'STRING' },
+          directive_lines: { type: 'ARRAY', items: { type: 'INTEGER' } },
+          type_is_explicit: { type: 'BOOLEAN' },
+          locked: { type: 'BOOLEAN' },
+          lock_passphrase: { type: 'STRING', nullable: true },
+          lock_hint: { type: 'STRING', nullable: true },
+          on_end: { type: 'STRING', enum: ['loop', 'stop', 'destroy'], nullable: true },
+          on_exit: { type: 'STRING', enum: ['pause', 'stop', 'keep'], nullable: true },
+          is_visible: { type: 'BOOLEAN', nullable: true },
+          is_mystery: { type: 'BOOLEAN', nullable: true },
+          radius: { type: 'NUMBER', nullable: true },
+          requires_zone: { type: 'INTEGER', nullable: true },
+          rewards: {
+            type: 'ARRAY',
+            items: {
+              type: 'OBJECT',
+              properties: { resource_id: { type: 'STRING' }, amount: { type: 'INTEGER' } },
+              required: ['resource_id', 'amount'],
+            },
+          },
+          requirements: {
+            type: 'ARRAY',
+            items: {
+              type: 'OBJECT',
+              properties: {
+                resource_id: { type: 'STRING' },
+                amount: { type: 'INTEGER' },
+                consume: { type: 'BOOLEAN' },
+              },
+              required: ['resource_id', 'amount', 'consume'],
+            },
+          },
         },
         required: ['kind', 'start_line', 'end_line', 'label', 'suggested_type', 'reason'],
+      },
+    },
+    resources: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          id: { type: 'STRING' },
+          name: { type: 'STRING' },
+          description: { type: 'STRING' },
+        },
+        required: ['id', 'name', 'description'],
       },
     },
     speakers: {
@@ -345,6 +473,7 @@ async function readDocument(apiKey: string, numbered: string): Promise<Reading> 
 
   reading.blocks = Array.isArray(reading.blocks) ? reading.blocks : [];
   reading.speakers = Array.isArray(reading.speakers) ? reading.speakers : [];
+  reading.resources = Array.isArray(reading.resources) ? reading.resources : [];
   reading.mechanics = Array.isArray(reading.mechanics) ? reading.mechanics : [];
   reading.concerns = Array.isArray(reading.concerns) ? reading.concerns : [];
   return reading;
@@ -549,8 +678,21 @@ export async function importDocument(
 
   const flags: string[] = [...reading.concerns];
   const lineAt = (n: number) => lines[n - 1] ?? '';
-  const sliceLines = (a: number, b: number) =>
-    lines.slice(Math.max(0, a - 1), Math.min(lines.length, b)).join('\n').trim();
+
+  /**
+   * Slice a range, dropping the lines the creator wrote as instructions to us.
+   *
+   * This is the second half of the fidelity guarantee and it is easy to
+   * underrate. A line reading "[[locked: PIER]]" is not content; if it stays
+   * in the slice it lands in voiceover_script, and a text-to-speech voice
+   * reads the creator's note out loud to a player standing in a park.
+   */
+  const sliceLines = (a: number, b: number, skip: Set<number> = new Set()) =>
+    lines
+      .slice(Math.max(0, a - 1), Math.min(lines.length, b))
+      .filter((_, i) => !skip.has(a + i))
+      .join('\n')
+      .trim();
 
   // Sort by position and drop anything nonsensical rather than trusting order.
   const blocks = reading.blocks
@@ -570,14 +712,52 @@ export async function importDocument(
     }
   }
 
+  const skipFor = (b: ReadingBlock) =>
+    new Set((Array.isArray(b.directive_lines) ? b.directive_lines : []).map(Number).filter(Number.isFinite));
+
   const zoneBlocks = blocks
     .filter(b => b.kind === 'zone' && b.end_line >= b.start_line)
-    .filter(b => sliceLines(b.start_line, b.end_line).length > 0)
+    .filter(b => sliceLines(b.start_line, b.end_line, skipFor(b)).length > 0)
     .slice(0, MAX_ZONES);
 
   if (zoneBlocks.length === 0) throw new Error('import_no_zones_found');
 
   const speakerById = new Map(reading.speakers.map(s => [s.id, s]));
+
+  // ── Progression, checked before anything references it ────────────────────
+  //
+  // A dangling resource id is the progression equivalent of a passphrase that
+  // appears nowhere: the player reaches a gate they cannot open. So the
+  // defined set is the only thing zones may point at, and anything else is
+  // dropped and reported rather than written and discovered in the field.
+  const slug = (s: string) =>
+    s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40);
+
+  const resources: ImportResource[] = [];
+  const resourceIds = new Set<string>();
+  const byName = new Map<string, string>();
+  for (const r of reading.resources) {
+    const id = slug(r?.id || r?.name || '');
+    if (!id || resourceIds.has(id)) continue;
+    resourceIds.add(id);
+    byName.set(slug(r?.name || ''), id);
+    resources.push({ id, name: (r?.name || id).trim(), description: (r?.description || '').trim() });
+  }
+
+  const droppedRefs: string[] = [];
+  const resolveResource = (raw: string): string | null => {
+    const s = slug(raw || '');
+    if (resourceIds.has(s)) return s;
+    const byNameHit = byName.get(s);
+    if (byNameHit) return byNameHit;
+    if (raw) droppedRefs.push(raw);
+    return null;
+  };
+
+  // The passphrase is the one short string the model hands back rather than
+  // the server slicing it, because "the answer is PIER" cannot be captured by
+  // a line range. It is only accepted if it appears in the document exactly.
+  const documentHas = (needle: string) => text.includes(needle);
 
   // ── Coordinates the creator already supplied ───────────────────────────────
   const anchors = new Map<number, [number, number]>();
@@ -623,7 +803,7 @@ export async function importDocument(
     order: i + 1,
     label: b.label,
     speaker: b.speaker_id ? speakerById.get(b.speaker_id) ?? null : null,
-    script: sliceLines(b.start_line, b.end_line),
+    script: sliceLines(b.start_line, b.end_line, skipFor(b)),
   }));
 
   let filled: Map<number, FilledZone>;
@@ -652,39 +832,122 @@ export async function importDocument(
     const title = f?.title?.trim() || b.label || `Zone ${i + 1}`;
     if (f?.title?.trim()) generated.push('title');
 
+    // Settings the creator asked for, listed so the review screen can show
+    // exactly what was applied rather than leaving it to be found later.
+    const applied: string[] = [];
+    const suggested: ImportZone['type'] =
+      b.suggested_type === 'character' || b.suggested_type === 'discoverable'
+        ? b.suggested_type : 'audio';
+
+    // An explicit instruction is obeyed. An inference is only ever a
+    // suggestion, because a first-person monologue reads the same whether it
+    // is a recording or someone to talk to, and guessing wrong means the
+    // creator undoes work. The character fields are filled either way, so
+    // switching an audio zone over costs one tap.
+    const type: ImportZone['type'] = b.type_is_explicit === true ? suggested : 'audio';
+    if (b.type_is_explicit === true && type !== 'audio') applied.push(`type: ${type}`);
+
+    // A passphrase is only trusted if it is really in the document. A locked
+    // zone whose answer appears nowhere is a dead end in the middle of a walk,
+    // so a mismatch unlocks the zone and says so.
+    let locked = b.locked === true;
+    let passphrase = b.lock_passphrase?.trim() || null;
+    if (locked && passphrase && !documentHas(passphrase)) {
+      flags.push(`Zone ${i + 1} asked for the passphrase "${passphrase}", which does not appear in your script exactly as written. The zone was left unlocked.`);
+      locked = false;
+      passphrase = null;
+    } else if (locked && !passphrase) {
+      flags.push(`Zone ${i + 1} is marked locked but no passphrase was given, so it was left unlocked.`);
+      locked = false;
+    } else if (locked) {
+      applied.push('locked');
+    }
+
+    const rewards = (Array.isArray(b.rewards) ? b.rewards : [])
+      .map(r => ({ resource_id: resolveResource(r?.resource_id), amount: Math.max(1, Math.round(Number(r?.amount) || 1)) }))
+      .filter((r): r is ReadReward => !!r.resource_id);
+    const requirements = (Array.isArray(b.requirements) ? b.requirements : [])
+      .map(r => ({
+        resource_id: resolveResource(r?.resource_id),
+        amount: Math.max(1, Math.round(Number(r?.amount) || 1)),
+        consume: r?.consume === true,
+      }))
+      .filter((r): r is ReadRequirement => !!r.resource_id);
+    if (rewards.length) applied.push(`grants ${rewards.length} item${rewards.length === 1 ? '' : 's'}`);
+    if (requirements.length) applied.push(`needs ${requirements.length} item${requirements.length === 1 ? '' : 's'}`);
+
+    const onEnd = b.on_end === 'loop' || b.on_end === 'destroy' || b.on_end === 'stop' ? b.on_end : null;
+    if (onEnd) applied.push(`on end: ${onEnd}`);
+    const onExit = b.on_exit === 'pause' || b.on_exit === 'keep' || b.on_exit === 'stop' ? b.on_exit : null;
+    if (onExit) applied.push(`on exit: ${onExit}`);
+    const isVisible = typeof b.is_visible === 'boolean' ? b.is_visible : null;
+    if (isVisible === false) applied.push('hidden from the map');
+    const isMystery = typeof b.is_mystery === 'boolean' ? b.is_mystery : null;
+    if (isMystery) applied.push('mystery');
+
+    const askedRadius = Number(b.radius);
+    const radius = Number.isFinite(askedRadius) && askedRadius > 0
+      ? Math.min(120, Math.max(3, Math.round(askedRadius)))
+      : DEFAULT_RADIUS_M;
+    if (radius !== DEFAULT_RADIUS_M) applied.push(`radius ${radius} m`);
+
+    // Gating points at a zone NUMBER here. Real ids do not exist until the
+    // zones are created, so the client resolves it in a second pass.
+    const reqZone = Math.round(Number(b.requires_zone));
+    const requiresZoneOrder =
+      Number.isFinite(reqZone) && reqZone >= 1 && reqZone <= zoneBlocks.length && reqZone !== i + 1
+        ? reqZone : null;
+    if (requiresZoneOrder) applied.push(`after zone ${requiresZoneOrder}`);
+
     return {
       order: i + 1,
-      // Import always lands on 'audio'. A first-person monologue reads the same
-      // whether it is a recording or someone to talk to, so guessing wrong
-      // means the creator has to undo work. The suggestion rides along and the
-      // character fields are filled either way, so flipping it costs one tap.
-      type: 'audio',
-      suggested_type: b.suggested_type === 'character' ? 'character' : 'audio',
-      locked: false,
+      type,
+      suggested_type: suggested,
+      type_is_explicit: b.type_is_explicit === true,
+      locked,
       title,
       lat: placed[i].lat,
       lng: placed[i].lng,
-      radius: DEFAULT_RADIUS_M,
+      radius,
       location_name: b.label || title,
       description: take('description', f?.description) ?? '',
-      script: sliceLines(b.start_line, b.end_line),
+      script: sliceLines(b.start_line, b.end_line, skipFor(b)),
       entry_message: take('entry_message', f?.entry_message),
       character_prompt: take('character_prompt', f?.character_prompt),
       character_bio: take('character_bio', f?.character_bio),
       greeting_message: take('greeting_message', f?.greeting_message),
       voice_style: take('voice_style', f?.voice_style),
       voice_instructions: take('voice_instructions', f?.voice_instructions),
-      // Locks are never invented on import. Real scripts gate with physical
-      // props and ciphers the creator designed; a guessed passphrase would be
-      // wrong and a wrong passphrase is a dead end in the middle of a walk.
-      lock_hint: null,
-      lock_passphrase: null,
+      // Locks are never invented, only obeyed. Every one here came from an
+      // instruction in the script and survived the check that its passphrase
+      // really appears in the document.
+      lock_hint: locked ? (b.lock_hint?.trim() || null) : null,
+      lock_passphrase: passphrase,
+      on_end: onEnd,
+      on_exit: onExit,
+      is_visible: isVisible,
+      is_mystery: isMystery,
+      rewards,
+      requirements,
+      requires_zone_order: requiresZoneOrder,
       generated_fields: generated,
+      applied_settings: applied,
       placement: placed[i].placement,
       source_lines: [b.start_line, b.end_line],
       speaker_name: speaker?.name ?? null,
     };
   });
+
+  if (droppedRefs.length) {
+    const unique = [...new Set(droppedRefs)];
+    flags.push(`${unique.length} reference${unique.length === 1 ? '' : 's'} to an item that was never defined ${unique.length === 1 ? 'was' : 'were'} dropped: ${unique.join(', ')}.`);
+  }
+  // A collectible nothing hands out is a gate that never opens.
+  const granted = new Set(zones.flatMap(z => z.rewards.map(r => r.resource_id)));
+  const ungettable = resources.filter(r => !granted.has(r.id));
+  if (ungettable.length) {
+    flags.push(`${ungettable.map(r => r.name).join(', ')} ${ungettable.length === 1 ? 'is' : 'are'} defined but never granted by any zone, so ${ungettable.length === 1 ? 'it' : 'they'} cannot be collected.`);
+  }
 
   const nudged = separate(zones);
   if (nudged) flags.push(`${nudged} zone${nudged === 1 ? '' : 's'} were moved slightly so no two overlap. Drag them where you want.`);
@@ -705,7 +968,7 @@ export async function importDocument(
       kind: b.kind,
       label: b.label,
       lines: [b.start_line, b.end_line] as [number, number],
-      text: sliceLines(b.start_line, b.end_line).slice(0, 2000),
+      text: sliceLines(b.start_line, b.end_line, skipFor(b)).slice(0, 2000),
     }))
     .filter(b => b.text.length > 0);
 
@@ -720,6 +983,7 @@ export async function importDocument(
     description: reading.description?.trim() || '',
     summary: reading.interpretation?.trim() || '',
     zones,
+    resources,
     reading: {
       convention: reading.convention ?? '',
       interpretation: reading.interpretation ?? '',

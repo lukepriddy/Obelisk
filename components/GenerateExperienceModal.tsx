@@ -18,14 +18,16 @@ import {
   Upload, Trash2, CheckCircle2, Plus,
 } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
-import { createTour, createZone } from '../services/db';
+import { createTour, createZone, updateZone } from '../services/db';
 
 // ── Draft types ───────────────────────────────────────────────────────────────
 
 interface DraftZone {
   order: number;
   title: string;
-  type: 'audio' | 'character';
+  /** 'discoverable' only ever comes from an import: a collectible the player
+   *  picks up. Generate produces audio and character zones only. */
+  type: 'audio' | 'character' | 'discoverable';
   locked: boolean;
   lat: number;
   lng: number;
@@ -50,9 +52,29 @@ interface DraftZone {
   /** Where the coordinates came from. */
   placement?: 'from_document' | 'interpolated' | 'laid_out';
   /** Reads as a character even though imports land on audio. */
-  suggested_type?: 'audio' | 'character';
+  suggested_type?: 'audio' | 'character' | 'discoverable';
+  type_is_explicit?: boolean;
   speaker_name?: string | null;
   source_lines?: [number, number];
+
+  // Settings taken from instructions written into the script. Null means the
+  // script did not ask, so the zone keeps its default.
+  on_end?: 'loop' | 'stop' | 'destroy' | null;
+  on_exit?: 'pause' | 'stop' | 'keep' | null;
+  is_visible?: boolean | null;
+  is_mystery?: boolean | null;
+  rewards?: { resource_id: string; amount: number }[];
+  requirements?: { resource_id: string; amount: number; consume: boolean }[];
+  /** Points at a zone NUMBER. Resolved to a real id after the zones exist. */
+  requires_zone_order?: number | null;
+  /** Plain-language list of what was applied, for the review screen. */
+  applied_settings?: string[];
+}
+
+interface ImportResource {
+  id: string;
+  name: string;
+  description: string;
 }
 
 /** How the model read the document, shown so the creator can correct the
@@ -79,6 +101,7 @@ interface ExperienceDraft {
   zones: DraftZone[];
   // Import only.
   reading?: ImportReading;
+  resources?: ImportResource[];
   set_aside?: SetAsideBlock[];
   flags?: string[];
 }
@@ -142,13 +165,17 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
-const zoneTypeColor = (type: 'audio' | 'character', locked: boolean) =>
+const zoneTypeColor = (type: DraftZone['type'], locked: boolean) =>
   locked ? 'text-amber-400 bg-amber-400/10 border-amber-400/30'
   : type === 'character' ? 'text-indigo-400 bg-indigo-400/10 border-indigo-400/30'
+  : type === 'discoverable' ? 'text-violet-400 bg-violet-400/10 border-violet-400/30'
   : 'text-emerald-400 bg-emerald-400/10 border-emerald-400/30';
 
-const ZoneTypeIcon: React.FC<{ type: 'audio' | 'character'; locked: boolean; size?: number }> = ({ type, locked, size = 13 }) =>
-  locked ? <Lock size={size} /> : type === 'character' ? <Mic size={size} /> : <Volume2 size={size} />;
+const ZoneTypeIcon: React.FC<{ type: DraftZone['type']; locked: boolean; size?: number }> = ({ type, locked, size = 13 }) =>
+  locked ? <Lock size={size} />
+  : type === 'character' ? <Mic size={size} />
+  : type === 'discoverable' ? <Sparkles size={size} />
+  : <Volume2 size={size} />;
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -387,6 +414,18 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
     const tourLat = sortedZones[0]?.lat ?? startPin?.[0] ?? 0;
     const tourLng = sortedZones[0]?.lng ?? startPin?.[1] ?? 0;
 
+    // Collectibles found in the script become the tour's resources, so the
+    // zones that grant and require them have something real to point at.
+    const importedResources = (draft.resources ?? []).map(r => ({
+      id: r.id,
+      name: r.name,
+      type: 'item' as const,
+      color: '#10b981',
+      image_url: null,
+      starting_amount: 0,
+      show_in_hud: true,
+    }));
+
     const tour = await createTour({
       owner_id:  userId,
       title:     draft.title,
@@ -396,6 +435,9 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
       lat: tourLat,
       lng: tourLng,
       map_style: 'satellite',
+      ...(importedResources.length
+        ? { progression_enabled: true, progression_resources: importedResources }
+        : {}),
     });
 
     if (!tour) {
@@ -404,11 +446,17 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
       return;
     }
 
+    // Zone number to real id, filled as we go, so gating written as "after
+    // zone 4" can be resolved once the zones actually exist.
+    const idByOrder = new Map<number, string>();
+
     for (const dz of sortedZones) {
-      // Normalize: a "character" without a prompt can't hold a conversation —
-      // treat it as an audio zone so the editor opens on the right settings
-      const zoneType = dz.type === 'character' && dz.character_prompt?.trim() ? 'character' : 'audio';
-      await createZone({
+      // Normalize: a "character" without a prompt can't hold a conversation,
+      // so treat it as an audio zone and the editor opens on the right settings
+      const zoneType = dz.type === 'discoverable'
+        ? 'discoverable'
+        : dz.type === 'character' && dz.character_prompt?.trim() ? 'character' : 'audio';
+      const created = await createZone({
         tour_id:    tour.id,
         title:      dz.title,
         type:       zoneType,
@@ -417,7 +465,13 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
         radius:     dz.radius,
         description: dz.description ?? '',
         entry_message: dz.entry_message ?? undefined,
-        is_visible:  true,
+        // Null means the script never asked, so the column default stands.
+        is_visible:  dz.is_visible ?? true,
+        ...(dz.on_end  ? { on_end:  dz.on_end }  : {}),
+        ...(dz.on_exit ? { on_exit: dz.on_exit } : {}),
+        ...(dz.is_mystery ? { is_mystery: true } : {}),
+        ...(dz.rewards?.length      ? { progression_rewards: dz.rewards }           : {}),
+        ...(dz.requirements?.length ? { progression_requirements: dz.requirements } : {}),
         character_prompt:  dz.character_prompt  ?? undefined,
         voice_instructions: dz.voice_instructions ?? undefined,
         character_bio:     dz.character_bio     ?? undefined,
@@ -432,6 +486,16 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
         lock_hint:         dz.lock_hint         ?? undefined,
         lock_passphrase:   dz.lock_passphrase   ?? undefined,
       });
+      if (created) idByOrder.set(dz.order, created.id);
+    }
+
+    // Second pass. requires_zone_id needs an id that did not exist when the
+    // zone was created, so gating is wired up only once every zone is in.
+    for (const dz of sortedZones) {
+      if (!dz.requires_zone_order) continue;
+      const self   = idByOrder.get(dz.order);
+      const target = idByOrder.get(dz.requires_zone_order);
+      if (self && target) await updateZone(self, { requires_zone_id: target });
     }
 
     onBuilt(tour.id);
@@ -876,6 +940,39 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
                 </div>
               )}
 
+              {/* Collectibles lifted out of the script. These become the
+                  tour's progression resources, so the zones that grant and
+                  require them have something real to point at. */}
+              {isImport && !!draft.resources?.length && (
+                <div className="px-5 pt-3">
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+                    <p className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-1">
+                      Collectibles
+                    </p>
+                    <p className="text-[11px] text-zinc-600 mb-3">
+                      Set up on the experience so zones can hand them out and ask for them.
+                      Colors and icons are yours to change afterwards.
+                    </p>
+                    <div className="space-y-1.5">
+                      {draft.resources.map(r => {
+                        const from = draft.zones.filter(z => z.rewards?.some(w => w.resource_id === r.id));
+                        const needs = draft.zones.filter(z => z.requirements?.some(w => w.resource_id === r.id));
+                        return (
+                          <div key={r.id} className="flex items-baseline gap-2 text-xs">
+                            <span className="text-zinc-200 font-medium shrink-0">{r.name}</span>
+                            <span className="text-zinc-600 truncate flex-1">{r.description}</span>
+                            <span className="text-[10px] text-zinc-500 shrink-0 tabular-nums">
+                              {from.length ? `from ${from.map(z => z.order).join(', ')}` : 'never granted'}
+                              {needs.length ? ` · needed at ${needs.map(z => z.order).join(', ')}` : ''}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Things worth a second look before building. */}
               {isImport && !!draft.flags?.length && (
                 <div className="px-5 pt-3">
@@ -984,9 +1081,9 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
                                 wrong would mean undoing work. The suggestion
                                 shows here and the character fields are already
                                 filled, so switching is one tap in the editor. */}
-                            {zone.suggested_type === 'character' && (
+                            {!zone.type_is_explicit && zone.suggested_type && zone.suggested_type !== 'audio' && (
                               <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border text-indigo-400 bg-indigo-400/10 border-indigo-400/30">
-                                reads as character
+                                reads as {zone.suggested_type}
                               </span>
                             )}
                             {zone.placement === 'from_document' && (
@@ -998,6 +1095,21 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
                           <p className="text-xs text-zinc-500 mt-0.5 truncate">
                             {zone.speaker_name ? `${zone.speaker_name} · ` : ''}{zone.location_name}
                           </p>
+                          {/* Everything the script told us to switch on, shown
+                              on the card rather than left to be discovered in
+                              the editor or, worse, in the field. */}
+                          {!!zone.applied_settings?.length && (
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {zone.applied_settings.map((s, i) => (
+                                <span
+                                  key={i}
+                                  className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700"
+                                >
+                                  {s}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                           {!isOpen && (
                             <p className="text-xs text-zinc-400 mt-1 line-clamp-2 leading-relaxed">
                               {zone.script || zone.description}
