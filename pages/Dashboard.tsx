@@ -703,22 +703,33 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
 
                         {/* Delete confirmation */}
                         {confirmDeleteId === tour.id ? (
-                          <div className="mt-auto flex items-center gap-2 bg-red-500/10 border border-red-500/30 rounded-xl px-3 py-2.5">
-                            <AlertTriangle size={13} className="text-red-400 shrink-0" />
-                            <span className="text-xs text-red-300 flex-1">Delete this experience?</span>
-                            <button
-                              onClick={() => handleDelete(tour.id)}
-                              disabled={deletingId === tour.id}
-                              className="text-xs font-bold text-red-400 hover:text-red-300 disabled:opacity-50 whitespace-nowrap"
-                            >
-                              {deletingId === tour.id ? 'Deleting…' : 'Delete'}
-                            </button>
-                            <button
-                              onClick={() => setConfirmDeleteId(null)}
-                              className="text-xs text-zinc-500 hover:text-zinc-300"
-                            >
-                              Cancel
-                            </button>
+                          /* Question above, buttons below.
+                             This was one row, and it overflowed the card: a
+                             flex item defaults to min-width:auto, so the
+                             question could not shrink past "experience?" and
+                             shoved Cancel out through the right edge. Stacking
+                             removes the constraint rather than tuning around
+                             it, and the buttons get real tap targets. */
+                          <div className="mt-auto bg-red-500/10 border border-red-500/30 rounded-xl px-3 py-2.5">
+                            <div className="flex items-start gap-2">
+                              <AlertTriangle size={13} className="text-red-400 shrink-0 mt-0.5" />
+                              <span className="text-xs text-red-300">Delete this experience?</span>
+                            </div>
+                            <div className="flex items-center gap-2 mt-2.5">
+                              <button
+                                onClick={() => handleDelete(tour.id)}
+                                disabled={deletingId === tour.id}
+                                className="flex-1 min-w-0 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-xs font-bold text-red-300 transition-colors disabled:opacity-50 truncate"
+                              >
+                                {deletingId === tour.id ? 'Deleting…' : 'Delete'}
+                              </button>
+                              <button
+                                onClick={() => setConfirmDeleteId(null)}
+                                className="flex-1 min-w-0 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-medium text-zinc-300 transition-colors truncate"
+                              >
+                                Cancel
+                              </button>
+                            </div>
                           </div>
                         ) : (
                           <div className="mt-auto flex flex-col gap-2">
