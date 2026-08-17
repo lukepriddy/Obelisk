@@ -690,7 +690,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
               rows={2}
               value={zone.greeting_message || ''}
               onChange={(e) => onUpdate({ greeting_message: e.target.value })}
-              placeholder="First line they speak…"
+              placeholder="Opening line…"
             />
             <p className="text-[10px] text-zinc-500 mt-1">Script the character's exact first words. Leave blank for an auto-generated greeting.</p>
           </div>
