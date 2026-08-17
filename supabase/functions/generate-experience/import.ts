@@ -106,6 +106,27 @@ interface ReadingBlock {
 
   rewards: ReadReward[];
   requirements: ReadRequirement[];
+
+  /** Direction the creator wrote for this speaker. A chat is only as good as
+   *  what the character wants and what it is holding back, and neither can be
+   *  reliably inferred from a monologue. */
+  character: CharacterDirection | null;
+}
+
+interface CharacterDirection {
+  /** Who they are and how they talk. Shapes the persona in a chat, and the
+   *  delivery direction for a voice on an audio zone. */
+  persona: string | null;
+  /** What they are after from the player. */
+  wants: string | null;
+  /** What they will give up, and what it takes to get it. */
+  reveals: string | null;
+  /** What they put back to the player. */
+  asks: string | null;
+  /** Hard limits. What they will not say however hard they are pushed. */
+  never: string | null;
+  /** A named prebuilt voice, when the creator picked one. */
+  voice: string | null;
 }
 
 interface Speaker {
@@ -354,6 +375,16 @@ Set the matching field when you see an instruction, and leave it null when you d
 - radius: in metres, only when a number is given.
 - requires_zone: the 1-based number of the zone that must be visited first, when the script gates one beat behind another.
 
+CHARACTER DIRECTION
+A conversation is only as good as what the character wants and what it is holding back, and neither can be read off a monologue. When the creator writes any of these, capture them in "character" word for word in meaning. Do not soften them, do not merge them, and never invent one that was not written:
+- persona: who they are and how they speak. On a character zone this drives the personality; on an audio zone it is delivery direction for the voice.
+- wants: what they are after from the player.
+- reveals: what they will give up, and what it takes to get it out of them.
+- asks: what they put back to the player.
+- never: a hard limit. What they will not say however hard they are pushed. Respect this absolutely.
+- voice: a named prebuilt voice the creator chose.
+Leave "character" null when the creator wrote no direction at all.
+
 PROGRESSION
 Many scripts are built around collecting things: symbols, tokens, clues, an object carried from one place to another. Where that is happening, define it.
 - resources: one entry per collectible, with a short slug id, the creator's name for it, and a one-line description. A glossary block listing symbols and their meanings is exactly this. So is a prop introduced early and used late.
@@ -419,6 +450,18 @@ const READ_SCHEMA = {
                 consume: { type: 'BOOLEAN' },
               },
               required: ['resource_id', 'amount', 'consume'],
+            },
+          },
+          character: {
+            type: 'OBJECT',
+            nullable: true,
+            properties: {
+              persona: { type: 'STRING', nullable: true },
+              wants: { type: 'STRING', nullable: true },
+              reveals: { type: 'STRING', nullable: true },
+              asks: { type: 'STRING', nullable: true },
+              never: { type: 'STRING', nullable: true },
+              voice: { type: 'STRING', nullable: true },
             },
           },
         },
@@ -505,7 +548,17 @@ FIELDS
 - title: 2–5 words naming this stop. If the script already labels the section, keep that label's sense.
 - description: a production note for the creator, not for the player. What happens here, what audio is needed, any stage direction present in the script. One or two sentences.
 - entry_message: 1–2 sentences the player sees on arrival. A hook, never a summary, and never a spoiler. Null if the script's own opening already serves that purpose.
-- character_prompt: only when there is a speaker. Second person ("You are…"), 3–5 sentences covering voice, what they want, and what they know but will not volunteer. Ground it in details from the script.
+- character_prompt: only when there is a speaker. Second person ("You are…"), covering voice, what they want, and what they know but will not volunteer. Ground it in details from the script.
+
+WHEN A ZONE CARRIES DIRECTION
+Some zones come with direction the creator wrote: persona, wants, reveals, asks, never. That is not a suggestion to work from, it is the specification. Build character_prompt so that all of it survives:
+- persona becomes how they speak, in their own register. If it says soft-spoken, the character never raises its voice.
+- wants is their objective in every exchange. It should shape what they steer towards.
+- reveals is the payload AND its price. State plainly in the prompt what unlocks it, so the character does not hand it over on the first question.
+- asks must be put to the player in their own words, not paraphrased into a topic.
+- never is absolute. Write it into the prompt as a hard rule, and add that they will deflect in character rather than break it.
+Where a zone has direction and is an audio zone rather than a character one, use persona as the delivery direction for voice_instructions and ignore the rest.
+Two characters in the same experience must not end up sounding alike. If the direction makes them distinct, keep them distinct.
 - character_bio: a short player-facing teaser, no spoilers.
 - greeting_message: their opening line, in voice, at most two sentences. Null if the script already opens with one.
 - voice_style: the closest prebuilt voice — ${VOICE_OPTIONS}
@@ -541,18 +594,39 @@ const FILL_SCHEMA = {
 async function fillZones(
   apiKey: string,
   speakers: Speaker[],
-  zones: { order: number; label: string; speaker: Speaker | null; script: string }[],
+  zones: {
+    order: number;
+    label: string;
+    speaker: Speaker | null;
+    script: string;
+    type: 'audio' | 'character' | 'discoverable';
+    direction: CharacterDirection | null;
+  }[],
 ): Promise<Map<number, FilledZone>> {
   const registry = speakers.length
     ? speakers.map(s => `- ${s.id} — ${s.name}: ${s.description}`).join('\n')
     : '(no named speakers identified)';
 
+  const directionOf = (d: CharacterDirection | null) => {
+    if (!d) return null;
+    const parts = [
+      d.persona && `  persona: ${d.persona}`,
+      d.wants   && `  wants: ${d.wants}`,
+      d.reveals && `  reveals: ${d.reveals}`,
+      d.asks    && `  asks: ${d.asks}`,
+      d.never   && `  never: ${d.never}`,
+      d.voice   && `  voice: ${d.voice}`,
+    ].filter(Boolean);
+    return parts.length ? `DIRECTION FROM THE CREATOR (this is the specification):\n${parts.join('\n')}` : null;
+  };
+
   const body = zones.map(z => [
-    `ZONE ${z.order} — ${z.label}`,
+    `ZONE ${z.order} — ${z.label}  [${z.type}]`,
     z.speaker ? `Speaker: ${z.speaker.id} (${z.speaker.name})` : 'Speaker: none identified',
+    directionOf(z.direction),
     'Script:',
     z.script,
-  ].join('\n')).join('\n\n───\n\n');
+  ].filter(Boolean).join('\n')).join('\n\n───\n\n');
 
   const filled = await callGemini(apiKey, {
     system_instruction: { parts: [{ text: FILL_INSTRUCTION }] },
@@ -859,11 +933,21 @@ export async function importDocument(
   if (anchors.size === 0 && !fallback) throw new Error('import_needs_start_point');
 
   // ── Fill the gaps ──────────────────────────────────────────────────────────
+  // The fill pass needs the zone's resolved type and any direction written for
+  // it. Type is resolved once here so the two places that need it cannot drift.
+  const resolvedType = (b: ReadingBlock): 'audio' | 'character' | 'discoverable' => {
+    const s = b.suggested_type === 'character' || b.suggested_type === 'discoverable'
+      ? b.suggested_type : 'audio';
+    return b.type_is_explicit === true ? s : 'audio';
+  };
+
   const forFill = zoneBlocks.map((b, i) => ({
     order: i + 1,
     label: b.label,
     speaker: b.speaker_id ? speakerById.get(b.speaker_id) ?? null : null,
     script: sliceLines(b.start_line, b.end_line, skipFor(b)),
+    type: resolvedType(b),
+    direction: b.character ?? null,
   }));
 
   let filled: Map<number, FilledZone>;
@@ -904,8 +988,11 @@ export async function importDocument(
     // is a recording or someone to talk to, and guessing wrong means the
     // creator undoes work. The character fields are filled either way, so
     // switching an audio zone over costs one tap.
-    const type: ImportZone['type'] = b.type_is_explicit === true ? suggested : 'audio';
+    const type: ImportZone['type'] = resolvedType(b);
     if (b.type_is_explicit === true && type !== 'audio') applied.push(`type: ${type}`);
+    if (b.character && Object.values(b.character).some(Boolean)) {
+      applied.push(type === 'character' ? 'character direction' : 'delivery direction');
+    }
 
     // A passphrase is only trusted if it is really in the document. A locked
     // zone whose answer appears nowhere is a dead end in the middle of a walk,

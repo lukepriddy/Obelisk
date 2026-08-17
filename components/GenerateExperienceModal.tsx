@@ -653,8 +653,9 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
                     </summary>
                     <div className="mt-2 pl-4 border-l border-zinc-800">
                       <p className="text-[11px] text-zinc-500 leading-relaxed mb-2">
-                        Put any of these on their own line inside a section. They are
-                        stripped out before your words are used, so a player never hears them.
+                        Put any of these on their own line inside a section. They are stripped out
+                        before your words are used, so a player never hears them. The last six
+                        direct a character: without them a chat has no objective and nothing to hold back.
                       </p>
                       <div className="grid grid-cols-2 gap-x-4 gap-y-1">
                         {[
@@ -668,6 +669,12 @@ export const GenerateExperienceModal: React.FC<Props> = ({ userId, onClose, onBu
                           ['[[mystery]]', 'unknown until found'],
                           ['[[radius: 6]]', 'this zone only'],
                           ['[[requires zone: 2]]', 'after zone 2'],
+                          ['[[persona: …]]', 'who they are'],
+                          ['[[wants: …]]', 'their objective'],
+                          ['[[reveals: …]]', 'and what unlocks it'],
+                          ['[[asks: …]]', 'what they put to you'],
+                          ['[[never: …]]', 'a hard limit'],
+                          ['[[voice: Charon]]', 'pick the voice'],
                         ].map(([code, what]) => (
                           <div key={code} className="flex items-baseline gap-2 min-w-0">
                             <code className="text-[10px] font-mono text-zinc-300 bg-zinc-800 px-1 py-0.5 rounded shrink-0">
