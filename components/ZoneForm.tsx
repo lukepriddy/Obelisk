@@ -813,8 +813,8 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
                 </select>
                 <p className="text-[10px] text-zinc-500 mt-1 leading-relaxed">
                   This character unlocks the selected zone when it decides the player has earned it,
-                  not after a set number of replies. Say what earns it in the personality prompt above
-                  , what the character is holding back and what a player has to do to get it.
+                  not after a set number of replies. Say what earns it in the personality prompt above:
+                  what the character is holding back, and what a player has to do to get it.
                   Without that, the character has no condition to judge and will never unlock anything.
                   The zone keeps its passphrase either way, so this is a second route in, not the only one.
                 </p>
