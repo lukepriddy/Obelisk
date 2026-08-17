@@ -3,11 +3,14 @@
 Where Obelisk stands between "a tool I use" and "a platform other people use,"
 and what's deliberately not done yet.
 
-Last refreshed 2026-08-11. Several claims in the previous version had gone
-stale, which matters because this document is used to decide what to do next
-and it was overstating risk in some places while understating it in others.
-Security posture is audited separately in `docs/platform-audit-2026-08-11.md`;
-all seven findings from that audit were closed on 2026-08-12.
+Last refreshed 2026-08-17. Security posture is audited separately in
+`docs/platform-audit-2026-08-11.md`; all seven findings from that audit were
+closed on 2026-08-12.
+
+Changed since the 2026-08-11 refresh: script import shipped (see below), the
+key-resolution and rate-limit design was worked out and written down as
+section 5, and the ordering at the bottom is new. This document is used to
+decide what to do next, so anything stale in it costs real time.
 
 ## Already in place
 
@@ -41,6 +44,18 @@ removed.
 The licence position is unchanged and worth re-reading before any commercial
 step: the free tier bars use where value "derives substantially" from the
 engine. No reply was ever received to the outreach email.
+
+**Script import is shipped.** A finished script is pasted in and comes back as
+zones, with the creator's words carried across untouched: the document is
+numbered by line, the model returns line ranges, and the server does the
+slicing, so the model never handles the text and cannot paraphrase a cipher or
+transpose a glyph. Instructions written into the script (`[[locked: PIER]]`,
+`[[character]]`, `[[persona: ...]]` and the rest) are obeyed and stripped
+before the words are used, so they are never read aloud. Collectibles found in
+a script become the experience's progression resources. First production run,
+2026-08-17, turned a 14-beat Cluett-Schantz script into 17 zones: 2 character,
+1 discoverable, 2 locked, 8 hidden, all carrying their voiceover script, with
+progression enabled and one resource defined.
 
 ---
 
@@ -147,13 +162,77 @@ signature-verified `stripe-webhook` edge function with an idempotency table,
 plus a shared key resolver where the platform key is only handed out when
 `plan_tier = 'managed'` **and** the subscription is `active` or `trialing`.
 
-**Related gap to close at the same time:** `keyForTour()` and `keyForCaller()`
-currently fall back to the platform Gemini key for *any* creator without their
-own key, not just paying ones. Harmless while the only users are invited, but
-it must become conditional before Managed exists — otherwise the free tier
-silently gets the paid benefit.
+**The key-resolution and cap design that goes with it is section 5.** Do not
+build billing without reading it; the two share the same code path and doing
+them separately means touching key resolution twice.
 
 ---
+
+## 5. Whose key, and who sets the caps
+
+**Status:** designed, not built. Written down because it was worked out once
+and would otherwise be re-derived from scratch.
+
+Nothing here is urgent at three accounts. All of it becomes real the day
+somebody outside is pointed at the platform's API key.
+
+### The bug in the current model
+
+`keyForTour()` and `keyForCaller()` decide which Gemini key to use by asking a
+single question: has this creator saved a key of their own? If not, they get
+the platform key.
+
+That collapses two completely different people into one branch:
+
+- someone on a BYOK plan who has not added their key yet, who should be told
+  to add one
+- someone on a paid Managed plan, who is entitled to the platform key
+
+Both silently get the platform key today. As of 2026-08-17, 2 of 3 accounts
+have no key of their own and are billing to it. Harmless at this size, and
+the free tier silently getting the paid benefit the moment Managed exists.
+
+### The fix: the plan decides, not the presence of a key
+
+`profiles` already carries `plan_tier` and `stripe_subscription_status`, so
+there is something to branch on:
+
+- **BYOK plan:** use the creator's key. If it is missing, refuse and say so.
+  Never fall back.
+- **Managed plan, subscription `active` or `trialing`:** use the platform key.
+
+One resolver, used by every AI function, so this is a single place to change.
+
+### Caps follow from that, as one mechanism with two policies
+
+Two fields on an experience: **messages per player per day** and **messages
+per experience per day**.
+
+| Plan | Who sets them | What they protect |
+|---|---|---|
+| BYOK | The creator | Their own bill |
+| Managed | The platform, by tier | The platform's bill |
+
+On BYOK the creator sets them freely. It is their money, and the platform's
+only stake is a very high sanity ceiling to catch a runaway loop, which
+protects them too. On Managed the tier sets the ceiling and the creator may
+set anything lower.
+
+The settings UI is therefore worth building **once**, not per plan. It does
+not need pricing to exist. The only pricing-dependent number is the Managed
+ceiling.
+
+### What is and is not blocked on pricing
+
+Blocked, because they are tier definitions: the Managed ceiling numbers.
+
+Not blocked, and buildable at any point:
+
+- the per-player cap, which is an abuse rail rather than a product limit. It
+  can sit well above any honest playthrough (a playthrough is roughly 10 to 30
+  messages) without knowing a single price.
+- the plan branch in key resolution, which is a correctness fix and not a
+  pricing decision.
 
 ## Known soft spots
 
@@ -161,6 +240,22 @@ silently gets the paid benefit.
   `pending_review` by design, but breaking the key to prove it would have taken
   down character chat on live tours. A waterfall of Gemini keys would make this
   largely moot.
+- **AI rate limits are keyed on the tour, not the player.** `gemini-chat`
+  allows 30 calls a minute and 500 a day, counted per `tourId` in
+  `api_usage_events`. These are the platform's own limits, in
+  `supabase/functions/gemini-chat/index.ts`, not Google's; Google's quotas sit
+  above them and are never reached first, which is deliberate.
+  Two consequences, both inside a single experience rather than across the
+  platform: one abusive player can drain a tour's whole day and lock out every
+  legitimate player of it, and a genuinely popular tour hits the ceiling on
+  honest use at roughly 20 to 50 playthroughs a day. The number is arbitrary;
+  the keying is the actual flaw. Fixed by the per-player cap in section 5.
+
+- **Script import has one production run behind it.** The mechanics came out
+  right (see "Already in place"), but that is a single document by the person
+  who designed the format. Nothing is known yet about how it reads a script
+  written by somebody else, or one whose sectioning is less regular.
+
 - **Storage ledger can be bypassed.** `uploads` is written by the client after
   a successful upload, so a determined caller hitting Supabase Storage directly
   would undercount their usage. Closing it needs a trigger on `storage.objects`
@@ -194,3 +289,38 @@ silently gets the paid benefit.
   readable only by its owner. Drafts, review verdicts, passphrases and
   character personas are no longer reachable by anyone but the creator, signed
   in or not. Every finding in `docs/platform-audit-2026-08-11.md` is closed.
+
+---
+
+## Housekeeping
+
+Small, none of them blocking, all of them cheap.
+
+- **Retention purge is written but never scheduled.** `purge_old_data()` exists
+  and dry-runs by default. Nobody has decided the cutoff or put it on a
+  schedule.
+- **Roughly 101 MB of pre-resize images.** New uploads are downscaled in the
+  browser now; the existing full-size ones were never reclaimed.
+- **Em dashes in older UI strings.** House style is no em dashes in text
+  output. The files touched since 2026-08-16 are clean; the rest of the app is
+  not.
+- **Code splitting.** The build warns about chunks over 500 kB. Declined on
+  2026-08-15 as not worth the risk for the current audience.
+
+---
+
+## What to do next, in order
+
+1. **Invite one real creator.** Section 3. Still not started, still the
+   cheapest high-information step available, and almost everything below is
+   blocked on what it tells you. It answers whether the BYOK key step is a mild
+   annoyance or a wall, which decides whether Managed is an upsell or the
+   default tier, which sets the prices, which sets the caps in section 5.
+2. **Make key resolution branch on plan.** Section 5. A correctness fix, not a
+   pricing decision, and the free tier silently gets the paid benefit until it
+   is done.
+3. **Entity, terms review, DMCA agent.** Section 2. Gates public signups. The
+   DMCA registration is about $6 and is the cheapest risk reduction on this
+   whole document.
+4. **Per-player cap.** Section 5. An abuse rail; buildable without pricing.
+5. **Stripe and the Managed tier.** Section 4, once 1 has told you the price.
