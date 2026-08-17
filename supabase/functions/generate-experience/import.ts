@@ -79,9 +79,11 @@ interface ReadingBlock {
   suggested_type: 'audio' | 'character' | 'discoverable';
   reason: string;
 
-  /** Lines inside this block that are instructions TO US, not content.
-   *  Dropped before slicing, so a note like "[[locked: PIER]]" never ends up
-   *  in the voiceover script and gets read aloud to a player. */
+  /** Lines inside this block that must not reach the player: instructions the
+   *  creator wrote to us, and section headings, which name a zone rather than
+   *  being part of it. Dropped before slicing, so neither "[[locked: PIER]]"
+   *  nor "Step 4: The Crossroads" ends up in the voiceover script and gets
+   *  read aloud. */
   directive_lines: number[];
 
   /** True when the creator stated the type outright rather than us inferring
@@ -335,6 +337,10 @@ Identify who speaks each zone. Give each distinct speaker one stable id and reus
 
 TYPE
 "character" means the player can talk to them. "audio" means the player listens. "discoverable" is a small collectible the player picks up at a spot, granting them something. First-person monologue reads the same as audio or character either way, so when it is genuinely ambiguous choose "audio", set type_is_explicit false, and note it. When the creator states the type outright, set type_is_explicit true.
+
+HEADINGS ARE LABELS, NOT LINES TO BE HEARD
+"Step 4: The Crossroads" or "3. Mother Goose" names a section; it is not something a player should hear read aloud. Put the heading's line number in directive_lines so it is stripped from the spoken text, and use the heading text as the block's label so it names the zone instead.
+The exception is a heading that IS the content. In a run of one-word beats like "Step 5: North" / "Step 6: of", the whole beat sits on the heading line, and stripping it would leave the zone empty. Keep those, and say so in reason.
 
 INSTRUCTIONS TO US, MIXED INTO THE SCRIPT
 Creators annotate their own documents. A line may say "[[locked: PIER]]", "[[character]]", "make this one loop", "hidden zone", "radius 8m". These are instructions, NOT content, and this matters twice over: the setting has to be applied, and the line must never reach the player. Put every such line number in directive_lines so it is stripped before the text is used. A missed one gets read aloud by a text-to-speech voice.
