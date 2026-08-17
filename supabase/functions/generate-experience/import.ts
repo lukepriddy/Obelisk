@@ -562,7 +562,7 @@ WHEN A ZONE CARRIES DIRECTION
 Some zones come with direction the creator wrote: persona, wants, reveals, asks, never. That is not a suggestion to work from, it is the specification. Build character_prompt so that all of it survives:
 - persona becomes how they speak, in their own register. If it says soft-spoken, the character never raises its voice.
 - wants is their objective in every exchange. It should shape what they steer towards.
-- reveals is the payload AND its price. State plainly in the prompt what unlocks it, so the character does not hand it over on the first question.
+- reveals is the payload AND its price. State both plainly in the prompt, as a condition the character can judge for itself: what it is holding back, and exactly what a player has to do to earn it. This is load-bearing, not flavour: a character can be set to unlock a locked zone elsewhere in the experience, and it decides when that has been earned by reading this condition. Vague wording means it never fires, or fires on hello.
 - asks must be put to the player in their own words, not paraphrased into a topic.
 - never is absolute. Write it into the prompt as a hard rule, and add that they will deflect in character rather than break it.
 Where a zone has direction and is an audio zone rather than a character one, use persona as the delivery direction for voice_instructions and ignore the rest.

@@ -13,6 +13,36 @@ const NO_STAGE_DIRECTIONS =
   'Speak only as dialogue, exactly as it would be heard aloud. ' +
   'Keep replies concise and voice-chat natural: usually 1 to 3 short sentences unless the player asks for detail.';
 
+/**
+ * Earning the unlock.
+ *
+ * A character zone can open a locked zone elsewhere. That used to fire on the
+ * FIRST reply, so a player typed "hi" and the lock opened — which makes a
+ * puzzle character pointless, since the puzzle was never the thing being
+ * solved. The character now decides, and says so with a token.
+ *
+ * The token is stripped before the line is shown or spoken, so the player only
+ * ever sees the reply. It is deliberately ugly and bracketed so it cannot
+ * occur in natural dialogue, and it is matched anywhere in the message because
+ * models put it on its own line about as often as they put it at the end.
+ *
+ * No fallback on message count, on purpose. The target zone always has a
+ * passphrase — the editor only offers passphrase-locked zones here — so a
+ * player who never earns the conversation route still has the ordinary way in.
+ * A count-based fallback would just be the old behaviour with extra steps.
+ */
+const UNLOCK_TOKEN = '<<UNLOCK>>';
+const UNLOCK_RE = /<<\s*UNLOCK\s*>>/gi;
+
+const unlockInstruction = (zone: Zone) => zone.avatar_unlock_zone_id
+  ? '\n\nEARNING THE UNLOCK: you are holding something back, as described above. ' +
+    'The moment the player has genuinely earned it and you have actually revealed ' +
+    `it to them, include ${UNLOCK_TOKEN} anywhere in that same message. ` +
+    'Include it exactly once, in the message where the reveal happens, never before. ' +
+    'A player who has not met the condition does not get it, however they ask, ' +
+    'and you never mention the token or explain that it exists.'
+  : '';
+
 const TEXT_LIMIT  = 70;  // text replies before conversation ends
 
 // Injected as model messages (not from the API) when limits are hit.
@@ -155,17 +185,25 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
 
     try {
       const conversationHistory = newHistory.filter(m => m.role === 'user' || m.role === 'model');
-      const replyText = await geminiService.generateText(
+      const rawReply = await geminiService.generateText(
         conversationHistory.slice(0, -1), text,
-        (zone.character_prompt || 'You are a helpful assistant.') + NO_STAGE_DIRECTIONS,
+        (zone.character_prompt || 'You are a helpful assistant.') + NO_STAGE_DIRECTIONS + unlockInstruction(zone),
         zone.tour_id,
       );
 
+      // Strip the token before the line is stored, shown or spoken. Stored
+      // stripped as well, because history is replayed from sessionStorage and
+      // a token surviving a remount would show up in the transcript.
+      const earned = UNLOCK_RE.test(rawReply);
+      UNLOCK_RE.lastIndex = 0;
+      const replyText = earned
+        ? rawReply.replace(UNLOCK_RE, '').replace(/[ \t]{2,}/g, ' ').trim()
+        : rawReply;
+
       setHistory(prev => [...prev, { role: 'model', text: replyText }]);
 
-      // Fire zone unlock exactly once, immediately on reply text arriving —
-      // not gated on TTS completing, not repeated on subsequent messages.
-      if (!hasUnlockedRef.current && zone.avatar_unlock_zone_id && onUnlock) {
+      // The character decided the player earned it. Once per zone.
+      if (earned && !hasUnlockedRef.current && zone.avatar_unlock_zone_id && onUnlock) {
         hasUnlockedRef.current = true;
         onUnlock(zone.avatar_unlock_zone_id);
       }

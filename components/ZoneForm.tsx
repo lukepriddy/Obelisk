@@ -795,7 +795,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
           {/* After Conversation — Avatar Unlock */}
           <div className="border-t border-zinc-800 pt-5">
             <label className="block text-xs font-bold text-zinc-400 uppercase mb-2 flex items-center gap-2">
-              <KeySquare size={14} /> After Conversation Ends
+              <KeySquare size={14} /> Unlock a Zone by Earning It
             </label>
             {zonesList && zonesList.filter(z => z.id !== zone.id && z.lock_type === 'passphrase').length > 0 ? (
               <>
@@ -811,7 +811,13 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
                       <option key={z.id} value={z.id}>{z.title}</option>
                     ))}
                 </select>
-                <p className="text-[10px] text-zinc-500 mt-1">Completing this conversation automatically unlocks the selected locked zone.</p>
+                <p className="text-[10px] text-zinc-500 mt-1 leading-relaxed">
+                  This character unlocks the selected zone when it decides the player has earned it,
+                  not after a set number of replies. Say what earns it in the personality prompt above
+                  , what the character is holding back and what a player has to do to get it.
+                  Without that, the character has no condition to judge and will never unlock anything.
+                  The zone keeps its passphrase either way, so this is a second route in, not the only one.
+                </p>
               </>
             ) : (
               <p className="text-[10px] text-zinc-500 bg-zinc-800/40 rounded p-2">
