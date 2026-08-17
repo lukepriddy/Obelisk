@@ -36,11 +36,16 @@ const UNLOCK_RE = /<<\s*UNLOCK\s*>>/gi;
 
 const unlockInstruction = (zone: Zone) => zone.avatar_unlock_zone_id
   ? '\n\nEARNING THE UNLOCK: you are holding something back, as described above. ' +
-    'The moment the player has genuinely earned it and you have actually revealed ' +
-    `it to them, include ${UNLOCK_TOKEN} anywhere in that same message. ` +
-    'Include it exactly once, in the message where the reveal happens, never before. ' +
-    'A player who has not met the condition does not get it, however they ask, ' +
-    'and you never mention the token or explain that it exists.'
+    'When the player meets the condition, reply to them normally and fully: ' +
+    'acknowledge what they just did, in your own voice, and reveal what you were ' +
+    `holding back. Then add ${UNLOCK_TOKEN} at the very end of that same message.\n` +
+    `The ${UNLOCK_TOKEN} is an addition to your reply, never a replacement for it. ` +
+    'A message containing only the marker, or the marker with a bare acknowledgement ' +
+    'and no reveal, is wrong: the player would be left in silence at the exact moment ' +
+    'they succeeded. Always speak first, mark second.\n' +
+    'Use it exactly once, in the message where the reveal happens, never before. ' +
+    'A player who has not met the condition does not get it, however they ask. ' +
+    'Never mention the marker or explain that it exists.'
   : '';
 
 const TEXT_LIMIT  = 70;  // text replies before conversation ends
@@ -185,10 +190,10 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
 
     try {
       const conversationHistory = newHistory.filter(m => m.role === 'user' || m.role === 'model');
+      const systemInstruction =
+        (zone.character_prompt || 'You are a helpful assistant.') + NO_STAGE_DIRECTIONS + unlockInstruction(zone);
       const rawReply = await geminiService.generateText(
-        conversationHistory.slice(0, -1), text,
-        (zone.character_prompt || 'You are a helpful assistant.') + NO_STAGE_DIRECTIONS + unlockInstruction(zone),
-        zone.tour_id,
+        conversationHistory.slice(0, -1), text, systemInstruction, zone.tour_id,
       );
 
       // Strip the token before the line is stored, shown or spoken. Stored
@@ -196,11 +201,33 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
       // a token surviving a remount would show up in the transcript.
       const earned = UNLOCK_RE.test(rawReply);
       UNLOCK_RE.lastIndex = 0;
-      const replyText = earned
+      let replyText = earned
         ? rawReply.replace(UNLOCK_RE, '').replace(/[ \t]{2,}/g, ' ').trim()
         : rawReply;
 
-      setHistory(prev => [...prev, { role: 'model', text: replyText }]);
+      // A model told to emit a token sometimes emits ONLY the token, and
+      // stripping it then leaves nothing to say at the single most important
+      // moment in the conversation: the player solved it and the character
+      // went silent. Ask once for the line that should have come with it.
+      if (earned && !replyText) {
+        try {
+          const recovered = await geminiService.generateText(
+            conversationHistory.slice(0, -1), text,
+            systemInstruction +
+              '\n\nThe player has just met the condition. Give them your reply now: ' +
+              'acknowledge what they did, in character, and reveal what you were holding back. ' +
+              'Do not include any token or marker of any kind in this message.',
+            zone.tour_id,
+          );
+          replyText = recovered.replace(UNLOCK_RE, '').trim();
+        } catch {
+          // Leave replyText empty; the guard below drops the bubble rather
+          // than rendering a blank one. The unlock still stands, because the
+          // player earned it whatever the model did with its words.
+        }
+      }
+
+      if (replyText) setHistory(prev => [...prev, { role: 'model', text: replyText }]);
 
       // The character decided the player earned it. Once per zone.
       if (earned && !hasUnlockedRef.current && zone.avatar_unlock_zone_id && onUnlock) {
