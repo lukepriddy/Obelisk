@@ -86,6 +86,11 @@ interface ReadingBlock {
    *  read aloud. */
   directive_lines: number[];
 
+  /** True when the FIRST line of this block starts with a heading label that
+   *  the content follows on the same line, as in "Step 7: the". Stripping a
+   *  whole line would delete the beat, so the server removes just the label. */
+  label_on_first_line: boolean;
+
   /** True when the creator stated the type outright rather than us inferring
    *  it. An explicit instruction is obeyed; an inference is only suggested. */
   type_is_explicit: boolean;
@@ -361,7 +366,7 @@ TYPE
 
 HEADINGS ARE LABELS, NOT LINES TO BE HEARD
 "Step 4: The Crossroads" or "3. Mother Goose" names a section; it is not something a player should hear read aloud. Put the heading's line number in directive_lines so it is stripped from the spoken text, and use the heading text as the block's label so it names the zone instead.
-The exception is a heading that IS the content. In a run of one-word beats like "Step 5: North" / "Step 6: of", the whole beat sits on the heading line, and stripping it would leave the zone empty. Keep those, and say so in reason.
+The exception is a heading that IS the content. In a run of one-word beats like "Step 5: North" / "Step 6: of", the whole beat sits on the heading line, and stripping the line would leave the zone empty. Keep the line in the range, and set label_on_first_line true so the "Step 5:" part is removed and the player hears only the word. Say so in reason.
 
 INSTRUCTIONS TO US, MIXED INTO THE SCRIPT
 Creators annotate their own documents. A line may say "[[locked: PIER]]", "[[character]]", "make this one loop", "hidden zone", "radius 8m". These are instructions, NOT content, and this matters twice over: the setting has to be applied, and the line must never reach the player. Put every such line number in directive_lines so it is stripped before the text is used. A missed one gets read aloud by a text-to-speech voice.
@@ -422,6 +427,7 @@ const READ_SCHEMA = {
           suggested_type: { type: 'STRING', enum: ['audio', 'character', 'discoverable'] },
           reason: { type: 'STRING' },
           directive_lines: { type: 'ARRAY', items: { type: 'INTEGER' } },
+          label_on_first_line: { type: 'BOOLEAN' },
           type_is_explicit: { type: 'BOOLEAN' },
           locked: { type: 'BOOLEAN' },
           lock_passphrase: { type: 'STRING', nullable: true },
@@ -546,7 +552,9 @@ RULES
 
 FIELDS
 - title: 2–5 words naming this stop. If the script already labels the section, keep that label's sense.
-- description: a production note for the creator, not for the player. What happens here, what audio is needed, any stage direction present in the script. One or two sentences.
+- description: PLAYER-FACING. It appears on the card while the zone is playing, and on a character's card when there is no bio. One or two sentences, present tense, atmosphere rather than plot.
+  Never write about "the player" or "the user". The person reading it IS the player, so "The player meets Naru, who expresses gratitude" is wrong twice over: it talks about them in the third person, and it tells them the ending before they hear it.
+  It supplements the moment, it does not summarise it. Name the place, the weather, the sound, the thing they can see from where they are standing. Never name what is about to be revealed, who is about to speak, or how it resolves. If the zone has a secret, the description is the part that makes them want it, not the part that gives it up.
 - entry_message: 1–2 sentences the player sees on arrival. A hook, never a summary, and never a spoiler. Null if the script's own opening already serves that purpose.
 - character_prompt: only when there is a speaker. Second person ("You are…"), covering voice, what they want, and what they know but will not volunteer. Ground it in details from the script.
 
@@ -819,12 +827,26 @@ export async function importDocument(
    * in the slice it lands in voiceover_script, and a text-to-speech voice
    * reads the creator's note out loud to a player standing in a park.
    */
-  const sliceLines = (a: number, b: number, skip: Set<number> = new Set()) =>
-    lines
+  const sliceLines = (
+    a: number,
+    b: number,
+    skip: Set<number> = new Set(),
+    stripLabel = false,
+  ) => {
+    const kept = lines
       .slice(Math.max(0, a - 1), Math.min(lines.length, b))
-      .filter((_, i) => !skip.has(a + i))
-      .join('\n')
-      .trim();
+      .filter((_, i) => !skip.has(a + i));
+
+    // "Step 7: the" is a beat whose whole content shares a line with its
+    // label. Dropping the line would delete the word, so the label alone comes
+    // off — done here, by rule, rather than by asking the model to retype the
+    // creator's text. Bounded to a short prefix so it can never eat a sentence
+    // that merely contains a colon.
+    if (stripLabel && kept.length) {
+      kept[0] = kept[0].replace(/^\s*[^:\n]{1,30}:[ \t]*/, '');
+    }
+    return kept.join('\n').trim();
+  };
 
   // Sort by position and drop anything nonsensical rather than trusting order.
   const blocks = reading.blocks
@@ -849,7 +871,7 @@ export async function importDocument(
 
   const zoneBlocks = blocks
     .filter(b => b.kind === 'zone' && b.end_line >= b.start_line)
-    .filter(b => sliceLines(b.start_line, b.end_line, skipFor(b)).length > 0)
+    .filter(b => sliceLines(b.start_line, b.end_line, skipFor(b), b.label_on_first_line === true).length > 0)
     .slice(0, MAX_ZONES);
 
   if (zoneBlocks.length === 0) throw new Error('import_no_zones_found');
@@ -945,7 +967,7 @@ export async function importDocument(
     order: i + 1,
     label: b.label,
     speaker: b.speaker_id ? speakerById.get(b.speaker_id) ?? null : null,
-    script: sliceLines(b.start_line, b.end_line, skipFor(b)),
+    script: sliceLines(b.start_line, b.end_line, skipFor(b), b.label_on_first_line === true),
     type: resolvedType(b),
     direction: b.character ?? null,
   }));
@@ -1058,7 +1080,7 @@ export async function importDocument(
       radius,
       location_name: b.label || title,
       description: take('description', f?.description) ?? '',
-      script: sliceLines(b.start_line, b.end_line, skipFor(b)),
+      script: sliceLines(b.start_line, b.end_line, skipFor(b), b.label_on_first_line === true),
       entry_message: take('entry_message', f?.entry_message),
       character_prompt: take('character_prompt', f?.character_prompt),
       character_bio: take('character_bio', f?.character_bio),
