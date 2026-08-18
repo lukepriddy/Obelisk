@@ -266,7 +266,16 @@ Not blocked, and buildable at any point:
   who designed the format. Nothing is known yet about how it reads a script
   written by somebody else, or one whose sectioning is less regular.
 
-- **Storage ledger can be bypassed.** `uploads` is written by the client after
+- **Storage ledger can be bypassed.** Checked 2026-08-17 and it is still only
+  theoretical: every creator upload is accounted for, with no orphan rows and
+  no duplicates. The 29 storage files with no ledger row are all platform
+  library assets seeded by hand on 2026-05-28 (the Gemini voice samples and the
+  ambient sound library), which correctly belong to nobody's quota.
+  **Trap for whoever builds the fix:** those 29 files carry Luke's uid in
+  `storage.objects.owner_id`, so a trigger that writes the ledger from the
+  object's owner would silently bill about 20 MB of platform assets to his
+  personal quota. Exclude them explicitly.
+  Original problem: `uploads` is written by the client after
   a successful upload, so a determined caller hitting Supabase Storage directly
   would undercount their usage. Closing it needs a trigger on `storage.objects`
   or proxying uploads through an edge function.
