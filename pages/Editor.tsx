@@ -541,7 +541,7 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
       if (state) setTour(prev => prev && ({ ...prev, ...state }));
     } catch (err) {
       console.error('saveTour failed:', err);
-      setSaveError('Save failed — check your connection and try again.');
+      setSaveError('Save failed. Check your connection and try again.');
     } finally {
       setPublishing(false);
       setSaving(false);
@@ -611,7 +611,7 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
         <button
           onClick={() => setActiveTool('draw')}
           className={`p-3 rounded-lg transition-all ${activeTool === 'draw' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-900/50' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'}`}
-          title="Add Zone — click map to place"
+          title="Add Zone (click map to place)"
         >
           <PlusCircle size={22} />
         </button>
@@ -620,7 +620,7 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
         <button
           onClick={() => setActiveTool('place-start')}
           className={`p-3 rounded-lg transition-all ${activeTool === 'place-start' ? 'bg-amber-500 text-white shadow-lg shadow-amber-900/50' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'}`}
-          title={tour.lat === 0 && tour.lng === 0 ? 'Place Start Point — click map' : 'Move Start Point — click map'}
+          title={tour.lat === 0 && tour.lng === 0 ? 'Place Start Point (click map)' : 'Move Start Point (click map)'}
         >
           <MapPin size={22} />
         </button>
@@ -750,7 +750,7 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
       {tour.lat === 0 && tour.lng === 0 && activeTool !== 'place-start' && (
         <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[500] pointer-events-none">
           <div className="bg-zinc-900/95 border border-amber-500/50 text-amber-400 text-sm px-4 py-2 rounded-full shadow-lg flex items-center gap-2">
-            <MapPin size={14} /> No start point set — use the flag tool to place one
+            <MapPin size={14} /> No start point set. Use the flag tool to place one
           </div>
         </div>
       )}

@@ -97,7 +97,7 @@ const ApiKeyRow: React.FC<{
     const ok = await onSave(value.trim());
     setBusy(false);
     if (ok) { setValue(''); setShow(false); setMessage('Key saved.'); }
-    else setMessage('Failed to save — please try again.');
+    else setMessage('Failed to save. Please try again.');
   };
 
   const remove = async () => {
@@ -105,7 +105,7 @@ const ApiKeyRow: React.FC<{
     setMessage(null);
     const ok = await onRemove();
     setBusy(false);
-    setMessage(ok ? 'Key removed.' : 'Failed to remove — please try again.');
+    setMessage(ok ? 'Key removed.' : 'Failed to remove. Please try again.');
   };
 
   return (
@@ -811,7 +811,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
                 <div className="flex items-center justify-between mb-6">
                   <div>
                     <h1 className="text-2xl font-bold text-white tracking-tight">Analytics</h1>
-                    <p className="text-sm text-zinc-500 mt-0.5">Real plays from the player URL — preview sessions excluded</p>
+                    <p className="text-sm text-zinc-500 mt-0.5">Real plays from the player URL, preview sessions excluded</p>
                   </div>
                 </div>
 

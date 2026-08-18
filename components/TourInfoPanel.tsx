@@ -323,7 +323,7 @@ export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({
             <p className={`text-[10px] mt-1.5 ${tour.welcome_image_url ? 'text-zinc-500' : 'text-amber-500/80'}`}>
               {tour.welcome_image_url
                 ? 'Shown on the welcome screen, and as the preview when this link is shared.'
-                : 'Without one, sharing this link shows no picture — just the title. Worth adding.'}
+                : 'Without one, sharing this link shows no picture, just the title. Worth adding.'}
             </p>
             {imageError && (
               <p className="mt-1.5 text-xs text-red-400 leading-snug">{imageError}</p>

@@ -130,7 +130,7 @@ export const AdminModeration: React.FC = () => {
       // Approving can succeed while the invite email fails; that distinction
       // matters, so don't swallow it behind a generic refresh.
       if (result?.message) setNotice(result.message);
-      else if (result?.invited) setNotice('Invited — they\'ve been emailed a sign-up link.');
+      else if (result?.invited) setNotice('Invited. They\'ve been emailed a sign-up link.');
       await load();
     } catch {
       setError('That action failed. Try again.');

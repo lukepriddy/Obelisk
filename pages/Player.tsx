@@ -1853,7 +1853,7 @@ export const Player: React.FC = () => {
               const reliable = simulationMode || (gpsFixRef.current?.accuracy ?? Infinity) <= 100;
               return (
                 <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5 border-t border-amber-500/30 pt-1.5 text-amber-100/80">
-                  <span>Started</span><span className="text-right">{audioStarted ? 'yes' : 'NO — tap Begin'}</span>
+                  <span>Started</span><span className="text-right">{audioStarted ? 'yes' : 'NO (tap Begin)'}</span>
                   <span>AR zones w/ asset</span><span className="text-right">{arZones.length}</span>
                   {nearest ? (<>
                     <span>Nearest AR zone</span><span className="text-right truncate">{nearest.z.title || '(untitled)'}</span>

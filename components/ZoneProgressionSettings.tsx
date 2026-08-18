@@ -176,7 +176,7 @@ export const ZoneProgressionSettings: React.FC<ZoneProgressionSettingsProps> = (
                   }`}
                   aria-label="Toggle variable amount"
                   aria-pressed={isVariable}
-                  title="Variable amount — grants a random number in this range"
+                  title="Variable amount: grants a random number in this range"
                 >
                   <Dices size={14} />
                 </button>

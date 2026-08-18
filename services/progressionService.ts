@@ -15,7 +15,17 @@ const clampAmount = (value: unknown) => {
   return Number.isFinite(amount) ? Math.max(0, amount) : 0;
 };
 
-const getPlayerId = () => {
+/**
+ * The anonymous player's id, created once and kept in localStorage.
+ *
+ * Exported because it is also what the AI rate limiter keys on. It is
+ * client-supplied and therefore clearable, which makes it a speed bump rather
+ * than a wall: it stops one player accidentally or casually draining a tour's
+ * daily budget for everybody else, and does not stop somebody determined. The
+ * alternative, keying on IP, groups mobile players behind carrier NAT and
+ * would punish legitimate players sharing a network.
+ */
+export const getPlayerId = () => {
   try {
     const existing = localStorage.getItem(PLAYER_ID_KEY);
     if (existing) return existing;

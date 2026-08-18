@@ -75,7 +75,7 @@ const AudioPreview: React.FC<{ url: string; volume?: number }> = ({ url, volume 
     return (
       <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 mt-2 text-xs text-red-300">
         <AlertCircle size={13} className="shrink-0" />
-        This audio can't be loaded — check the link or re-upload. Players would hear nothing.
+        This audio can't be loaded. Check the link or re-upload. Players would hear nothing.
       </div>
     );
   }
@@ -337,14 +337,14 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
       });
       if (error || !data?.url) {
         const msg = await fnErrorMessage(error, data);
-        setTtsError(msg || 'Voice generation failed — please try again.');
+        setTtsError(msg || 'Voice generation failed. Please try again.');
       } else {
         onUpdate({ media_url: data.url });
         recordRecentVoice(ttsVoiceId);
         setTtsDone(true);
       }
     } catch {
-      setTtsError('Voice generation failed — please try again.');
+      setTtsError('Voice generation failed. Please try again.');
     }
     setTtsGenerating(false);
   };
@@ -660,7 +660,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
               onChange={(e) => onUpdate({ character_bio: e.target.value })}
               placeholder="Who is this character?"
             />
-            <p className="text-[10px] text-zinc-500 mt-1">Shown on the card players see before starting the conversation. Keep it evocative — set the scene.</p>
+            <p className="text-[10px] text-zinc-500 mt-1">Shown on the card players see before starting the conversation. Keep it evocative and set the scene.</p>
           </div>
 
           {/* Character Persona */}
@@ -675,7 +675,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
               placeholder="Personality, voice, goals…"
             />
             <p className="text-[10px] text-zinc-400 mt-1.5">
-              Defines the AI's personality, knowledge, and goals. Be specific — the more detail, the better the character.
+              Defines the AI's personality, knowledge, and goals. Be specific: the more detail, the better the character.
               E.g. "You are a grumpy troll under this bridge. You demand a riddle to pass. Keep answers short and in character."
             </p>
           </div>
@@ -804,7 +804,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
                   value={zone.avatar_unlock_zone_id || ''}
                   onChange={(e) => onUpdate({ avatar_unlock_zone_id: e.target.value || null })}
                 >
-                  <option value="">— No automatic unlock —</option>
+                  <option value="">No automatic unlock</option>
                   {zonesList
                     .filter(z => z.id !== zone.id && z.lock_type === 'passphrase')
                     .map(z => (
@@ -1067,7 +1067,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
                       )}
                       {ttsDone && (
                         <p className="text-xs text-emerald-400">
-                          Voiceover saved as this zone's audio — preview it below. Generate again to replace it.
+                          Voiceover saved as this zone's audio. Preview it below. Generate again to replace it.
                         </p>
                       )}
 
@@ -1432,7 +1432,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
                       )}
                       {ttsDone && (
                         <p className="text-xs text-emerald-400">
-                          Voiceover saved as this zone's audio — preview it below. Generate again to replace it.
+                          Voiceover saved as this zone's audio. Preview it below. Generate again to replace it.
                         </p>
                       )}
 
@@ -1581,9 +1581,9 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
                     ))}
                   </div>
                   <p className="text-[10px] text-zinc-500 mt-1">
-                    <strong className="text-zinc-400">Stop</strong> — plays once per visit, replays on re-entry. &nbsp;
-                    <strong className="text-zinc-400">Loop</strong> — repeats. &nbsp;
-                    <strong className="text-red-400">Destroy</strong> — plays once, then gone for the session.
+                    <strong className="text-zinc-400">Stop</strong>: plays once per visit, replays on re-entry. &nbsp;
+                    <strong className="text-zinc-400">Loop</strong>: repeats. &nbsp;
+                    <strong className="text-red-400">Destroy</strong>: plays once, then gone for the session.
                   </p>
                 </div>
               </div>
@@ -1636,7 +1636,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
                     <button key={behavior} type="button" onClick={() => updateArConfig({ behavior })} className={`flex-1 py-2 rounded text-xs font-bold capitalize ${arConfig.behavior === behavior ? 'bg-sky-600 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}>{behavior}</button>
                   ))}
                 </div>
-                <p className="text-[10px] text-zinc-500 mt-1.5">{arConfig.behavior === 'static' ? 'Floats at a fixed spot near this zone — place it on the pad below.' : 'Loops slowly through this zone\'s coordinate on a real geographic path.'}</p>
+                <p className="text-[10px] text-zinc-500 mt-1.5">{arConfig.behavior === 'static' ? 'Floats at a fixed spot near this zone. Place it on the pad below.' : 'Loops slowly through this zone\'s coordinate on a real geographic path.'}</p>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1743,7 +1743,7 @@ export const ZoneForm: React.FC<ZoneFormProps> = ({
               value={zone.requires_zone_id || ''}
               onChange={(e) => onUpdate({ requires_zone_id: e.target.value || null })}
             >
-              <option value="">— No prerequisite —</option>
+              <option value="">No prerequisite</option>
               {zonesList
                 .filter(z => z.id !== zone.id)
                 .map(z => (

@@ -226,7 +226,7 @@ async function upload(
   const { error } = await supabase.storage.from(bucket).upload(path, file, { upsert: false });
   if (error) {
     console.error(`${bucket} upload failed:`, error.message);
-    return fail('Upload failed — check your connection and try again.');
+    return fail('Upload failed. Check your connection and try again.');
   }
 
   await recordUpload(bucket, path, file, tourId);

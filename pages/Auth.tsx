@@ -79,7 +79,7 @@ export const Auth: React.FC = () => {
     const { error } = await auth.verifyOtp(email.trim(), token);
     setLoading(false);
     if (error) {
-      setErrorMsg('Incorrect code — check your email and try again.');
+      setErrorMsg('Incorrect code. Check your email and try again.');
       setCode(['', '', '', '', '', '', '', '']);
       inputRefs.current[0]?.focus();
     }
@@ -205,7 +205,7 @@ export const Auth: React.FC = () => {
               </form>
 
               <p className="mt-5 text-[11px] text-center text-zinc-600">
-                We'll email you an 8-digit code — no password needed.
+                We'll email you an 8-digit code, no password needed.
               </p>
             </>
           ) : (

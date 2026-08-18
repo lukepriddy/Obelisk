@@ -6,6 +6,7 @@
 
 import { ChatMessage } from "../types";
 import { supabase } from "./supabaseClient";
+import { getPlayerId } from "./progressionService";
 
 // Wraps raw PCM bytes from Gemini TTS in a WAV header so decodeAudioData can handle it
 function pcmToWav(pcmData: ArrayBuffer, sampleRate = 24000, numChannels = 1, bitsPerSample = 16): ArrayBuffer {
@@ -40,6 +41,8 @@ class GeminiService {
    * Text-only character reply. Fast — used to show the message immediately,
    * before (and independently of) the slower TTS step.
    * tourId lets the edge function charge the tour owner's Gemini key (BYOK).
+   * playerId is attached here rather than at the call sites so no future caller
+   * can forget it and quietly fall out of the per-player rate limit.
    */
   async generateText(
     history: ChatMessage[],
@@ -49,7 +52,7 @@ class GeminiService {
   ): Promise<string> {
     const { data, error } = await supabase.functions.invoke(
       'gemini-chat',
-      { body: { type: 'chat', history, userMessage: prompt, systemInstruction, tourId } }
+      { body: { type: 'chat', history, userMessage: prompt, systemInstruction, tourId, playerId: getPlayerId() } }
     );
     if (error) throw error;
     return data?.text || "I didn't catch that.";
@@ -70,7 +73,7 @@ class GeminiService {
     try {
       const { data: ttsData, error: ttsError } = await supabase.functions.invoke(
         'gemini-chat',
-        { body: { type: 'tts', textToSpeak: text, voiceStyle: voiceStyle || 'Kore', tourId, styleInstruction } }
+        { body: { type: 'tts', textToSpeak: text, voiceStyle: voiceStyle || 'Kore', tourId, styleInstruction, playerId: getPlayerId() } }
       );
       if (ttsError || !ttsData?.audioData) return undefined;
 

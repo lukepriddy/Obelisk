@@ -240,7 +240,17 @@ Not blocked, and buildable at any point:
   `pending_review` by design, but breaking the key to prove it would have taken
   down character chat on live tours. A waterfall of Gemini keys would make this
   largely moot.
-- **AI rate limits are keyed on the tour, not the player.** `gemini-chat`
+- ~~**AI rate limits are keyed on the tour, not the player.**~~ Per-player cap
+  added 2026-08-17. `gemini-chat` now checks two budgets: the tour ceiling as
+  before, and a much lower one keyed on tour plus `obelisk_player_id`, the uuid
+  the client already keeps in localStorage for progression. 120 chat messages
+  and 80 voice calls per player per day, against a playthrough of roughly 10 to
+  30. Checked second, so a player over their own limit does not also burn a slot
+  from the tour's budget on the way to being refused.
+  A speed bump, not a wall: clearing browser storage earns a new id. Keying on
+  IP was considered and rejected, because it groups mobile players behind
+  carrier NAT and would throttle strangers for each other's traffic. Original
+  problem, kept for context: `gemini-chat`
   allows 30 calls a minute and 500 a day, counted per `tourId` in
   `api_usage_events`. These are the platform's own limits, in
   `supabase/functions/gemini-chat/index.ts`, not Google's; Google's quotas sit
@@ -301,9 +311,11 @@ Small, none of them blocking, all of them cheap.
   schedule.
 - **Roughly 101 MB of pre-resize images.** New uploads are downscaled in the
   browser now; the existing full-size ones were never reclaimed.
-- **Em dashes in older UI strings.** House style is no em dashes in text
-  output. The files touched since 2026-08-16 are clean; the rest of the app is
-  not.
+- ~~**Em dashes in older UI strings.**~~ Swept 2026-08-17, 32 replacements
+  across 12 files. Deliberately left: a lone "—" used as a no-value glyph in a
+  stat row or input placeholder, which is a symbol rather than punctuation;
+  `console.error` and GPS-debug strings, which are developer output and never
+  shown; and the model-facing instruction in `ChatInterface`.
 - **Code splitting.** The build warns about chunks over 500 kB. Declined on
   2026-08-15 as not worth the risk for the current audience.
 
@@ -322,5 +334,14 @@ Small, none of them blocking, all of them cheap.
 3. **Entity, terms review, DMCA agent.** Section 2. Gates public signups. The
    DMCA registration is about $6 and is the cheapest risk reduction on this
    whole document.
-4. **Per-player cap.** Section 5. An abuse rail; buildable without pricing.
+4. ~~**Per-player cap.**~~ Done 2026-08-17. See the soft spots list.
 5. **Stripe and the Managed tier.** Section 4, once 1 has told you the price.
+
+Also deferred, with reasoning, in case it looks like an oversight: closing the
+**storage ledger bypass** needs three sequenced deploys (a unique index on
+bucket plus path, then a fail-open trigger on `storage.objects` with conflict
+handling, then removing the client-side insert), because the client already
+writes that ledger and a trigger alone would double every creator's measured
+storage overnight. Real work against a threat that requires somebody to
+deliberately bypass the app to under-report their own usage. Right time to do
+it is alongside the key-resolution work in section 5, when strangers arrive.

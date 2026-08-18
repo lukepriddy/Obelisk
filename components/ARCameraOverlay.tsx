@@ -861,7 +861,7 @@ export const ARCameraOverlay: React.FC<ARCameraOverlayProps> = ({
         const hint = scanning ? 'Move your phone slowly side to side to read the space'
           : !degraded ? null
           : tracking.reason === 'INSUFFICIENT_FEATURES' ? 'Point at something with more detail'
-          : tracking.reason === 'INSUFFICIENT_LIGHT' ? 'Too dark to track — more light will help'
+          : tracking.reason === 'INSUFFICIENT_LIGHT' ? 'Too dark to track, more light will help'
           : tracking.reason === 'EXCESSIVE_MOTION' || tracking.reason === 'MOTION' ? 'Move a little slower'
           : tracking.reason === 'RELOCALIZING' ? 'Finding your place again…'
           : 'Move your phone slowly side to side';

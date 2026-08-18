@@ -62,15 +62,28 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Players are anonymous, so the budget is per TOUR rather than per person.
-    // Set generously: a genuinely popular tour with many simultaneous players
-    // shares one bucket, and throttling real players is worse than the abuse
-    // this is guarding against.
+    // Two budgets, because one was never enough on its own.
+    //
+    // The TOUR budget is the blast radius: it caps what a single experience can
+    // cost in a day, and it is set generously because a popular tour with many
+    // simultaneous players shares one bucket and throttling real players is
+    // worse than the abuse it guards against.
+    //
+    // The PLAYER budget is the one that stops a single person spending that
+    // whole budget and locking out everyone else playing the same experience.
+    // A playthrough is roughly 10 to 30 messages, so this sits far above honest
+    // use and far below the tour ceiling.
+    //
+    // playerId is a uuid the client keeps in localStorage. Clearing storage
+    // earns a new one, so this is a speed bump and not a wall. The alternative,
+    // keying on IP, groups mobile players behind carrier NAT and would throttle
+    // strangers for each other's traffic. See docs/launch-readiness.md.
     if (type === 'chat' || type === 'tts') {
       const actorKey = typeof body.tourId === 'string' && UUID_RE.test(body.tourId)
         ? body.tourId
         : 'unknown-tour';
       const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+
       const usage = await checkAndRecordUsage(
         admin,
         `gemini-chat:${type}`,
@@ -81,6 +94,24 @@ Deno.serve(async (req) => {
         actorKey === 'unknown-tour' ? null : actorKey,
       );
       if (!usage.allowed) return rateLimited(usage, cors);
+
+      // Checked second, so a player who is over their own limit does not also
+      // burn a slot from the tour's budget on the way to being refused.
+      const playerId = typeof body.playerId === 'string' && UUID_RE.test(body.playerId)
+        ? body.playerId
+        : null;
+      if (playerId) {
+        const perPlayer = await checkAndRecordUsage(
+          admin,
+          `gemini-chat:${type}:player`,
+          `${actorKey}:${playerId}`,
+          type === 'chat'
+            ? { perMinute: 12, perDay: 120 }
+            : { perMinute: 12, perDay: 80 },
+          actorKey === 'unknown-tour' ? null : actorKey,
+        );
+        if (!perPlayer.allowed) return rateLimited(perPlayer, cors);
+      }
     }
 
     // ── TEXT GENERATION ──────────────────────────────────────────────────────
