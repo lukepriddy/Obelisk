@@ -58,7 +58,7 @@ export const ClosingCardSettings: React.FC<Props> = ({ tour, zones, onUpdate }) 
         Which zone ends the experience. Finishing it brings up the closing card.
       </p>
       <select
-        className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-white outline-none focus:border-emerald-500"
+        className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm text-white focus:border-emerald-500 focus:outline-none"
         value={tour.ending_zone_id || ''}
         onChange={(e) => onUpdate({ ending_zone_id: e.target.value || null })}
       >
@@ -71,7 +71,7 @@ export const ClosingCardSettings: React.FC<Props> = ({ tour, zones, onUpdate }) 
           <div className="mt-4">
             <label className="block text-[11px] font-semibold text-zinc-400 mb-1.5">Closing message</label>
             <textarea
-              className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-white outline-none focus:border-emerald-500 resize-none leading-relaxed"
+              className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm text-white focus:border-emerald-500 focus:outline-none resize-none leading-relaxed"
               rows={3}
               value={tour.closing_message || ''}
               onChange={(e) => onUpdate({ closing_message: e.target.value.slice(0, 1000) })}
@@ -84,7 +84,7 @@ export const ClosingCardSettings: React.FC<Props> = ({ tour, zones, onUpdate }) 
               <Heart size={11} /> Support links <span className="text-zinc-600 font-normal">optional</span>
             </label>
             <input
-              className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-white outline-none focus:border-emerald-500 mb-3"
+              className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm text-white focus:border-emerald-500 focus:outline-none mb-3"
               value={tour.donation_note || ''}
               onChange={(e) => onUpdate({ donation_note: e.target.value.slice(0, 200) })}
               placeholder="One line above the buttons. If this was worth a coffee…"

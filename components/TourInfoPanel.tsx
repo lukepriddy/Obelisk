@@ -25,9 +25,12 @@ interface TourInfoPanelProps {
   publishNotice?: string | null;
 }
 
-const ACCENT_PRESETS = ['#10b981','#6366f1','#f59e0b','#ef4444','#3b82f6','#ec4899'];
-const BG_PRESETS     = ['#0f172a','#111827','#ffffff','#fafaf9','#1e293b','#18181b'];
-const TEXT_PRESETS   = ['#ffffff','#f1f5f9','#1e293b','#0f172a','#94a3b8','#d1fae5'];
+// Eight each. #09090b was missing from the background list despite being the
+// default every experience starts on, so the swatch matching the current
+// colour was unselectable until you typed the hex.
+const ACCENT_PRESETS = ['#10b981','#14b8a6','#6366f1','#a855f7','#f59e0b','#ef4444','#3b82f6','#ec4899'];
+const BG_PRESETS     = ['#09090b','#18181b','#0f172a','#1e293b','#111827','#292524','#ffffff','#fafaf9'];
+const TEXT_PRESETS   = ['#ffffff','#f1f5f9','#e2e8f0','#fef3c7','#d1fae5','#94a3b8','#1e293b','#000000'];
 
 // File-type and size validation now lives in services/storageService.ts so
 // every upload path shares one set of rules; it reports failures via onError.
@@ -419,7 +422,10 @@ export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({
                   key={color}
                   onClick={() => onUpdate({ accent_color: color })}
                   className="w-7 h-7 rounded-full border-2 transition-transform hover:scale-110"
-                  style={{ backgroundColor: color, borderColor: accent === color ? 'white' : 'transparent' }}
+                  style={{
+                    backgroundColor: color,
+                    borderColor: accent === color ? '#ffffff' : 'rgba(255,255,255,0.3)',
+                  }}
                 />
               ))}
             </div>
@@ -440,13 +446,40 @@ export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({
                   key={color}
                   onClick={() => onUpdate({ bg_color: color })}
                   className="w-7 h-7 rounded-full border-2 transition-transform hover:scale-110"
-                  style={{ backgroundColor: color, borderColor: bg === color ? 'white' : 'transparent' }}
+                  style={{
+                    backgroundColor: color,
+                    borderColor: bg === color ? '#ffffff' : 'rgba(255,255,255,0.3)',
+                  }}
                 />
               ))}
             </div>
             <div className="flex items-center gap-2">
               <input type="color" className="w-8 h-8 rounded cursor-pointer bg-transparent border-0" value={bg} onChange={(e) => onUpdate({ bg_color: e.target.value })} />
               <input type="text" className="flex-1 bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm text-white font-mono focus:border-emerald-500 focus:outline-none" value={bg} onChange={(e) => onUpdate({ bg_color: e.target.value })} />
+            </div>
+          </div>
+
+          {/* Text Color */}
+          <div>
+            <label className="block text-xs font-bold text-zinc-400 uppercase mb-2 flex items-center gap-2">
+              <Type size={13} /> Text Color
+            </label>
+            <div className="flex flex-wrap gap-2 mb-2">
+              {TEXT_PRESETS.map((color) => (
+                <button
+                  key={color}
+                  onClick={() => onUpdate({ text_color: color })}
+                  className="w-7 h-7 rounded-full border-2 transition-transform hover:scale-110"
+                  style={{
+                    backgroundColor: color,
+                    borderColor: textCol === color ? '#ffffff' : 'rgba(255,255,255,0.3)',
+                  }}
+                />
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <input type="color" className="w-8 h-8 rounded cursor-pointer bg-transparent border-0" value={textCol} onChange={(e) => onUpdate({ text_color: e.target.value })} />
+              <input type="text" className="flex-1 bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm text-white font-mono focus:border-emerald-500 focus:outline-none" value={textCol} onChange={(e) => onUpdate({ text_color: e.target.value })} />
             </div>
           </div>
 
@@ -564,27 +597,6 @@ export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({
                 Setting this to Public runs a quick content check when you save.
               </p>
             )}
-          </div>
-
-          {/* Text Color */}
-          <div>
-            <label className="block text-xs font-bold text-zinc-400 uppercase mb-2 flex items-center gap-2">
-              <Type size={13} /> Text Color
-            </label>
-            <div className="flex flex-wrap gap-2 mb-2">
-              {TEXT_PRESETS.map((color) => (
-                <button
-                  key={color}
-                  onClick={() => onUpdate({ text_color: color })}
-                  className="w-7 h-7 rounded-full border-2 transition-transform hover:scale-110"
-                  style={{ backgroundColor: color, borderColor: textCol === color ? 'white' : 'transparent' }}
-                />
-              ))}
-            </div>
-            <div className="flex items-center gap-2">
-              <input type="color" className="w-8 h-8 rounded cursor-pointer bg-transparent border-0" value={textCol} onChange={(e) => onUpdate({ text_color: e.target.value })} />
-              <input type="text" className="flex-1 bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm text-white font-mono focus:border-emerald-500 focus:outline-none" value={textCol} onChange={(e) => onUpdate({ text_color: e.target.value })} />
-            </div>
           </div>
 
         </div>
