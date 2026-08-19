@@ -5,6 +5,7 @@ import { uploadImage } from '../services/storageService';
 import { MediaPicker } from './MediaPicker';
 import { Image as ImageIcon, Type, Palette, AlignLeft, AlignCenter, Upload, MapPin, Eye, Settings, Globe, Lock, Loader2, Sun, Moon, X, Tag as TagIcon, Clock, Route, EyeOff } from 'lucide-react';
 import { ProgressionSettings } from './ProgressionSettings';
+import { ClosingCardSettings } from './ClosingCardSettings';
 import { trailStats, formatDistance, suggestDuration } from '../utils/trail';
 
 interface TourInfoPanelProps {
@@ -451,6 +452,9 @@ export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({
 
           {/* Player progression */}
           <ProgressionSettings tour={tour} onUpdate={onUpdate} />
+
+          {/* How it ends, and the only place money is asked for */}
+          <ClosingCardSettings tour={tour} zones={zones} onUpdate={onUpdate} />
 
           {/* Visibility */}
           <div>

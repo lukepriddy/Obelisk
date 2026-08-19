@@ -20,7 +20,8 @@ import { trailStats, trailSummary, formatDistance } from '../utils/trail';
 import { PLAYER_TERMS_VERSION } from '../constants/playerTerms';
 import { PlayerProgress, ProgressionReward, Tour, Zone } from '../types';
 import { FONT_STYLES, MAP_STYLES, DEFAULT_MAP_STYLE } from '../constants';
-import { Loader2, PlayCircle, Volume2, MessageCircle, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu, Layers, Locate, RotateCcw, ZoomIn, ZoomOut, Backpack, Gem, Trash2, Info, RefreshCw, LogOut, Bug, Navigation, ChevronRight, Camera, Flag, Eye } from 'lucide-react';
+import { Loader2, PlayCircle, Volume2, MessageCircle, Lock, X, KeyRound, ChevronUp, Copy, Check, MapPin, ArrowLeft, Menu, Layers, Locate, RotateCcw, ZoomIn, ZoomOut, Backpack, Gem, Trash2, Info, RefreshCw, LogOut, Bug, Navigation, ChevronRight, Camera, Flag, Eye, Heart,
+} from 'lucide-react';
 import { ChatInterface } from '../components/ChatInterface';
 import { ARCameraOverlay } from '../components/ARCameraOverlay';
 import { CalibrationScreen } from '../components/CalibrationScreen';
@@ -179,6 +180,16 @@ export const Player: React.FC = () => {
 
   // Character Interaction
   const [activeCharacterZone, setActiveCharacterZone] = useState<Zone | null>(null);
+
+  // ── Closing card ─────────────────────────────────────────────────────────
+  // Reaching the ending zone is not the same as being finished with it. If the
+  // finale is a character, the player still has the whole conversation ahead of
+  // them; if it is audio, the track is still playing. So arrival is recorded
+  // here and the card waits until nothing is open, which is the moment the
+  // experience is actually over.
+  const [endingReached, setEndingReached] = useState(false);
+  const [showClosing, setShowClosing]     = useState(false);
+  const closingShownRef                   = useRef(false);
 
   // Set of zone ids currently "active" (playing / open) — drives the blue map
   // highlight. Memoised so PlayerMap only rebuilds when it actually changes.
@@ -565,6 +576,7 @@ export const Player: React.FC = () => {
 
   const completeZoneEntry = (zone: Zone) => {
     markZoneVisited(zone.id);
+    if (tour?.ending_zone_id && zone.id === tour.ending_zone_id) setEndingReached(true);
     const rewards = applyProgressionForZone(zone);
     const messages = [
       zone.type !== 'character' ? zone.entry_message : '',
@@ -579,6 +591,24 @@ export const Player: React.FC = () => {
       });
     }
   };
+
+  // The experience is over when the ending zone has been reached AND nothing is
+  // still open on top of it. A character finale means the conversation is still
+  // to come; an audio finale means the track is still playing. Both would be
+  // interrupted by a card that says "the end".
+  //
+  // The short delay is so the card does not appear in the same frame the chat
+  // closes, which reads as the app doing two things at once rather than one
+  // thing finishing.
+  useEffect(() => {
+    if (!endingReached || closingShownRef.current) return;
+    if (activeCharacterZone || activeMediaZone || passphraseChallenge) return;
+    const timer = setTimeout(() => {
+      closingShownRef.current = true;
+      setShowClosing(true);
+    }, 900);
+    return () => clearTimeout(timer);
+  }, [endingReached, activeCharacterZone, activeMediaZone, passphraseChallenge]);
 
   const handlePassphraseSubmit = () => {
     const zone = passphraseChallenge;
@@ -3130,6 +3160,86 @@ export const Player: React.FC = () => {
               <ChevronUp size={11} className="shrink-0" />
             </span>
           </button>
+        </div>
+      )}
+
+      {/* ── Closing card ──
+          The bookend to the welcome screen. Deliberately the only place a
+          donation is asked for: by the time this appears the player has walked
+          the whole route, so it reads as a thank-you rather than a toll gate. */}
+      {showClosing && (
+        <div className="fixed inset-0 z-[2600] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4">
+          <div
+            className="w-full sm:max-w-md rounded-3xl border shadow-2xl overflow-hidden max-h-full flex flex-col"
+            style={{ backgroundColor: th.sheetBg, borderColor: th.sheetBorder }}
+          >
+            <div className="overflow-y-auto px-6 pt-7 pb-6">
+              <p className="text-[11px] font-bold uppercase tracking-[0.2em] mb-3" style={{ color: th.sheetMuted }}>
+                The end
+              </p>
+              <h2 className="text-2xl font-bold leading-tight mb-3" style={{ color: th.sheetText }}>
+                {tour.title}
+              </h2>
+
+              {tour.closing_message && (
+                <p className="text-sm leading-relaxed whitespace-pre-wrap mb-6" style={{ color: th.sheetText }}>
+                  {tour.closing_message}
+                </p>
+              )}
+
+              {(tour.donation_links || []).length > 0 && (
+                <div className="pt-5 border-t" style={{ borderColor: th.sheetBorder }}>
+                  {tour.donation_note && (
+                    <p className="text-sm leading-relaxed mb-4" style={{ color: th.sheetMuted }}>
+                      {tour.donation_note}
+                    </p>
+                  )}
+                  <div className="flex flex-col gap-2.5">
+                    {(tour.donation_links || []).map((link, i) => (
+                      <div key={i}>
+                        {/* The tap-through is the primary action, because it is
+                            the one that works for the person holding the phone.
+                            A QR on your own screen is for whoever is standing
+                            next to you, or for a screenshot to come back to. */}
+                        <a
+                          href={link.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-center gap-2 w-full py-3 rounded-2xl font-bold text-sm transition-opacity hover:opacity-90"
+                          style={{ backgroundColor: accent, color: '#09090b' }}
+                        >
+                          <Heart size={15} /> {link.label}
+                        </a>
+                        {link.qr_url && (
+                          <details className="mt-2 group">
+                            <summary className="cursor-pointer list-none text-center text-xs" style={{ color: th.sheetMuted }}>
+                              or scan the {link.label} code
+                            </summary>
+                            <img
+                              src={link.qr_url}
+                              alt={`${link.label} QR code`}
+                              className="mt-3 mx-auto rounded-xl bg-white p-2"
+                              style={{ width: 180, height: 180, objectFit: 'contain' }}
+                            />
+                          </details>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 pb-6 pt-1 shrink-0">
+              <button
+                onClick={() => setShowClosing(false)}
+                className="w-full py-3 rounded-2xl text-sm font-semibold border transition-colors"
+                style={{ color: th.sheetMuted, borderColor: th.sheetBorder }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

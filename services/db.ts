@@ -341,11 +341,17 @@ export const duplicateTour = async (tourId: string, ownerId: string): Promise<To
   const { data: src, error: te } = await supabase.from('tours').select('*').eq('id', tourId).single();
   if (te || !src) { console.error('duplicateTour — fetch tour:', te); return null; }
 
-  // 2. Create new tour shell
-  const { id: _id, created_at: _ca, ...tourFields } = src as any;
+  // 2. Create new tour shell.
+  //
+  // ending_zone_id is dropped here and restored in step 5, for the same reason
+  // the zone-level cross-references are: it points at a zone id that belongs to
+  // the ORIGINAL tour. Carrying it over would leave the copy's closing card
+  // waiting on a zone the player can never reach, so it would simply never
+  // appear, silently and only in the copy.
+  const { id: _id, created_at: _ca, ending_zone_id: _ez, ...tourFields } = src as any;
   const { data: newTour, error: ce } = await supabase
     .from('tours')
-    .insert({ ...tourFields, title: `Copy of ${src.title}`, owner_id: ownerId })
+    .insert({ ...tourFields, title: `Copy of ${src.title}`, owner_id: ownerId, ending_zone_id: null })
     .select().single();
   if (ce || !newTour) { console.error('duplicateTour — create tour:', ce); return null; }
 
@@ -377,6 +383,14 @@ export const duplicateTour = async (tourId: string, ownerId: string): Promise<To
       updates.avatar_unlock_zone_id = idMap.get(orig.avatar_unlock_zone_id)!;
     if (Object.keys(updates).length)
       await supabase.from('zones').update(updates).eq('id', (nz as any).id);
+  }
+
+  // 6. The tour's own reference to a zone, remapped the same way.
+  if (src.ending_zone_id && idMap.has(src.ending_zone_id)) {
+    await supabase.from('tours')
+      .update({ ending_zone_id: idMap.get(src.ending_zone_id)! })
+      .eq('id', (newTour as any).id);
+    (newTour as any).ending_zone_id = idMap.get(src.ending_zone_id)!;
   }
 
   return newTour as Tour;

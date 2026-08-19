@@ -77,6 +77,29 @@ export interface Tour {
   // Optional player progression
   progression_enabled?: boolean;
   progression_resources?: ProgressionResource[];
+
+  // ── Closing card ─────────────────────────────────────────────────────────
+  /** Finishing this zone ends the experience. Null means it has no explicit
+   *  end, and no closing card is shown. Marked rather than inferred: zones
+   *  have no order column, so "the last one" is whichever was created most
+   *  recently, which is not the same thing as the last beat. */
+  ending_zone_id?: string | null;
+  /** Shown on the closing card. The creator's words. */
+  closing_message?: string | null;
+  /** One line above the donation buttons. */
+  donation_note?: string | null;
+  donation_links?: DonationLink[];
+}
+
+/** One way to support the creator, shown as a button on the closing card. */
+export interface DonationLink {
+  /** Button text. "PayPal", "Venmo", "Ko-fi". */
+  label: string;
+  url: string;
+  /** Optional image of the QR the payment app generated. Deliberately an
+   *  upload rather than a generated code: Venmo and PayPal already hand the
+   *  creator a branded one, and players recognise it. */
+  qr_url?: string | null;
 }
 
 /**
