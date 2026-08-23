@@ -602,13 +602,48 @@ export const Player: React.FC = () => {
   // thing finishing.
   useEffect(() => {
     if (!endingReached || closingShownRef.current) return;
-    if (activeCharacterZone || activeMediaZone || passphraseChallenge) return;
-    const timer = setTimeout(() => {
+    if (passphraseChallenge) return;
+
+    const endingZone = zones.find(z => z.id === tour?.ending_zone_id);
+
+    // "Finished" means something different per zone type, and getting it wrong
+    // is what made the timing feel off. A character finale is over when the
+    // conversation closes. An AUDIO finale is over when the audio ends, NOT
+    // when the player happens to dismiss the card: that only clears on a tap or
+    // on walking away, so the ending sat waiting behind a card the player had
+    // no reason to close.
+    const isCharacterEnding = endingZone?.type === 'character';
+    const waitsForAudio = !isCharacterEnding && !!endingZone?.media_url
+      && endingZone.on_end !== 'loop';
+
+    const readyToClose = () => {
+      if (isCharacterEnding) return !activeCharacterZone;
+      if (waitsForAudio) return audioService.hasFinished(endingZone!.id);
+      return !activeMediaZone;
+    };
+
+    const fire = () => {
       closingShownRef.current = true;
       setShowClosing(true);
-    }, 900);
-    return () => clearTimeout(timer);
-  }, [endingReached, activeCharacterZone, activeMediaZone, passphraseChallenge]);
+    };
+
+    if (readyToClose()) {
+      // The short delay is so the card does not land in the same frame the
+      // audio stops, which reads as two things happening rather than one
+      // thing finishing.
+      const timer = setTimeout(fire, 900);
+      return () => clearTimeout(timer);
+    }
+
+    // Audio has no completion event reaching this component, so the finish is
+    // polled on the same cadence the geofence loop already uses.
+    const poll = setInterval(() => {
+      if (!readyToClose()) return;
+      clearInterval(poll);
+      setTimeout(fire, 900);
+    }, 500);
+    return () => clearInterval(poll);
+  }, [endingReached, activeCharacterZone, activeMediaZone, passphraseChallenge, zones, tour?.ending_zone_id]);
 
   const handlePassphraseSubmit = async () => {
     const zone = passphraseChallenge;

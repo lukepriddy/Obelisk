@@ -10,7 +10,7 @@ import React, { useRef, useState } from 'react';
 import { Flag, Heart, ImageIcon, Loader2, Plus, Trash2, Upload } from 'lucide-react';
 import { DonationLink, Tour, Zone } from '../types';
 import { uploadImage, ICON_MAX_EDGE } from '../services/storageService';
-import { donationUrlError, DONATION_HOST_LABEL } from '../utils/donationLinks';
+import { donationUrlError } from '../utils/donationLinks';
 
 interface Props {
   tour: Tour;
@@ -83,12 +83,9 @@ export const ClosingCardSettings: React.FC<Props> = ({ tour, zones, onUpdate }) 
             <label className="block text-[11px] font-semibold text-zinc-400 mb-1.5 flex items-center gap-1.5">
               <Heart size={11} /> Support links <span className="text-zinc-600 font-normal">optional</span>
             </label>
-            <input
-              className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm text-white focus:border-emerald-500 focus:outline-none mb-3"
-              value={tour.donation_note || ''}
-              onChange={(e) => onUpdate({ donation_note: e.target.value.slice(0, 200) })}
-              placeholder="One line above the buttons. If this was worth a coffee…"
-            />
+            <p className="text-[10px] text-zinc-500 mb-2 leading-relaxed">
+              Each link becomes a button on the card. Add one below.
+            </p>
 
             <input
               ref={fileInputRef}
@@ -168,10 +165,22 @@ export const ClosingCardSettings: React.FC<Props> = ({ tour, zones, onUpdate }) 
               <Plus size={13} /> Add a support link
             </button>
 
-            {/* Stated rather than only enforced, so the restriction is not a
-                surprise after typing a link that gets rejected. */}
-            <p className="text-[10px] text-zinc-600 mt-2 leading-relaxed">
-              <ImageIcon size={9} className="inline mb-px" /> Links are limited to {DONATION_HOST_LABEL}.
+            {links.length > 0 && (
+              <div className="mt-4">
+                <label className="block text-[11px] font-semibold text-zinc-400 mb-1.5">
+                  Line above the buttons <span className="text-zinc-600 font-normal">not a link</span>
+                </label>
+                <input
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm text-white focus:border-emerald-500 focus:outline-none"
+                  value={tour.donation_note || ''}
+                  onChange={(e) => onUpdate({ donation_note: e.target.value.slice(0, 200) })}
+                  placeholder="If this was worth a coffee…"
+                />
+              </div>
+            )}
+
+            <p className="text-[10px] text-zinc-600 mt-3 leading-relaxed">
+              <ImageIcon size={9} className="inline mb-px" /> Any https link: PayPal, Venmo, Ko-fi, your own site.
               The QR is the image your payment app gives you, not a generated one, so players see the code they recognise.
             </p>
           </div>

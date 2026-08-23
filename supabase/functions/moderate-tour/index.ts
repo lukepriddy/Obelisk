@@ -101,6 +101,26 @@ coordinates lead, and you must not guess whether a location is dangerous,
 private property, or trespassing. That is handled separately. Judge only the
 words and images you are given.
 
+SUPPORT LINKS appear on the closing card, the last screen of an experience,
+after a player has spent an hour trusting the creator. That makes it the most
+persuasive place in the product to send somebody somewhere, so judge the
+destination, not just the wording.
+
+Creators may link anywhere they genuinely take support or tell people about
+their work: a payment page, their own site, a shop, a mailing list, a charity.
+That is the normal case and it passes.
+
+Fail a link that is plainly not what it claims to be. A label naming one
+service pointing at an unrelated domain. A destination imitating a bank, a
+wallet, a login page or a well-known brand. A URL disguised behind a shortener
+or an IP address, where a player cannot see where they are going. An offer of
+something in exchange, rather than support for the work. Anything asking for
+credentials, card numbers or identity documents.
+
+You are judging the text of the link, not visiting it. Where the label and the
+domain simply do not match and you cannot tell which is intended, that is
+borderline, not fail.
+
 "reason" must be written directly to the creator, in one or two plain
 sentences, saying specifically what must change. Leave it empty when passing.
 `.trim();
@@ -145,6 +165,32 @@ function textForReview(snap: Snapshot) {
     .map(r => (r as Record<string, unknown>)?.name)
     .filter((n): n is string => typeof n === 'string' && n.trim() !== '');
   if (resourceNames.length) lines.push(`HUD RESOURCE NAMES: ${resourceNames.join(', ')}`);
+
+  // The closing card. Player-facing text on the last screen of the experience,
+  // and it was going unreviewed entirely.
+  //
+  // The links matter more than the words. A URL on a page a player has just
+  // spent an hour trusting is the most persuasive place in the whole product to
+  // send somebody somewhere, and the only check on it used to be a host
+  // allowlist that ran in the browser, which a creator posting straight to the
+  // API never had to meet. Reviewing them here is the control that actually
+  // holds.
+  if (typeof tour.closing_message === 'string' && tour.closing_message.trim()) {
+    lines.push(`CLOSING MESSAGE: ${tour.closing_message}`);
+  }
+  if (typeof tour.donation_note === 'string' && tour.donation_note.trim()) {
+    lines.push(`SUPPORT NOTE: ${tour.donation_note}`);
+  }
+  const donationLinks = Array.isArray(tour.donation_links) ? tour.donation_links : [];
+  const linkLines = donationLinks
+    .map(l => {
+      const link = l as Record<string, unknown>;
+      const label = typeof link?.label === 'string' ? link.label.trim() : '';
+      const url = typeof link?.url === 'string' ? link.url.trim() : '';
+      return url ? `${label || 'unlabelled'} -> ${url}` : '';
+    })
+    .filter(Boolean);
+  if (linkLines.length) lines.push(`SUPPORT LINKS: ${linkLines.join(' | ')}`);
 
   zones.forEach((z, i) => {
     const parts: string[] = [`\n--- ZONE ${i + 1} (${z.type ?? 'audio'}) ---`];
