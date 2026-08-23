@@ -85,6 +85,46 @@ const LocationSearch: React.FC<{ mapRef: React.RefObject<EditorMapHandle | null>
 };
 
 
+/**
+ * Tour columns the editor deliberately never writes.
+ *
+ * Paired with the explicit save list in saveTour to catch the failure this
+ * file has now had twice: a new column is added, the editor edits it happily,
+ * and the save silently drops it because nobody remembered the list. First
+ * duration_minutes, then the whole closing card.
+ *
+ * The check below compares the columns actually present on a loaded tour
+ * against saved-plus-never-saved, so a new column announces itself the first
+ * time the editor opens rather than the first time somebody notices their work
+ * vanishing. Dev only: it is a note to whoever is building, not a runtime
+ * concern for a creator.
+ */
+const NEVER_SAVED_FROM_EDITOR = new Set([
+  'id', 'owner_id', 'created_at',
+  // Visibility is handled separately above, because a DB trigger refuses
+  // is_public from the client on the publish transition.
+  'is_public', 'is_listed',
+  // Owned by moderation and publishing, never by the editor.
+  'moderation_status', 'moderation_reason', 'moderation_categories', 'moderated_at',
+  'published_snapshot', 'published_hash', 'published_content_hash', 'draft_hash',
+  'draft_review_status', 'draft_review_reason', 'draft_review_categories', 'draft_reviewed_at',
+  // Written from the map, not from the form.
+  'start_zoom',
+]);
+
+function warnAboutUnsavedTourFields(tour: Record<string, unknown>, savedKeys: string[]) {
+  if (!(import.meta as any).env?.DEV) return;
+  const known = new Set([...savedKeys, ...NEVER_SAVED_FROM_EDITOR]);
+  const orphans = Object.keys(tour).filter(k => !known.has(k));
+  if (orphans.length) {
+    console.warn(
+      `[Editor] These tour columns are neither saved nor listed as deliberately unsaved, ` +
+      `so edits to them will be silently discarded: ${orphans.join(', ')}. ` +
+      `Add them to the save list in saveTour, or to NEVER_SAVED_FROM_EDITOR.`,
+    );
+  }
+}
+
 export const Editor: React.FC<EditorProps> = ({ user }) => {
   const { tourId } = useParams<{ tourId: string }>();
   const navigate = useNavigate();
@@ -476,10 +516,9 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
     const wantsToPublish = tour.is_public && !publishedRef.current
       && !options?.skipPublishTransition;
 
-    try {
-      await Promise.all([
-        ...zoneSaves,
-        dbUpdateTour(tour.id, {
+    // Built as a named object so the guard can see exactly which keys are
+    // being written, rather than the two lists drifting apart unnoticed.
+    const tourUpdates = {
           title: tour.title,
           description: tour.description,
           welcome_subtitle: tour.welcome_subtitle,
@@ -511,7 +550,17 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
           start_zoom: editorMapZoomRef.current,
           progression_enabled: tour.progression_enabled,
           progression_resources: tour.progression_resources || [],
-        }),
+          ending_zone_id: tour.ending_zone_id ?? null,
+          closing_message: tour.closing_message ?? null,
+          donation_note: tour.donation_note ?? null,
+          donation_links: tour.donation_links || [],
+    };
+    warnAboutUnsavedTourFields(tour as unknown as Record<string, unknown>, Object.keys(tourUpdates));
+
+    try {
+      await Promise.all([
+        ...zoneSaves,
+        dbUpdateTour(tour.id, tourUpdates),
       ]);
       pendingZoneUpdatesRef.current.clear();
 
