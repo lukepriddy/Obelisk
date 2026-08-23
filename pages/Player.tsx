@@ -610,11 +610,18 @@ export const Player: React.FC = () => {
     return () => clearTimeout(timer);
   }, [endingReached, activeCharacterZone, activeMediaZone, passphraseChallenge]);
 
-  const handlePassphraseSubmit = () => {
+  const handlePassphraseSubmit = async () => {
     const zone = passphraseChallenge;
     if (!zone) return;
-    const correct = (zone.lock_passphrase || '').trim().toLowerCase();
-    if (passphraseInput.trim().toLowerCase() === correct) {
+    // Checked on the server. It used to be compared here, which meant every
+    // answer had to be shipped to every player inside the published snapshot,
+    // where anyone with a share link could read them all without walking a
+    // step. The function returns a boolean and never the passphrase.
+    const { data: correct } = await supabase.rpc('check_zone_passphrase', {
+      p_zone_id: zone.id,
+      p_attempt: passphraseInput,
+    });
+    if (correct === true) {
       unlockedZoneIdsRef.current = new Set([...unlockedZoneIdsRef.current, zone.id]);
       persistZoneState();
       if (zone.type !== 'discoverable') {

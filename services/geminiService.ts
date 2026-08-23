@@ -40,19 +40,33 @@ class GeminiService {
   /**
    * Text-only character reply. Fast — used to show the message immediately,
    * before (and independently of) the slower TTS step.
-   * tourId lets the edge function charge the tour owner's Gemini key (BYOK).
+   * tourId charges the tour owner's Gemini key (BYOK) and, with zoneId,
+   * tells the function which character to be.
    * playerId is attached here rather than at the call sites so no future caller
    * can forget it and quietly fall out of the per-player rate limit.
    */
   async generateText(
     history: ChatMessage[],
     prompt: string,
-    systemInstruction: string,
-    tourId?: string,
+    opts: { tourId: string; zoneId: string; recover?: boolean },
   ): Promise<string> {
     const { data, error } = await supabase.functions.invoke(
       'gemini-chat',
-      { body: { type: 'chat', history, userMessage: prompt, systemInstruction, tourId, playerId: getPlayerId() } }
+      {
+        body: {
+          type: 'chat',
+          history,
+          userMessage: prompt,
+          // The character's personality is NOT sent from here. The function
+          // looks it up from the zone, because a caller-supplied system
+          // instruction plus a tour id that is public in every share link made
+          // this an LLM proxy on the tour owner's key.
+          tourId: opts.tourId,
+          zoneId: opts.zoneId,
+          recover: opts.recover === true,
+          playerId: getPlayerId(),
+        },
+      }
     );
     if (error) throw error;
     return data?.text || "I didn't catch that.";

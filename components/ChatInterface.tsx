@@ -3,50 +3,17 @@ import { Zone, ChatMessage } from '../types';
 import { geminiService } from '../services/geminiService';
 import { Send, X } from 'lucide-react';
 
-// Appended to every character system instruction so Gemini never
-// adds stage directions like "(smiles)" or "(pauses solemnly)".
-const NO_STAGE_DIRECTIONS =
-  '\n\nCRITICAL: Respond with spoken words only. ' +
-  'Never include stage directions, action descriptions, or parenthetical ' +
-  'notes about physical actions, expressions, or emotions — e.g. never write ' +
-  '(smiles), (pauses), (My gaze is steady), or anything in parentheses. ' +
-  'Speak only as dialogue, exactly as it would be heard aloud. ' +
-  'Keep replies concise and voice-chat natural: usually 1 to 3 short sentences unless the player asks for detail.';
-
 /**
- * Earning the unlock.
+ * The unlock marker.
  *
- * A character zone can open a locked zone elsewhere. That used to fire on the
- * FIRST reply, so a player typed "hi" and the lock opened — which makes a
- * puzzle character pointless, since the puzzle was never the thing being
- * solved. The character now decides, and says so with a token.
- *
- * The token is stripped before the line is shown or spoken, so the player only
- * ever sees the reply. It is deliberately ugly and bracketed so it cannot
- * occur in natural dialogue, and it is matched anywhere in the message because
- * models put it on its own line about as often as they put it at the end.
- *
- * No fallback on message count, on purpose. The target zone always has a
- * passphrase — the editor only offers passphrase-locked zones here — so a
- * player who never earns the conversation route still has the ordinary way in.
- * A count-based fallback would just be the old behaviour with extra steps.
+ * The instruction that produces it lives on the SERVER now, along with the
+ * character's personality, because a browser-composed system instruction is
+ * one an attacker can rewrite. What stays here is the reading of it: strip the
+ * marker before the line is stored or shown, and treat its presence as the
+ * character saying the player earned it.
  */
 const UNLOCK_TOKEN = '<<UNLOCK>>';
 const UNLOCK_RE = /<<\s*UNLOCK\s*>>/gi;
-
-const unlockInstruction = (zone: Zone) => zone.avatar_unlock_zone_id
-  ? '\n\nEARNING THE UNLOCK: you are holding something back, as described above. ' +
-    'When the player meets the condition, reply to them normally and fully: ' +
-    'acknowledge what they just did, in your own voice, and reveal what you were ' +
-    `holding back. Then add ${UNLOCK_TOKEN} at the very end of that same message.\n` +
-    `The ${UNLOCK_TOKEN} is an addition to your reply, never a replacement for it. ` +
-    'A message containing only the marker, or the marker with a bare acknowledgement ' +
-    'and no reveal, is wrong: the player would be left in silence at the exact moment ' +
-    'they succeeded. Always speak first, mark second.\n' +
-    'Use it exactly once, in the message where the reveal happens, never before. ' +
-    'A player who has not met the condition does not get it, however they ask. ' +
-    'Never mention the marker or explain that it exists.'
-  : '';
 
 const TEXT_LIMIT  = 70;  // text replies before conversation ends
 
@@ -164,8 +131,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
       try {
         const text = await geminiService.generateText(
           [], '[The player has arrived at your location. Greet them briefly and in character, then wait for them to respond.]',
-          (zone.character_prompt || 'You are a helpful assistant.') + NO_STAGE_DIRECTIONS,
-          zone.tour_id,
+          { tourId: zone.tour_id, zoneId: zone.id },
         );
         setHistory([{ role: 'model', text }]);
         setIsReady(true);
@@ -190,10 +156,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
 
     try {
       const conversationHistory = newHistory.filter(m => m.role === 'user' || m.role === 'model');
-      const systemInstruction =
-        (zone.character_prompt || 'You are a helpful assistant.') + NO_STAGE_DIRECTIONS + unlockInstruction(zone);
       const rawReply = await geminiService.generateText(
-        conversationHistory.slice(0, -1), text, systemInstruction, zone.tour_id,
+        conversationHistory.slice(0, -1), text, { tourId: zone.tour_id, zoneId: zone.id },
       );
 
       // Strip the token before the line is stored, shown or spoken. Stored
@@ -213,11 +177,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ zone, onClose, onU
         try {
           const recovered = await geminiService.generateText(
             conversationHistory.slice(0, -1), text,
-            systemInstruction +
-              '\n\nThe player has just met the condition. Give them your reply now: ' +
-              'acknowledge what they did, in character, and reveal what you were holding back. ' +
-              'Do not include any token or marker of any kind in this message.',
-            zone.tour_id,
+            { tourId: zone.tour_id, zoneId: zone.id, recover: true },
           );
           replyText = recovered.replace(UNLOCK_RE, '').trim();
         } catch {
