@@ -20,6 +20,9 @@ interface Props {
 
 export const ClosingCardSettings: React.FC<Props> = ({ tour, zones, onUpdate }) => {
   const links = tour.donation_links || [];
+  // Anything with a dot and no spaces is a link somebody meant to be tappable.
+  const noteLooksLikeLink =
+    /^\s*(https?:\/\/)?[\w-]+(\.[\w-]+)+(\/\S*)?\s*$/i.test(tour.donation_note || '');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadIndex, setUploadIndex] = useState<number | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -164,6 +167,31 @@ export const ClosingCardSettings: React.FC<Props> = ({ tour, zones, onUpdate }) 
             >
               <Plus size={13} /> Add a support link
             </button>
+
+            {/* The note field was mistaken for the link field once already, and
+                the cost was silent: the URL saved fine, the card showed no
+                button, and nothing anywhere said why. Detect it and offer to
+                finish the job rather than leaving the creator to work out that
+                the two boxes are different. */}
+            {noteLooksLikeLink && (
+              <div className="mt-3 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
+                <p className="text-[11px] text-amber-200/90 leading-relaxed mb-2">
+                  That looks like a link. The line above the buttons is only text,
+                  so on its own it will not appear as anything a player can tap.
+                </p>
+                <button
+                  onClick={() => {
+                    const raw = (tour.donation_note || '').trim();
+                    const url = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+                    setLinks([...links, { label: '', url, qr_url: null }]);
+                    onUpdate({ donation_note: null });
+                  }}
+                  className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-300 hover:text-amber-200 transition-colors"
+                >
+                  <Plus size={12} /> Make this a support link
+                </button>
+              </div>
+            )}
 
             {links.length > 0 && (
               <div className="mt-4">
