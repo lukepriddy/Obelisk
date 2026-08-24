@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Why the first zone used to fire in the wrong place</title>
+  <meta name="description" content="GPS is a guess that gets better. Here is what that means for a walk, and why the app now waits before it starts.">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" href="/icons/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<header>
+  <div class="wrap bar">
+    <a class="brand" href="/">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--accent)">
+        <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>
+      </svg>
+      Obelisk
+    </a>
+    <nav>
+      <a href="/about">About</a>
+      <a href="/blog">Blog</a>
+      <a class="cta" href="https://app.obelisk.place">Start building</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap hero" style="padding-bottom:0">
+    <p style="margin-bottom:1.5rem"><a class="backlink" href="/blog">Back to all posts</a></p>
+    <div class="posthead">
+      <time datetime="2026-08-23">23 August 2026</time>
+      <h1 style="margin-top:0.5rem">Why the first zone used to fire in the wrong place</h1>
+    </div>
+  </div>
+  <div class="wrap" style="padding-bottom:4rem">
+    <div class="prose">
+      <p>
+        Here is something people find out the hard way when they build a walk.
+        A phone does not know where it is. It guesses, and the guess gets
+        better over the first few seconds.
+      </p>
+      <p>
+        When someone opens a walk and starts moving straight away, that first
+        guess can be off by a long way. Wide open field, clear sky, no
+        buildings? Maybe fifteen feet. City street with tall buildings on both
+        sides? It can be a hundred feet or worse, and it will wander before it
+        settles.
+      </p>
+
+      <h2>What that does to a walk</h2>
+      <p>
+        If your first zone is small, the walk breaks before it starts. Either
+        nothing plays when the player is standing in the right place, or
+        something plays while they are still in the car park.
+      </p>
+      <p>
+        Neither of those reads as a GPS problem to the person it happens to. It
+        reads as a broken experience, and they blame you.
+      </p>
+
+      <h2>What we do about it</h2>
+      <p>
+        Obelisk does not show the map straight away. It holds a screen in front
+        of the walk while the signal settles, and shows a ring that tightens as
+        the reading gets better. When the reading is good enough, the walk
+        begins.
+      </p>
+      <p>
+        It takes a few seconds. Most people are still putting their headphones
+        in. Nobody has ever complained about it, and the first zone now fires
+        where it should.
+      </p>
+
+      <h2>A second thing, quieter</h2>
+      <p>
+        Even after the signal settles, it still drifts a little. So a zone is
+        slightly harder to leave than it is to enter. If you have ever stood
+        still and watched an app decide you had walked away, that is the
+        problem this fixes.
+      </p>
+      <p>
+        You will not notice either of these when they work. That is rather the
+        point.
+      </p>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap footrow">
+    <a href="/">Home</a>
+    <a href="/about">About</a>
+    <a href="/blog">Blog</a>
+    <span class="spacer faint">Obelisk</span>
+  </div>
+</footer>
+
+</body>
+</html>

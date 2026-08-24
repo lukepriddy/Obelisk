@@ -92,7 +92,8 @@ p  { margin: 0 0 1.1rem; max-width: var(--measure); }
 
 .eyebrow {
   font-size: 0.72rem; font-weight: 700; letter-spacing: 0.19em;
-  text-transform: uppercase; color: var(--accent-dim);
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--accent) 80%, #ffffff);
   margin: 0 0 1rem;
 }
 
@@ -156,3 +157,19 @@ footer a:hover { color: var(--text); }
 .posts a { text-decoration: none; display: block; }
 .posts a:hover h3 { color: var(--accent-dim); }
 .posts time { color: var(--faint); font-size: 0.82rem; }
+
+/* ── Posts ──────────────────────────────────────────────────────────────── */
+.prose { max-width: var(--measure); }
+.prose h2 { font-size: 1.35rem; margin: 2.75rem 0 0.8rem; }
+.prose p { color: #d4d4d8; }
+.prose blockquote {
+  margin: 1.8rem 0; padding: 0 0 0 1.1rem;
+  border-left: 2px solid var(--accent);
+  color: var(--muted); font-style: italic;
+}
+.prose ul { color: #d4d4d8; padding-left: 1.1rem; margin: 0 0 1.1rem; }
+.prose li { margin: 0.35rem 0; }
+.posthead { border-bottom: 1px solid var(--line); padding-bottom: 2rem; margin-bottom: 2.5rem; }
+.posthead time { color: var(--faint); font-size: 0.85rem; }
+.backlink { color: var(--muted); text-decoration: none; font-size: 0.9rem; }
+.backlink:hover { color: var(--text); }

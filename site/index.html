@@ -3,27 +3,28 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Obelisk: walk into a story</title>
-  <meta name="description" content="Obelisk lets you build audio experiences tied to real places. People walk there, and the story plays on their phone. No app to install.">
+  <title>Obelisk: build location-based experiences</title>
+  <meta name="description" content="Obelisk is a platform for location-based immersive experiences. Geolocated audio, AI voices, AR characters, chat characters you can talk to, locked zones, and pages you can theme. No app to install.">
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" href="/icons/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/calibration.css">
+  <link rel="stylesheet" href="/features.css">
 </head>
 <body>
 
 <header>
   <div class="wrap bar">
     <a class="brand" href="/">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--accent)">
         <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>
       </svg>
       Obelisk
     </a>
     <nav>
+      <a href="#features">Features</a>
       <a href="/about">About</a>
       <a href="/blog">Blog</a>
-      <a href="#pricing" class="hide-sm">Pricing</a>
       <a class="cta" href="https://app.obelisk.place">Start building</a>
     </nav>
   </div>
@@ -32,60 +33,219 @@
 <main>
 
   <div class="wrap hero">
-    <h1>Walk into a story.</h1>
-    <p class="lead">
-      Obelisk lets you tie sound and characters to real places. Someone walks to the
-      spot, and that part of the story plays on their phone. There is no app to install.
+    <p class="eyebrow reveal">Location-based immersive experiences</p>
+    <h1 class="reveal d1">Geolocated audio, and everything after it.</h1>
+    <p class="lead reveal d2">
+      Soundwalks. Audio tours. Locative storytelling. Obelisk does all of that,
+      then keeps going: AI voices, characters people can talk to, AR objects,
+      locked zones, and pages you can make look like your own. It runs in a
+      browser, so nobody installs an app.
     </p>
-    <p><a class="cta" href="https://app.obelisk.place">Start building</a></p>
+    <p class="reveal d2"><a class="cta" href="https://app.obelisk.place">Start building</a></p>
   </div>
 
   <div class="wrap block">
-    <p class="eyebrow">What it is</p>
-    <h2>A map, and things that happen on it.</h2>
-    <p>
-      You pick spots on a map and decide what each one does. One spot might play
-      a voice. Another might hide a code someone has to work out. Another might be
-      a character they can talk to.
+    <p class="eyebrow reveal">The short version</p>
+    <h2 class="reveal">Most tools stop at sound.</h2>
+    <p class="reveal">
+      Draw a geofence, drop in a track, and the audio plays when someone walks
+      there. That part is solved, and Obelisk does it well.
     </p>
-    <p>
-      Then you share a link. People open it in their browser and start walking.
-      Nothing happens until they reach a spot. That is the whole idea.
+    <p class="reveal">
+      But a place can hold more than a recording. It can hold someone to ask, a
+      door that will not open until you work something out, an object that is
+      only there through the camera. That is the part we built.
     </p>
   </div>
 
-  <div class="wrap block">
-    <p class="eyebrow">How it works</p>
-    <h2>Three steps.</h2>
-    <div class="steps">
-      <div class="step">
-        <span class="num">1</span>
-        <h3>Mark your spots</h3>
-        <p>Drop pins on a map where you want something to happen. Make them as small or as wide as you like.</p>
+  <div id="features">
+
+    <section class="feature" data-accent="#10b981">
+      <div class="wrap feature-grid">
+        <div class="feature-copy">
+          <p class="eyebrow reveal">Zones</p>
+          <h2 class="reveal">Every zone does what you tell it.</h2>
+          <p class="lead reveal d1">
+            Set a radius as tight as a few feet or as wide as a field. Decide
+            what happens when someone leaves, and whether the sound loops,
+            plays once, or is gone for good.
+          </p>
+          <div class="chips reveal d2">
+            <span class="chip on">Any radius</span>
+            <span class="chip">Loop or play once</span>
+            <span class="chip">Hidden from the map</span>
+            <span class="chip">Fade in and out</span>
+            <span class="chip">Quieter at the edges</span>
+            <span class="chip">Open only after another zone</span>
+          </div>
+        </div>
+        <div class="panel reveal d1">
+          <div class="zone-stack"><span></span><span></span><span></span><span></span></div>
+        </div>
       </div>
-      <div class="step">
-        <span class="num">2</span>
-        <h3>Say what happens</h3>
-        <p>Add audio, write a character, or lock a spot behind a password people have to find first.</p>
+    </section>
+
+    <section class="feature" data-accent="#a855f7">
+      <div class="wrap feature-grid">
+        <div class="feature-copy">
+          <p class="eyebrow reveal">Voices</p>
+          <h2 class="reveal">Write it. Hear it.</h2>
+          <p class="lead reveal d1">
+            Type the words and pick a voice. ElevenLabs and Google voices are
+            built in, so you get a narrator without booking a studio or
+            recording yourself twelve times.
+          </p>
+          <div class="chips reveal d2">
+            <span class="chip on">ElevenLabs built in</span>
+            <span class="chip">Twenty plus voices</span>
+            <span class="chip">Tell it how to say the line</span>
+            <span class="chip">Or upload your own audio</span>
+          </div>
+        </div>
+        <div class="panel reveal d1">
+          <div class="wave">
+            <i style="height:24%; animation-delay:0s"></i><i style="height:58%; animation-delay:.12s"></i>
+            <i style="height:96%; animation-delay:.24s"></i><i style="height:44%; animation-delay:.36s"></i>
+            <i style="height:78%; animation-delay:.48s"></i><i style="height:32%; animation-delay:.6s"></i>
+            <i style="height:88%; animation-delay:.72s"></i><i style="height:52%; animation-delay:.84s"></i>
+            <i style="height:20%; animation-delay:.96s"></i>
+          </div>
+        </div>
       </div>
-      <div class="step">
-        <span class="num">3</span>
-        <h3>Share the link</h3>
-        <p>Send it to anyone. They walk, their phone listens for the spots, and the story plays itself.</p>
+    </section>
+
+    <section class="feature" data-accent="#6366f1">
+      <div class="wrap feature-grid">
+        <div class="feature-copy">
+          <p class="eyebrow reveal">Characters</p>
+          <h2 class="reveal">People they can actually talk to.</h2>
+          <p class="lead reveal d1">
+            Give a character a voice, something they want, and something they
+            are hiding. Players type to them and get real answers back. You
+            decide what it takes before the secret comes out.
+          </p>
+          <div class="chips reveal d2">
+            <span class="chip on">Real conversation</span>
+            <span class="chip">A secret worth earning</span>
+            <span class="chip">Stays in character</span>
+            <span class="chip">Can open a locked zone</span>
+          </div>
+        </div>
+        <div class="panel reveal d1">
+          <div class="bubbles">
+            <b class="them">You said it. A name said out loud is a door.</b>
+            <b class="you">What is under the water?</b>
+            <b class="them">Ask me that again when you have walked further.</b>
+          </div>
+        </div>
       </div>
-    </div>
+    </section>
+
+    <section class="feature" data-accent="#f59e0b">
+      <div class="wrap feature-grid">
+        <div class="feature-copy">
+          <p class="eyebrow reveal">Puzzles</p>
+          <h2 class="reveal">Doors that stay shut.</h2>
+          <p class="lead reveal d1">
+            Lock a zone behind a password and hide the answer earlier in the
+            walk. Leave a hint if you are feeling kind. Or let a character
+            decide when someone has earned it.
+          </p>
+          <div class="chips reveal d2">
+            <span class="chip on">Password zones</span>
+            <span class="chip">Hints you write</span>
+            <span class="chip">Unlocked by conversation</span>
+            <span class="chip">Answers never leave the server</span>
+          </div>
+        </div>
+        <div class="panel reveal d1">
+          <div class="lock"><span></span><span></span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="feature" data-accent="#06b6d4">
+      <div class="wrap feature-grid">
+        <div class="feature-copy">
+          <p class="eyebrow reveal">Collecting</p>
+          <h2 class="reveal">Things to find and carry.</h2>
+          <p class="lead reveal d1">
+            Hide objects along the route. Players pick them up, watch them
+            gather in a counter as they walk, and spend them at the end. Some
+            stay a mystery until found.
+          </p>
+          <div class="chips reveal d2">
+            <span class="chip on">Hidden collectibles</span>
+            <span class="chip">A counter on screen</span>
+            <span class="chip">Spend them to get through</span>
+            <span class="chip">Unknown until picked up</span>
+          </div>
+        </div>
+        <div class="panel reveal d1">
+          <div class="tokens"><span></span><span></span><span></span><span></span><span></span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="feature" data-accent="#ec4899">
+      <div class="wrap feature-grid">
+        <div class="feature-copy">
+          <p class="eyebrow reveal">Camera</p>
+          <h2 class="reveal">Objects that are only there through the lens.</h2>
+          <p class="lead reveal d1">
+            Place something at a spot and it appears when a player raises their
+            camera. It can sit still or fly overhead. All of it in the browser,
+            with no app store in the way.
+          </p>
+          <div class="chips reveal d2">
+            <span class="chip on">Augmented reality</span>
+            <span class="chip">Sits still or flies over</span>
+            <span class="chip">Placed on the map</span>
+            <span class="chip">No install</span>
+          </div>
+        </div>
+        <div class="panel reveal d1">
+          <div class="reticle"><span></span><span></span><span></span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="feature" data-accent="#f43f5e">
+      <div class="wrap feature-grid">
+        <div class="feature-copy">
+          <p class="eyebrow reveal">Your look</p>
+          <h2 class="reveal">It does not have to look like us.</h2>
+          <p class="lead reveal d1">
+            Set the colours, the type, and the map. Write your own welcome
+            screen and your own ending. This page has been changing colour as
+            you scroll, which is the same control you get.
+          </p>
+          <div class="chips reveal d2">
+            <span class="chip on">Your colours</span>
+            <span class="chip">Three typefaces</span>
+            <span class="chip">Six map styles</span>
+            <span class="chip">Your welcome screen</span>
+            <span class="chip">Your ending</span>
+          </div>
+        </div>
+        <div class="panel reveal d1">
+          <div class="swatches"><i></i><i></i><i></i></div>
+        </div>
+      </div>
+    </section>
+
   </div>
 
   <div class="wrap block">
-    <p class="eyebrow">Built for the real world</p>
-    <h2>It waits until it knows where you are.</h2>
-    <p>
-      Phones guess your location, and the guess gets better over the first few
-      seconds. Most apps show you a map right away and let the dot jump around.
-      Obelisk waits for the signal to settle before the walk begins, so the first
-      spot plays where it should.
+    <p class="eyebrow reveal">Built for the real world</p>
+    <h2 class="reveal">It waits until it knows where you are.</h2>
+    <p class="reveal">
+      GPS guesses your location, and the guess gets better over the first few
+      seconds. Most tools show a map right away and let the dot jump around.
+      Obelisk holds the walk until the signal settles, so the first zone
+      triggers where it should.
     </p>
-    <div class="rings" aria-hidden="true">
+    <div class="rings reveal d1" aria-hidden="true">
       <span class="ring-outer"></span>
       <span class="ring-inner"></span>
       <span class="ripple"></span>
@@ -95,34 +255,34 @@
       <span class="bloom"><span></span></span>
       <span class="dot"></span>
     </div>
-    <p class="faint" style="text-align:center; margin: 1.5rem auto 0;">
-      This is the screen players see while their phone finds them.
+    <p class="faint reveal" style="text-align:center; margin: 1.5rem auto 0;">
+      This is the real screen players see while their phone finds them.
     </p>
   </div>
 
   <div class="wrap block" id="pricing">
-    <p class="eyebrow">Pricing</p>
-    <h2>Start free.</h2>
-    <p>
-      The AI voices and characters cost money to run. You can pay for that yourself
-      with your own key, or let us handle it.
+    <p class="eyebrow reveal">Pricing</p>
+    <h2 class="reveal">Start free.</h2>
+    <p class="reveal">
+      AI voices and characters cost money to run. Pay for that yourself with
+      your own key, or let us handle it.
     </p>
 
     <div class="cards">
-      <div class="card">
+      <div class="card reveal">
         <span class="tag-space" aria-hidden="true"></span>
         <h3>Free</h3>
         <p class="price">$0</p>
         <p class="per">Bring your own AI key</p>
         <ul>
-          <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg> Build as many experiences as you want</li>
-          <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg> Audio, characters, and locked spots</li>
+          <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg> Every feature, no limits on what you build</li>
+          <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg> Voices, characters, AR, locks, collectibles</li>
           <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg> You add your own AI key and pay that bill</li>
         </ul>
         <a class="ghost" href="https://app.obelisk.place">Start building</a>
       </div>
 
-      <div class="card featured">
+      <div class="card featured reveal d1">
         <span class="tag">Most people</span>
         <h3>Creator</h3>
         <p class="price">$00</p>
@@ -135,11 +295,11 @@
         <a class="cta" href="https://app.obelisk.place">Start building</a>
       </div>
 
-      <div class="card">
+      <div class="card reveal d2">
         <span class="tag-space" aria-hidden="true"></span>
         <h3>Studio</h3>
         <p class="price">Talk to us</p>
-        <p class="per">For teams and venues</p>
+        <p class="per">Museums, parks, festivals, teams</p>
         <ul>
           <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg> Everything in Creator</li>
           <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg> Help building your first walk</li>
@@ -148,7 +308,7 @@
         <a class="ghost" href="mailto:hello@obelisk.place">Get in touch</a>
       </div>
     </div>
-    <p class="faint" style="margin-top:1.25rem;">
+    <p class="faint reveal" style="margin-top:1.25rem;">
       Prices are not final yet. Nothing is charged today.
     </p>
   </div>
@@ -164,5 +324,6 @@
   </div>
 </footer>
 
+<script src="/scroll.js" defer></script>
 </body>
 </html>
