@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Obelisk: walk into a story</title>
+  <meta name="description" content="Obelisk lets you build audio experiences tied to real places. People walk there, and the story plays on their phone. No app to install.">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" href="/icons/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/calibration.css">
+</head>
+<body>
+
+<header>
+  <div class="wrap bar">
+    <a class="brand" href="/">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>
+      </svg>
+      Obelisk
+    </a>
+    <nav>
+      <a href="/about">About</a>
+      <a href="/blog">Blog</a>
+      <a href="#pricing" class="hide-sm">Pricing</a>
+      <a class="cta" href="https://app.obelisk.place">Start building</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <div class="wrap hero">
+    <h1>Walk into a story.</h1>
+    <p class="lead">
+      Obelisk lets you tie sound and characters to real places. Someone walks to the
+      spot, and that part of the story plays on their phone. There is no app to install.
+    </p>
+    <p><a class="cta" href="https://app.obelisk.place">Start building</a></p>
+  </div>
+
+  <div class="wrap block">
+    <p class="eyebrow">What it is</p>
+    <h2>A map, and things that happen on it.</h2>
+    <p>
+      You pick spots on a map and decide what each one does. One spot might play
+      a voice. Another might hide a code someone has to work out. Another might be
+      a character they can talk to.
+    </p>
+    <p>
+      Then you share a link. People open it in their browser and start walking.
+      Nothing happens until they reach a spot. That is the whole idea.
+    </p>
+  </div>
+
+  <div class="wrap block">
+    <p class="eyebrow">How it works</p>
+    <h2>Three steps.</h2>
+    <div class="steps">
+      <div class="step">
+        <span class="num">1</span>
+        <h3>Mark your spots</h3>
+        <p>Drop pins on a map where you want something to happen. Make them as small or as wide as you like.</p>
+      </div>
+      <div class="step">
+        <span class="num">2</span>
+        <h3>Say what happens</h3>
+        <p>Add audio, write a character, or lock a spot behind a password people have to find first.</p>
+      </div>
+      <div class="step">
+        <span class="num">3</span>
+        <h3>Share the link</h3>
+        <p>Send it to anyone. They walk, their phone listens for the spots, and the story plays itself.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap block">
+    <p class="eyebrow">Built for the real world</p>
+    <h2>It waits until it knows where you are.</h2>
+    <p>
+      Phones guess your location, and the guess gets better over the first few
+      seconds. Most apps show you a map right away and let the dot jump around.
+      Obelisk waits for the signal to settle before the walk begins, so the first
+      spot plays where it should.
+    </p>
+    <div class="rings" aria-hidden="true">
+      <span class="ring-outer"></span>
+      <span class="ring-inner"></span>
+      <span class="ripple"></span>
+      <span class="ripple"></span>
+      <span class="ripple"></span>
+      <span class="ring-accuracy"></span>
+      <span class="bloom"><span></span></span>
+      <span class="dot"></span>
+    </div>
+    <p class="faint" style="text-align:center; margin: 1.5rem auto 0;">
+      This is the screen players see while their phone finds them.
+    </p>
+  </div>
+
+  <div class="wrap block" id="pricing">
+    <p class="eyebrow">Pricing</p>
+    <h2>Start free.</h2>
+    <p>
+      The AI voices and characters cost money to run. You can pay for that yourself
+      with your own key, or let us handle it.
+    </p>
+
+    <div class="cards">
+      <div class="card">
+        <span class="tag-space" aria-hidden="true"></span>
+        <h3>Free</h3>
+        <p class="price">$0</p>
+        <p class="per">Bring your own AI key</p>
+        <ul>
+          <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg> Build as many experiences as you want</li>
+          <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg> Audio, characters, and locked spots</li>
+          <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg> You add your own AI key and pay that bill</li>
+        </ul>
+        <a class="ghost" href="https://app.obelisk.place">Start building</a>
+      </div>
+
+      <div class="card featured">
+        <span class="tag">Most people</span>
+        <h3>Creator</h3>
+        <p class="price">$00</p>
+        <p class="per">per month</p>
+        <ul>
+          <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg> Everything in Free</li>
+          <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg> No AI key needed, we cover it</li>
+          <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg> More storage for your audio</li>
+        </ul>
+        <a class="cta" href="https://app.obelisk.place">Start building</a>
+      </div>
+
+      <div class="card">
+        <span class="tag-space" aria-hidden="true"></span>
+        <h3>Studio</h3>
+        <p class="price">Talk to us</p>
+        <p class="per">For teams and venues</p>
+        <ul>
+          <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg> Everything in Creator</li>
+          <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg> Help building your first walk</li>
+          <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg> Higher limits and a person to email</li>
+        </ul>
+        <a class="ghost" href="mailto:hello@obelisk.place">Get in touch</a>
+      </div>
+    </div>
+    <p class="faint" style="margin-top:1.25rem;">
+      Prices are not final yet. Nothing is charged today.
+    </p>
+  </div>
+
+</main>
+
+<footer>
+  <div class="wrap footrow">
+    <a href="/about">About</a>
+    <a href="/blog">Blog</a>
+    <a href="https://app.obelisk.place">Start building</a>
+    <span class="spacer faint">Obelisk</span>
+  </div>
+</footer>
+
+</body>
+</html>

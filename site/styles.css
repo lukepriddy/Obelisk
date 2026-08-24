@@ -1,0 +1,158 @@
+/*
+ * obelisk.place
+ *
+ * The marketing site. Deliberately separate from the app in app.obelisk.place:
+ * no build step, no framework, no dependencies. A page that describes a product
+ * should not be able to break the product.
+ *
+ * Colours are the app's own, not an approximation of them. #10b981 is the
+ * default accent every new experience starts with, and #09090b is the shell the
+ * player renders on.
+ */
+
+:root {
+  --bg:        #09090b;
+  --bg-raised: #18181b;
+  --line:      #27272a;
+  --text:      #fafafa;
+  --muted:     #a1a1aa;
+  --faint:     #71717a;
+  --accent:    #10b981;
+  --accent-dim:#34d399;
+  --radius:    18px;
+  --measure:   34rem;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 400 17px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: inherit; }
+
+.wrap { width: 100%; max-width: 62rem; margin: 0 auto; padding: 0 1.5rem; }
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+header {
+  position: sticky; top: 0; z-index: 20;
+  background: rgba(9, 9, 11, 0.82);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--line);
+}
+.bar { display: flex; align-items: center; gap: 1.25rem; height: 62px; }
+.brand { display: flex; align-items: center; gap: 0.55rem; text-decoration: none; font-weight: 700; letter-spacing: -0.01em; }
+.brand svg { display: block; }
+nav { margin-left: auto; display: flex; align-items: center; gap: 1.5rem; }
+nav a { color: var(--muted); text-decoration: none; font-size: 0.95rem; }
+nav a:hover { color: var(--text); }
+.cta {
+  background: var(--accent); color: #09090b;
+  padding: 0.5rem 0.95rem; border-radius: 999px;
+  font-weight: 700; font-size: 0.9rem; text-decoration: none;
+  white-space: nowrap;
+}
+.cta:hover { background: var(--accent-dim); }
+@media (max-width: 30rem) {
+  nav { gap: 1rem; }
+  nav a.hide-sm { display: none; }        /* Pricing only: it is an anchor on this page */
+  .cta { padding: 0.45rem 0.8rem; font-size: 0.85rem; }
+}
+
+/* ── Type ───────────────────────────────────────────────────────────────── */
+h1 {
+  font-size: clamp(2.3rem, 7vw, 3.9rem);
+  line-height: 1.04; letter-spacing: -0.035em;
+  font-weight: 800; margin: 0 0 1.1rem;
+  max-width: 18ch;
+}
+h2 {
+  font-size: clamp(1.5rem, 3.6vw, 2.1rem);
+  line-height: 1.15; letter-spacing: -0.025em;
+  font-weight: 700; margin: 0 0 0.9rem;
+}
+h3 { font-size: 1.06rem; font-weight: 700; margin: 0 0 0.35rem; letter-spacing: -0.01em; }
+p  { margin: 0 0 1.1rem; max-width: var(--measure); }
+.lead { font-size: clamp(1.08rem, 2.3vw, 1.28rem); color: var(--muted); line-height: 1.55; }
+.muted { color: var(--muted); }
+.faint { color: var(--faint); font-size: 0.86rem; }
+
+/* One page that flows, rather than a stack of boxed-off marketing panels.
+   The rhythm comes from spacing, not from borders and background swaps. */
+.block { padding: 5.5rem 0; }
+.block + .block { padding-top: 0; }
+.hero { padding: 6.5rem 0 5rem; }
+
+.eyebrow {
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.19em;
+  text-transform: uppercase; color: var(--accent-dim);
+  margin: 0 0 1rem;
+}
+
+/* ── Steps ──────────────────────────────────────────────────────────────── */
+.steps { display: grid; gap: 2rem; margin-top: 2.5rem; }
+@media (min-width: 46rem) { .steps { grid-template-columns: repeat(3, 1fr); gap: 2.25rem; } }
+.step p { margin: 0; color: var(--muted); font-size: 0.97rem; }
+.num {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 999px;
+  border: 1px solid var(--accent); color: var(--accent);
+  font-size: 0.78rem; font-weight: 700; margin-bottom: 0.75rem;
+}
+
+/* ── Pricing ────────────────────────────────────────────────────────────── */
+.cards { display: grid; gap: 1rem; margin-top: 2.5rem; }
+@media (min-width: 52rem) { .cards { grid-template-columns: repeat(3, 1fr); } }
+.card {
+  background: var(--bg-raised); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 1.6rem 1.5rem;
+  display: flex; flex-direction: column;
+}
+.card.featured { border-color: rgba(16, 185, 129, 0.5); }
+.tag { display: block; height: 1.42rem; margin-bottom: 0.9rem; }
+.tag-space { display: none; }
+@media (min-width: 52rem) {
+  .tag-space { display: block; height: 1.42rem; margin-bottom: 0.9rem; }
+}
+.tag {
+  align-self: flex-start; width: fit-content; font-size: 0.66rem; font-weight: 700;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--accent); background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  padding: 0.2rem 0.5rem; border-radius: 999px;
+  line-height: 1;
+}
+.price { font-size: 2.1rem; font-weight: 800; letter-spacing: -0.03em; margin: 0.3rem 0 0.15rem; }
+.per { color: var(--faint); font-size: 0.86rem; margin: 0 0 1.1rem; }
+.card ul { list-style: none; padding: 0; margin: 0 0 1.5rem; }
+.card li { display: flex; gap: 0.6rem; align-items: flex-start; color: var(--muted); font-size: 0.94rem; padding: 0.3rem 0; }
+.card li svg { flex: 0 0 auto; margin-top: 0.35rem; color: var(--accent); }
+.card .cta, .card .ghost { margin-top: auto; text-align: center; display: block; }
+.ghost {
+  border: 1px solid var(--line); border-radius: 999px;
+  padding: 0.5rem 0.95rem; font-weight: 600; font-size: 0.9rem;
+  text-decoration: none; color: var(--text);
+}
+.ghost:hover { border-color: var(--faint); }
+
+/* ── Footer ─────────────────────────────────────────────────────────────── */
+footer { border-top: 1px solid var(--line); padding: 2.5rem 0 3.5rem; margin-top: 4rem; }
+.footrow { display: flex; flex-wrap: wrap; gap: 1.25rem; align-items: center; }
+footer a { color: var(--muted); text-decoration: none; font-size: 0.9rem; }
+footer a:hover { color: var(--text); }
+.footrow .spacer { margin-left: auto; }
+
+/* ── Blog list ──────────────────────────────────────────────────────────── */
+.posts { list-style: none; padding: 0; margin: 2.5rem 0 0; }
+.posts li { border-top: 1px solid var(--line); padding: 1.4rem 0; }
+.posts li:last-child { border-bottom: 1px solid var(--line); }
+.posts a { text-decoration: none; display: block; }
+.posts a:hover h3 { color: var(--accent-dim); }
+.posts time { color: var(--faint); font-size: 0.82rem; }
