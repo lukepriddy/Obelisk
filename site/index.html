@@ -51,18 +51,28 @@
     preview has to work without signing in, which today it does not.
   -->
   <div class="wrap block">
-    <p class="eyebrow reveal">Try it</p>
-    <h2 class="reveal">An example</h2>
-    <p class="reveal">
-      A short walk you can try from here, with each kind of zone in it. No
-      walking required.
+    <p class="eyebrow reveal" style="text-align:center">Try it</p>
+    <h2 class="reveal" style="text-align:center;max-width:none">An example</h2>
+    <p class="reveal" style="margin-left:auto;margin-right:auto;text-align:center">
+      This is the real thing, not a video. Two stops in Washington Square:
+      one plays audio, the other is a character you can talk to. Drag the red
+      dot into a circle to trigger it.
     </p>
-    <div class="demo reveal d1" aria-hidden="true">
-      <div class="demo-inner">
-        <span class="demo-dot"></span>
-        <p class="faint" style="margin:0">Example experience coming soon</p>
-      </div>
+    <!-- The published experience in demo mode: a draggable position instead of
+         GPS, so it can be tried from a desk. Nothing here is a mock, which
+         means it cannot drift away from what the product actually does. -->
+    <div class="demo reveal d1">
+      <iframe
+        src="https://app.obelisk.place/player/3aff1e9b-ea37-4a0d-bd65-13b9354f4dbb?demo=1"
+        title="Washington Square: a demo"
+        loading="lazy"
+        allow="autoplay"
+        referrerpolicy="no-referrer-when-downgrade"></iframe>
     </div>
+    <p class="faint reveal" style="text-align:center;margin:1rem auto 0">
+      <a href="https://app.obelisk.place/player/3aff1e9b-ea37-4a0d-bd65-13b9354f4dbb?demo=1"
+         target="_blank" rel="noopener" style="color:var(--accent)">Open it full screen</a>
+    </p>
   </div>
 
   <div id="features">
@@ -85,7 +95,12 @@
           </div>
         </div>
         <div class="panel reveal d1">
-          <div class="zone-stack"><span></span><span></span><span></span><span></span></div>
+          <div class="zone-stack">
+            <span></span><span></span><span></span>
+            <span class="sweep"></span>
+            <span class="ping"></span><span class="ping b"></span>
+            <span></span>
+          </div>
         </div>
       </div>
     </section>
@@ -159,7 +174,7 @@
         </div>
         <div class="panel reveal d1">
           <div class="lock">
-            <span></span><span></span>
+            <span></span>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
           </div>
         </div>
@@ -229,7 +244,9 @@
               <i style="width:84px;height:84px;left:12%;top:63%"></i>
               <i style="width:65px;height:65px;left:67%;top:33%"></i>
             </div>
-            <div class="ar-object"></div>
+            <div class="ar-stage">
+              <div class="ar-object"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            </div>
           </div>
         </div>
       </div>
@@ -263,9 +280,9 @@
   </div>
 
   <div class="wrap block">
-    <p class="eyebrow reveal">Built for the real world</p>
-    <h2 class="reveal">GPS accuracy</h2>
-    <p class="reveal">
+    <p class="eyebrow reveal" style="text-align:center">Built for the real world</p>
+    <h2 class="reveal" style="text-align:center;max-width:none">GPS accuracy</h2>
+    <p class="reveal" style="margin-left:auto;margin-right:auto;text-align:center">
       A phone's location is a guess that gets better over the first few
       seconds. Obelisk waits for it to settle before the walk starts, so the
       first zone does not fire in the wrong place.

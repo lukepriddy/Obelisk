@@ -1398,9 +1398,14 @@ export const Player: React.FC = () => {
     // In preview/sim mode seed position at the tour start point.
     // In GPS mode leave userPos null — the watchPosition callback will set it
     // once the device gets a real fix, preventing fake zone triggers.
-    if (isPreview) {
+    if (isPreview || (isDemoRequested && t.allow_simulation)) {
       setUserPos([t.lat, t.lng]);
       simPosRef.current = [t.lat, t.lng];
+      // The GPS watcher starts on mount, before the tour is loaded and before
+      // anything knows this is a demo. On a desktop browser it has usually
+      // already failed by now, and that stale error would sit on the welcome
+      // screen demanding location for a walk that never needed it.
+      setGpsError(null);
     }
 
     setLoading(false);
@@ -1836,18 +1841,18 @@ export const Player: React.FC = () => {
               }}
             >
               <div className="w-full max-w-sm mx-auto px-5 flex flex-col gap-3">
-                {gpsError && (
+                {gpsError && !simulationMode && (
                   <div className="w-full rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300 leading-snug text-center">
                     {gpsError}
                   </div>
                 )}
-                {!isPreview && !userPos && !gpsError && (
+                {!simulationMode && !userPos && !gpsError && (
                   <div className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 flex items-center justify-center gap-2 text-sm" style={{ color: textColor }}>
                     <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin opacity-60" />
                     <span className="opacity-60">Waiting for GPS signal…</span>
                   </div>
                 )}
-                {!isPreview && !userPos && showGpsRetry && (
+                {!simulationMode && !userPos && showGpsRetry && (
                   <button
                     type="button"
                     onClick={retryGpsFromTap}
@@ -1860,7 +1865,7 @@ export const Player: React.FC = () => {
                 )}
                 <button
                   onClick={startAudio}
-                  disabled={!isPreview && !userPos}
+                  disabled={!simulationMode && !userPos}
                   className="flex items-center justify-center gap-2 text-white w-full py-4 rounded-2xl text-lg font-bold disabled:opacity-40 disabled:cursor-not-allowed"
                   style={{ backgroundColor: accent }}
                 >
