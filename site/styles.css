@@ -173,3 +173,13 @@ footer a:hover { color: var(--text); }
 .posthead time { color: var(--faint); font-size: 0.85rem; }
 .backlink { color: var(--muted); text-decoration: none; font-size: 0.9rem; }
 .backlink:hover { color: var(--text); }
+
+/* ── Centred blocks ─────────────────────────────────────────────────────── */
+/* Applied where a section is about one thing and has nothing beside it, so
+   the eyebrow, the heading and the paragraph all sit on the same axis as the
+   thing they introduce. Done with a class rather than inline styles, because
+   it was three sections and would have been nine attributes. */
+.block.centered { text-align: center; }
+.block.centered h2 { max-width: none; margin-left: auto; margin-right: auto; }
+.block.centered p  { margin-left: auto; margin-right: auto; }
+.block.centered .cards { text-align: left; }

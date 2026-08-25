@@ -1423,7 +1423,12 @@ export const Player: React.FC = () => {
     // Both of these must happen inside the gesture. The tone doubles as the
     // audio test and as iOS's unlock; deferring it past an await would lose
     // the grant, which fails silently and only on real phones.
-    setCalibrating(true);
+    // Calibration exists to wait for a GPS fix to converge and to check the
+    // player can hear something. In simulation there is no fix to wait for, and
+    // the copy on that screen asks a person at a desk to hold their phone up.
+    // The audio grant is already taken by this tap, which is the part that
+    // actually matters, so a simulated run goes straight to the map.
+    setCalibrating(!simulationMode);
     try {
       const tone = new Audio('/calibration-tone.m4a');
       tone.volume = 0.7;

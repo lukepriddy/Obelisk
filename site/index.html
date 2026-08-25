@@ -50,27 +50,31 @@
     it needs before it goes in: the experience has to be genuinely public, and
     preview has to work without signing in, which today it does not.
   -->
-  <div class="wrap block">
-    <p class="eyebrow reveal" style="text-align:center">Try it</p>
-    <h2 class="reveal" style="text-align:center;max-width:none">An example</h2>
-    <p class="reveal" style="margin-left:auto;margin-right:auto;text-align:center">
+  <div class="wrap block centered">
+    <p class="eyebrow reveal">Try it</p>
+    <h2 class="reveal">An example</h2>
+    <p class="reveal">
       This is the real thing, not a video. Two stops in Washington Square:
       one plays audio, the other is a character you can talk to. Drag the red
       dot into a circle to trigger it.
     </p>
     <!-- The published experience in demo mode: a draggable position instead of
          GPS, so it can be tried from a desk. Nothing here is a mock, which
-         means it cannot drift away from what the product actually does. -->
+         means it cannot drift away from what the product actually does.
+
+         SWAP THIS HOST when app.obelisk.place is attached. It points at the
+         vercel URL because that is what resolves today, and an embed pointing
+         at a domain with no DNS is a blank box rather than a broken link. -->
     <div class="demo reveal d1">
       <iframe
-        src="https://app.obelisk.place/player/3aff1e9b-ea37-4a0d-bd65-13b9354f4dbb?demo=1"
+        src="https://obelisk-main.vercel.app/player/3aff1e9b-ea37-4a0d-bd65-13b9354f4dbb?demo=1"
         title="Washington Square: a demo"
         loading="lazy"
         allow="autoplay"
         referrerpolicy="no-referrer-when-downgrade"></iframe>
     </div>
-    <p class="faint reveal" style="text-align:center;margin:1rem auto 0">
-      <a href="https://app.obelisk.place/player/3aff1e9b-ea37-4a0d-bd65-13b9354f4dbb?demo=1"
+    <p class="faint reveal" style="margin:1rem auto 0">
+      <a href="https://obelisk-main.vercel.app/player/3aff1e9b-ea37-4a0d-bd65-13b9354f4dbb?demo=1"
          target="_blank" rel="noopener" style="color:var(--accent)">Open it full screen</a>
     </p>
   </div>
@@ -279,10 +283,10 @@
 
   </div>
 
-  <div class="wrap block">
-    <p class="eyebrow reveal" style="text-align:center">Built for the real world</p>
-    <h2 class="reveal" style="text-align:center;max-width:none">GPS accuracy</h2>
-    <p class="reveal" style="margin-left:auto;margin-right:auto;text-align:center">
+  <div class="wrap block centered">
+    <p class="eyebrow reveal">Built for the real world</p>
+    <h2 class="reveal">GPS accuracy</h2>
+    <p class="reveal">
       A phone's location is a guess that gets better over the first few
       seconds. Obelisk waits for it to settle before the walk starts, so the
       first zone does not fire in the wrong place.
@@ -302,9 +306,9 @@
     </p>
   </div>
 
-  <div class="wrap block" id="pricing">
+  <div class="wrap block centered" id="pricing">
     <p class="eyebrow reveal">Pricing</p>
-    <h2 class="reveal">Pricing</h2>
+    <h2 class="reveal">Choose your plan</h2>
     <p class="reveal">
       The AI costs money to run. Add your own key, or let us cover it.
     </p>
