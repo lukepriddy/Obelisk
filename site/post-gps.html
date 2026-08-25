@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Why the first zone used to fire in the wrong place</title>
+  <title>GPS is a guess, and what that means for a walk</title>
   <meta name="description" content="GPS is a guess that gets better. Here is what that means for a walk, and why the app now waits before it starts.">
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" href="/icons/favicon.svg" type="image/svg+xml">
@@ -32,15 +32,15 @@
     <p style="margin-bottom:1.5rem"><a class="backlink" href="/blog">Back to all posts</a></p>
     <div class="posthead">
       <time datetime="2026-08-23">23 August 2026</time>
-      <h1 style="margin-top:0.5rem">Why the first zone used to fire in the wrong place</h1>
+      <h1 style="margin-top:0.5rem">GPS is a guess, and what that means for a walk</h1>
     </div>
   </div>
   <div class="wrap" style="padding-bottom:4rem">
     <div class="prose">
       <p>
-        Here is something people find out the hard way when they build a walk.
-        A phone does not know where it is. It guesses, and the guess gets
-        better over the first few seconds.
+        A phone does not know exactly where it is. It makes a guess from the
+        satellites and the wifi around it, and that guess gets more accurate
+        over the first few seconds.
       </p>
       <p>
         When someone opens a walk and starts moving straight away, that first
@@ -50,18 +50,18 @@
         settles.
       </p>
 
-      <h2>What that does to a walk</h2>
+      <h2>Why this matters for a walk</h2>
       <p>
-        If your first zone is small, the walk breaks before it starts. Either
-        nothing plays when the player is standing in the right place, or
-        something plays while they are still in the car park.
+        If your first zone is small, it can go wrong right at the start.
+        Either nothing plays while the player is standing in the right place,
+        or something plays while they are still in the car park.
       </p>
       <p>
-        Neither of those reads as a GPS problem to the person it happens to. It
-        reads as a broken experience, and they blame you.
+        To the player this does not look like a GPS problem. It looks like
+        the experience is broken.
       </p>
 
-      <h2>What we do about it</h2>
+      <h2>What Obelisk does</h2>
       <p>
         Obelisk does not show the map straight away. It holds a screen in front
         of the walk while the signal settles, and shows a ring that tightens as
@@ -69,22 +69,19 @@
         begins.
       </p>
       <p>
-        It takes a few seconds. Most people are still putting their headphones
-        in. Nobody has ever complained about it, and the first zone now fires
-        where it should.
+        It usually takes a few seconds, which is about how long it takes to
+        put headphones in. After that the first zone plays in the right
+        place.
       </p>
 
-      <h2>A second thing, quieter</h2>
+      <h2>Drift after that</h2>
       <p>
-        Even after the signal settles, it still drifts a little. So a zone is
-        slightly harder to leave than it is to enter. If you have ever stood
-        still and watched an app decide you had walked away, that is the
-        problem this fixes.
+        Even once the signal settles it still moves around a little. So a
+        zone is slightly harder to leave than it is to enter. Without that,
+        standing still can be enough for the app to decide you have walked
+        away and stop the audio.
       </p>
-      <p>
-        You will not notice either of these when they work. That is rather the
-        point.
-      </p>
+
     </div>
   </div>
 </main>

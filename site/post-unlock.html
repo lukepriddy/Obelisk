@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>A character should make you earn the answer</title>
+  <title>Letting a character decide when to unlock a zone</title>
   <meta name="description" content="If a locked door opens the moment you say hello, it was never a puzzle.">
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" href="/icons/favicon.svg" type="image/svg+xml">
@@ -32,68 +32,70 @@
     <p style="margin-bottom:1.5rem"><a class="backlink" href="/blog">Back to all posts</a></p>
     <div class="posthead">
       <time datetime="2026-08-11">11 August 2026</time>
-      <h1 style="margin-top:0.5rem">A character should make you earn the answer</h1>
+      <h1 style="margin-top:0.5rem">Letting a character decide when to unlock a zone</h1>
     </div>
   </div>
   <div class="wrap" style="padding-bottom:4rem">
     <div class="prose">
       <p>
-        You can put a character in front of a locked door. Talk your way past
-        them and the door opens. It is a good idea and it is very old.
+        In Obelisk you can put a character in front of a locked zone. If the
+        player talks their way past them, the zone opens.
       </p>
       <p>
-        Ours did not work. The door opened as soon as the character replied to
-        anything. A player typed hello, got a line back, and walked through.
-      </p>
-
-      <h2>Why that is worse than no puzzle</h2>
-      <p>
-        A door that opens for anyone is not a door. It is a short pause with
-        extra steps. Worse, the player can tell. They know they did not do
-        anything, so the moment lands flat.
+        Our first version did not really work. The zone opened as soon as
+        the character replied to anything at all. A player could type hello,
+        get one line back, and walk through.
       </p>
 
-      <h2>Counting messages does not fix it</h2>
+      <h2>The problem with that</h2>
       <p>
-        The obvious repair is to wait for a few messages before opening. We
-        tried that idea on paper and threw it out.
+        If the zone opens for anyone, the character is not really guarding
+        anything. Players notice, because they know they did not do anything
+        to get through.
       </p>
-      <blockquote>
-        If the door opens after four replies, the puzzle is not the puzzle. The
-        puzzle is typing four times.
-      </blockquote>
 
-      <h2>Let the character decide</h2>
+      <h2>Why we did not just count messages</h2>
       <p>
-        Now you write what the character is hiding and what someone has to do
-        to get it. Then the character judges it for itself, and tells the app
-        quietly when it is satisfied. The player never sees any of that
-        machinery. They just get an answer, and the door is open.
+        The obvious fix is to wait for a few messages before opening the
+        zone. We decided against it.
       </p>
       <p>
-        The trick is writing a condition the character can actually judge.
-        Something like this works:
+        If the zone opens after four replies, then the thing the player has to
+        do is send four messages. That is not much better than one.
+      </p>
+
+      <h2>How it works now</h2>
+      <p>
+        You write what the character is hiding and what someone has to do to
+        get it. The character then decides for itself when that has happened,
+        and tells the app. The player does not see any of this. They get an
+        answer, and the zone is open.
+      </p>
+      <p>
+        The important part is writing something the character can actually
+        judge. This works:
       </p>
       <blockquote>
         Reveals it only after the player writes you a poem of three lines. Any
         honest attempt counts. Asking you to write it does not.
       </blockquote>
       <p>
-        Something like this does not:
+        This does not:
       </p>
       <blockquote>
         Reveals it when the player is nice.
       </blockquote>
       <p>
-        The first one has an answer. The second one is a mood, and a character
-        asked to judge a mood will either open for everyone or for nobody.
+        The first one either happened or it did not. The second one is a
+        matter of opinion, and a character asked to judge an opinion will
+        either open for everyone or for nobody.
       </p>
 
       <h2>Nobody gets stuck</h2>
       <p>
-        The zone still has its normal password. Talking your way in is a
-        shortcut, not the only door. If a player never works out what the
-        character wants, they can still get through the ordinary way.
+        The zone still has its normal password. Talking to the character is
+        a second way in, not the only way. If a player never works out what
+        the character wants, they can still enter the password.
       </p>
     </div>
   </div>
