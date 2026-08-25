@@ -357,3 +357,32 @@
 @media (max-width: 34rem) {
   .demo { aspect-ratio: 3 / 4; }
 }
+
+
+/* ── Demo shield ────────────────────────────────────────────────────────── */
+/* The iframe holds a scrollable map. Left live, it swallows the wheel whenever
+   the pointer crosses it, and the page appears to stop scrolling. So it is
+   inert until clicked and goes inert again when the pointer leaves. */
+.demo iframe { pointer-events: none; }
+.demo[data-active] iframe { pointer-events: auto; }
+
+.demo-shield {
+  position: absolute; inset: 0; z-index: 2;
+  border: 0; padding: 0; cursor: pointer;
+  background: rgba(9, 9, 11, 0.35);
+  display: flex; align-items: center; justify-content: center;
+  transition: opacity 0.25s ease;
+  font: inherit; color: inherit;
+}
+.demo[data-active] .demo-shield { opacity: 0; pointer-events: none; }
+.demo-shield-pill {
+  background: var(--accent); color: #09090b;
+  font-weight: 700; font-size: 0.9rem;
+  padding: 0.6rem 1.1rem; border-radius: 999px;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.45);
+}
+.demo-shield:hover .demo-shield-pill { filter: brightness(1.08); }
+
+/* The tile placeholders keep their own hue rather than following the section,
+   so the grid does not restyle itself while somebody is reading it. */
+.tile-img::after { background: radial-gradient(circle at 40% 35%, rgba(16, 185, 129, 0.12), transparent 70%); }

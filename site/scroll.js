@@ -35,6 +35,14 @@
     revealables.forEach(function (el) { revealObserver.observe(el); });
   }
 
+  // Demo shield: click to hand control to the embedded player, and take it
+  // back when the pointer leaves, so scrolling past never gets caught.
+  document.querySelectorAll('[data-demo]').forEach(function (box) {
+    var shield = box.querySelector('.demo-shield');
+    if (shield) shield.addEventListener('click', function () { box.setAttribute('data-active', ''); });
+    box.addEventListener('mouseleave', function () { box.removeAttribute('data-active'); });
+  });
+
   // Retint
   var sections = document.querySelectorAll('[data-accent]');
   if (!sections.length || !('IntersectionObserver' in window)) return;

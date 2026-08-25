@@ -34,7 +34,7 @@
 
   <div class="wrap hero">
     <p class="eyebrow reveal">Location-based experiences</p>
-    <h1 class="reveal d1">Build immersive location-based experiences with gamification, audio, and interactive AI characters</h1>
+    <h1 class="reveal d1">Immersive location-based experiences with audio zones, AI characters, AR, and gamification</h1>
     <p class="lead reveal d2">
       Mark spots on a map, decide what each one does, and share a link. Players
       walk there and it plays in their browser. Nothing to install.
@@ -64,7 +64,16 @@
          SWAP THIS HOST when app.obelisk.place is attached. It points at the
          vercel URL because that is what resolves today, and an embed pointing
          at a domain with no DNS is a blank box rather than a broken link. -->
-    <div class="demo reveal d1">
+    <!-- The iframe is inert until it is clicked.
+         A scrollable map sitting in the middle of a page traps the wheel: put
+         the pointer over it on the way down and the map scrolls instead of the
+         page, which feels like the page has jammed. So pointer events are off
+         until somebody deliberately clicks in, and go off again when they
+         leave. Scrolling past it does nothing; using it works normally. -->
+    <div class="demo reveal d1" data-demo>
+      <button class="demo-shield" type="button" aria-label="Start the demo">
+        <span class="demo-shield-pill">Click to try it</span>
+      </button>
       <iframe
         src="https://obelisk-main.vercel.app/player/3aff1e9b-ea37-4a0d-bd65-13b9354f4dbb?demo=1"
         title="Washington Square: a demo"
@@ -73,11 +82,6 @@
         referrerpolicy="no-referrer-when-downgrade"></iframe>
     </div>
     <p class="faint reveal" style="margin-top:1rem">
-      <a href="https://obelisk-main.vercel.app/player/3aff1e9b-ea37-4a0d-bd65-13b9354f4dbb?demo=1"
-         target="_blank" rel="noopener" style="color:var(--accent)">Open it full screen</a>
-    </p>
-  </div>
-    <p class="faint reveal" style="margin:1rem auto 0">
       <a href="https://obelisk-main.vercel.app/player/3aff1e9b-ea37-4a0d-bd65-13b9354f4dbb?demo=1"
          target="_blank" rel="noopener" style="color:var(--accent)">Open it full screen</a>
     </p>
@@ -361,6 +365,19 @@
     <div class="cards">
       <div class="card reveal">
         <span class="tag-space" aria-hidden="true"></span>
+        <h3>Free</h3>
+        <p class="price">$0</p>
+        <p class="per">forever</p>
+        <ul>
+          <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg> Build and share a real experience</li>
+          <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg> Enough to find out if this is for you</li>
+          <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg> No card needed</li>
+        </ul>
+        <a class="ghost" href="https://app.obelisk.place">Start building</a>
+      </div>
+
+      <div class="card reveal d1">
+        <span class="tag-space" aria-hidden="true"></span>
         <h3>Starter</h3>
         <p class="price">$10</p>
         <p class="per">per month, bring your own AI key</p>
@@ -372,7 +389,7 @@
         <a class="ghost" href="https://app.obelisk.place">Start building</a>
       </div>
 
-      <div class="card featured reveal d1">
+      <div class="card featured reveal d2">
         <span class="tag">Most people</span>
         <h3>Creator</h3>
         <p class="price">$17</p>

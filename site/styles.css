@@ -1,3 +1,9 @@
+@property --accent {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #10b981;
+}
+
 /*
  * obelisk.place
  *
@@ -18,6 +24,9 @@
   --muted:     #a1a1aa;
   --faint:     #71717a;
   --accent:    #10b981;
+  /* Long enough to read as a fade rather than a flicker, short enough that
+     the section you are looking at is the colour you are seeing. */
+  transition: --accent 700ms cubic-bezier(0.4, 0, 0.2, 1);
   --accent-dim:#34d399;
   --radius:    18px;
   --measure:   34rem;
@@ -110,7 +119,9 @@ p  { margin: 0 0 1.1rem; max-width: var(--measure); }
 
 /* ── Pricing ────────────────────────────────────────────────────────────── */
 .cards { display: grid; gap: 1rem; margin-top: 2.5rem; }
-@media (min-width: 52rem) { .cards { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 40rem) { .cards { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 68rem) { .cards { grid-template-columns: repeat(4, 1fr); } }
+.card ul { flex: 1 1 auto; }
 .card {
   background: var(--bg-raised); border: 1px solid var(--line);
   border-radius: var(--radius); padding: 1.6rem 1.5rem;
