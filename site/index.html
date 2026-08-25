@@ -50,13 +50,12 @@
     it needs before it goes in: the experience has to be genuinely public, and
     preview has to work without signing in, which today it does not.
   -->
-  <div class="wrap block centered">
+  <div class="wrap block">
     <p class="eyebrow reveal">Try it</p>
-    <h2 class="reveal">An example</h2>
+    <h2 class="reveal">Explore the player experience</h2>
     <p class="reveal">
-      This is the real thing, not a video. Two stops in Washington Square:
-      one plays audio, the other is a character you can talk to. Drag the red
-      dot into a circle to trigger it.
+      Move the dot around to each zone to explore what's possible. "Pizza" is
+      the password for the locked zone.
     </p>
     <!-- The published experience in demo mode: a draggable position instead of
          GPS, so it can be tried from a desk. Nothing here is a mock, which
@@ -73,6 +72,11 @@
         allow="autoplay"
         referrerpolicy="no-referrer-when-downgrade"></iframe>
     </div>
+    <p class="faint reveal" style="margin-top:1rem">
+      <a href="https://obelisk-main.vercel.app/player/3aff1e9b-ea37-4a0d-bd65-13b9354f4dbb?demo=1"
+         target="_blank" rel="noopener" style="color:var(--accent)">Open it full screen</a>
+    </p>
+  </div>
     <p class="faint reveal" style="margin:1rem auto 0">
       <a href="https://obelisk-main.vercel.app/player/3aff1e9b-ea37-4a0d-bd65-13b9354f4dbb?demo=1"
          target="_blank" rel="noopener" style="color:var(--accent)">Open it full screen</a>
@@ -283,6 +287,47 @@
 
   </div>
 
+  <div class="wrap block">
+    <p class="eyebrow reveal">Ideas</p>
+    <h2 class="reveal">What people build</h2>
+    <p class="reveal">
+      The same tools cover a guided walk and a scavenger hunt. What changes is
+      what you put at each stop.
+    </p>
+    <div class="tiles">
+      <div class="tile reveal">
+        <!-- Drop an image in: style="background-image:url(/img/audio-tours.jpg)" -->
+        <div class="tile-img" data-slug="audio-tours"></div>
+        <h3>Audio tours</h3>
+      </div>
+      <div class="tile reveal">
+        <!-- Drop an image in: style="background-image:url(/img/locative-storytelling.jpg)" -->
+        <div class="tile-img" data-slug="locative-storytelling"></div>
+        <h3>Locative storytelling</h3>
+      </div>
+      <div class="tile reveal">
+        <!-- Drop an image in: style="background-image:url(/img/treasure-hunts.jpg)" -->
+        <div class="tile-img" data-slug="treasure-hunts"></div>
+        <h3>Treasure hunts</h3>
+      </div>
+      <div class="tile reveal">
+        <!-- Drop an image in: style="background-image:url(/img/geolocated-games.jpg)" -->
+        <div class="tile-img" data-slug="geolocated-games"></div>
+        <h3>Geolocated games</h3>
+      </div>
+      <div class="tile reveal">
+        <!-- Drop an image in: style="background-image:url(/img/museum-guides.jpg)" -->
+        <div class="tile-img" data-slug="museum-guides"></div>
+        <h3>Museum audio guides</h3>
+      </div>
+      <div class="tile reveal">
+        <!-- Drop an image in: style="background-image:url(/img/nature-walks.jpg)" -->
+        <div class="tile-img" data-slug="nature-walks"></div>
+        <h3>Nature walks</h3>
+      </div>
+    </div>
+  </div>
+
   <div class="wrap block centered">
     <p class="eyebrow reveal">Built for the real world</p>
     <h2 class="reveal">GPS accuracy</h2>
@@ -316,9 +361,9 @@
     <div class="cards">
       <div class="card reveal">
         <span class="tag-space" aria-hidden="true"></span>
-        <h3>Free</h3>
-        <p class="price">$0</p>
-        <p class="per">Bring your own AI key</p>
+        <h3>Starter</h3>
+        <p class="price">$10</p>
+        <p class="per">per month, bring your own AI key</p>
         <ul>
           <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg> Every feature, and no limit on how much you build</li>
           <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg> Voices, characters, AR, locks, collectibles</li>
@@ -330,10 +375,10 @@
       <div class="card featured reveal d1">
         <span class="tag">Most people</span>
         <h3>Creator</h3>
-        <p class="price">$00</p>
+        <p class="price">$17</p>
         <p class="per">per month</p>
         <ul>
-          <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg> Everything in Free</li>
+          <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg> Everything in Starter</li>
           <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg> No AI key needed, we cover it for you</li>
           <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg> More storage for your audio</li>
         </ul>
@@ -342,19 +387,19 @@
 
       <div class="card reveal d2">
         <span class="tag-space" aria-hidden="true"></span>
-        <h3>Studio</h3>
+        <h3>Custom Web App</h3>
         <p class="price">Talk to us</p>
-        <p class="per">Museums, parks, festivals, teams</p>
+        <p class="per">Your own branded app, built with you</p>
         <ul>
           <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg> Everything in Creator</li>
-          <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg> Help building your first walk</li>
-          <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg> Higher limits and a person to email</li>
+          <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg> Built and branded for you</li>
+          <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg> Your own domain, and a person to email</li>
         </ul>
         <a class="ghost" href="mailto:hello@obelisk.place">Get in touch</a>
       </div>
     </div>
     <p class="faint reveal" style="margin-top:1.25rem;">
-      Prices are not final yet. Nothing is charged today.
+      Billing is not switched on yet, so nothing is charged today.
     </p>
   </div>
 

@@ -307,12 +307,15 @@
 /* Sized to a phone in landscape so the real embed can drop straight in
    without the section reflowing around it on the day it arrives. */
 .demo {
-  margin: 2rem auto 0;
+  margin: 2rem 0 0;
   border: 1px solid var(--line);
   border-radius: 22px;
   background: var(--bg-raised);
-  aspect-ratio: 4 / 3;
-  max-width: 44rem;
+  /* Wider and shorter than the phone it will mostly be used on, because the
+     thing being demonstrated here is a map with zones on it, and a map needs
+     width. Taller on a phone, where there is none to spare. */
+  aspect-ratio: 16 / 11;
+  max-width: none;
   display: flex; align-items: center; justify-content: center;
   position: relative; overflow: hidden;
 }
@@ -325,3 +328,32 @@
   animation: calibrate-bloom 4.5s ease-in-out infinite;
 }
 @media (prefers-reduced-motion: reduce) { .demo-dot { animation: none; } }
+
+
+/* ── Ideas grid ─────────────────────────────────────────────────────────── */
+.tiles { display: grid; gap: 1rem; margin-top: 2.5rem; grid-template-columns: repeat(2, 1fr); }
+@media (min-width: 46rem) { .tiles { grid-template-columns: repeat(3, 1fr); } }
+
+.tile h3 { margin: 0.75rem 0 0; font-size: 0.95rem; }
+/* Placeholder until real images land. A flat grey box would look broken; a
+   faint tint of the section accent reads as "not filled in yet" instead. */
+.tile-img {
+  aspect-ratio: 4 / 3; border-radius: 14px;
+  border: 1px solid var(--line);
+  background-color: var(--bg-raised);
+  background-size: cover; background-position: center;
+  position: relative; overflow: hidden;
+}
+.tile-img::after {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(circle at 40% 35%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%);
+}
+/* Once a background-image is set the tint would sit over the photograph. */
+.tile-img[style*="background-image"]::after { display: none; }
+
+@media (min-width: 34rem) {
+  .demo { aspect-ratio: 16 / 10; }
+}
+@media (max-width: 34rem) {
+  .demo { aspect-ratio: 3 / 4; }
+}

@@ -180,6 +180,10 @@ footer a:hover { color: var(--text); }
    thing they introduce. Done with a class rather than inline styles, because
    it was three sections and would have been nine attributes. */
 .block.centered { text-align: center; }
-.block.centered h2 { max-width: none; margin-left: auto; margin-right: auto; }
-.block.centered p  { margin-left: auto; margin-right: auto; }
+.block.centered > h2 { max-width: none; margin-left: auto; margin-right: auto; }
+/* Direct children only. A .card is a flex column, and auto side margins on a
+   flex item shrink it to its content and centre it, so an unrestricted rule
+   here quietly re-laid-out every price and caption inside the pricing cards
+   while their computed text-align still read "left". */
+.block.centered > p  { margin-left: auto; margin-right: auto; }
 .block.centered .cards { text-align: left; }
