@@ -42,6 +42,14 @@
   aspect-ratio: 4 / 3;
   display: flex; align-items: center; justify-content: center;
 }
+/* Names a view timeline for the things inside to hang off.
+   A bare view() would not work here: it resolves against the nearest ancestor
+   scroll container, and this panel is one, because it clips. The timeline was
+   therefore attached to a box that never scrolls and sat frozen at halfway.
+   Naming it on the panel measures the panel against the DOCUMENT instead,
+   which is the scrolling everybody can actually see. */
+.panel { view-timeline-name: --panel-view; }
+
 .panel::after {
   content: ''; position: absolute; inset: 0;
   background: radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--accent) 16%, transparent) 0%, transparent 62%);
@@ -98,45 +106,115 @@
   transition: transform 1.1s cubic-bezier(0.2, 0.6, 0.3, 1) 0.2s;
 }
 .in-view .lock span:nth-child(2) { transform: scale(0.55); }
+.lock svg {
+  position: absolute; inset: 0; margin: auto;
+  width: 34%; height: 34%; color: var(--accent);
+  opacity: 0; transform: scale(0.7);
+  transition: opacity 0.6s ease 0.5s, transform 0.6s cubic-bezier(0.2, 0.6, 0.3, 1) 0.5s;
+}
+/* Arrives after the inner ring has closed, so the two read as one movement
+   rather than two things happening at once. */
+.in-view .lock svg { opacity: 1; transform: scale(1); }
 
 /* Collectibles: a row of tokens that fill in. */
 .tokens { display: flex; gap: 0.7rem; }
 .tokens span {
-  width: 30px; height: 30px; border-radius: 8px;
-  border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
-  background: transparent;
+  width: 40px; height: 40px; border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  background: transparent; color: var(--accent);
+  display: flex; align-items: center; justify-content: center;
   transition: background 0.5s ease, transform 0.5s cubic-bezier(0.2, 0.6, 0.3, 1);
 }
-.in-view .tokens span { background: color-mix(in srgb, var(--accent) 30%, transparent); }
-.in-view .tokens span:nth-child(2) { transition-delay: 0.1s; }
-.in-view .tokens span:nth-child(3) { transition-delay: 0.2s; }
-.in-view .tokens span:nth-child(4) { transition-delay: 0.3s; transform: scale(1.12); }
+.tokens svg { width: 18px; height: 18px; opacity: 0.35; transition: opacity 0.5s ease; }
+/* They fill in left to right, the way a counter does on a walk, and the last
+   one stays empty because there is always one more thing to find. */
+.in-view .tokens span { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.in-view .tokens svg { opacity: 1; }
+.in-view .tokens span:nth-child(2), .in-view .tokens span:nth-child(2) svg { transition-delay: 0.1s; }
+.in-view .tokens span:nth-child(3), .in-view .tokens span:nth-child(3) svg { transition-delay: 0.2s; }
+.in-view .tokens span:nth-child(4), .in-view .tokens span:nth-child(4) svg { transition-delay: 0.3s; transform: scale(1.1); }
 .in-view .tokens span:nth-child(5) { transition-delay: 0.4s; background: transparent; }
+.in-view .tokens span:nth-child(5) svg { transition-delay: 0.4s; opacity: 0.25; }
 
-/* AR: a reticle over a drifting point field, the same idea as the app's
-   pre-camera screen. */
-.reticle { position: relative; width: 46%; aspect-ratio: 1; }
-.reticle span {
-  position: absolute; inset: 0; border-radius: 999px;
-  border: 1px dashed var(--accent); opacity: 0.4;
-  animation: calibrate-spin 26s linear infinite;
+/* AR: out of focus foliage, with something in front of it that is not there.
+   A reticle said "targeting". Depth is what actually says augmented reality:
+   the object holds still against a background that moves, which is the whole
+   trick a phone is doing when it pins something to a place. */
+.ar-scene { position: absolute; inset: 0; overflow: hidden; }
+
+.bokeh { position: absolute; inset: -8%; }
+.bokeh i {
+  position: absolute; border-radius: 999px;
+  filter: blur(14px);
+  background: radial-gradient(circle at 35% 35%, rgba(190, 240, 200, 0.85), rgba(60, 130, 85, 0.45) 55%, transparent 74%);
 }
-.reticle span:nth-child(2) {
-  inset: 22%; border-style: solid; opacity: 0.75;
-  animation: calibrate-spin-rev 17s linear infinite;
-}
-.reticle span:nth-child(3) {
-  inset: 42%; border: 0; border-radius: 6px;
-  background: var(--accent); opacity: 0.9; animation: none;
-  box-shadow: 0 0 26px var(--accent);
+/* Two depths. The far layer is smaller, dimmer and blurrier, and it travels
+   less, which is what makes the near layer read as nearer. */
+.bokeh.far i  { filter: blur(22px); opacity: 0.45; }
+.bokeh.near i { filter: blur(11px); opacity: 0.8; }
+
+.ar-object {
+  position: absolute; left: 50%; top: 50%;
+  width: 62px; height: 62px; margin: -31px 0 0 -31px;
+  border-radius: 12px;
+  background: var(--accent);
+  box-shadow: 0 0 40px -4px var(--accent), 0 14px 34px rgba(0, 0, 0, 0.55);
 }
 
-/* Theming: three swatch rows repainting themselves. */
-.swatches { display: flex; flex-direction: column; gap: 0.65rem; width: 60%; }
-.swatches i { display: block; height: 12px; border-radius: 999px; background: var(--accent); opacity: 0.9; }
-.swatches i:nth-child(2) { width: 72%; opacity: 0.6; }
-.swatches i:nth-child(3) { width: 46%; opacity: 0.35; }
-.swatches i:nth-child(1) { width: 100%; }
+/* Parallax on the scroll position, with no scroll listener anywhere: the
+   browser drives these off the compositor. Where view timelines are not
+   supported the layers simply hold still, which still reads correctly, so
+   there is no fallback to write. */
+@supports (animation-timeline: view()) {
+  .bokeh.far  { animation: ar-par-far  linear both; animation-timeline: --panel-view; }
+  .bokeh.near { animation: ar-par-near linear both; animation-timeline: --panel-view; }
+  .ar-object  { animation: ar-par-obj  linear both; animation-timeline: --panel-view; }
+}
+@keyframes ar-par-far  { from { transform: translateY(6%);  } to { transform: translateY(-6%);  } }
+@keyframes ar-par-near { from { transform: translateY(15%); } to { transform: translateY(-15%); } }
+@keyframes ar-par-obj  { from { transform: translateY(-4%) scale(0.94); } to { transform: translateY(4%) scale(1.06); } }
+
+/* Theming: a word and a set of bars that keep repainting.
+   The rest of the page changes accent once per section. This panel runs
+   through a whole palette on its own, because "pick any colours you like" is
+   a range rather than a single alternative. The word is there so the change
+   is legible as type colour and not just as decoration. */
+.theme-demo { display: flex; flex-direction: column; gap: 1.1rem; width: 66%; }
+.theme-word {
+  font-size: clamp(2.2rem, 6vw, 3rem); font-weight: 800;
+  letter-spacing: -0.03em; line-height: 1;
+  animation: theme-cycle 14s linear infinite;
+}
+.theme-bars { display: flex; flex-direction: column; gap: 0.6rem; }
+.theme-bars i {
+  display: block; height: 12px; border-radius: 999px;
+  background: currentColor; animation: theme-cycle 14s linear infinite;
+}
+.theme-bars i:nth-child(1) { width: 100%; animation-delay: -1.2s; }
+.theme-bars i:nth-child(2) { width: 74%;  animation-delay: -3.4s; opacity: 0.8; }
+.theme-bars i:nth-child(3) { width: 48%;  animation-delay: -5.6s; opacity: 0.6; }
+
+/* Scroll drives it where the browser can do that, so the palette moves with
+   the reader rather than on a clock they are not watching. Time-based
+   otherwise, because a still swatch would say nothing at all. */
+@supports (animation-timeline: view()) {
+  .theme-word, .theme-bars i {
+    animation: theme-cycle linear both;
+    animation-timeline: --panel-view;
+  }
+  .theme-bars i:nth-child(2) { animation-range: 5% 95%; }
+  .theme-bars i:nth-child(3) { animation-range: 10% 90%; }
+}
+
+@keyframes theme-cycle {
+  0%   { color: #10b981; }
+  17%  { color: #06b6d4; }
+  34%  { color: #6366f1; }
+  50%  { color: #a855f7; }
+  67%  { color: #ec4899; }
+  84%  { color: #f59e0b; }
+  100% { color: #10b981; }
+}
 
 @keyframes wave-pulse {
   0%, 100% { transform: scaleY(0.4); }
@@ -158,7 +236,9 @@
 
 @media (prefers-reduced-motion: reduce) {
   .reveal { opacity: 1; transform: none; transition: none; }
-  .wave i, .reticle span { animation: none; }
+  .wave i { animation: none; }
+  .bokeh.far, .bokeh.near, .ar-object { animation: none; }
+  .theme-word, .theme-bars i { animation: none; color: var(--accent); }
   .in-view .lock span:nth-child(2),
   .in-view .tokens span { transition: none; }
 }
