@@ -134,6 +134,10 @@ export const Player: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const isPreview = searchParams.get('preview') === '1';
+  // A public demo: the real published experience, played with a draggable dot.
+  // Distinct from preview, which reads the unpublished draft and needs the
+  // owner signed in. This reads exactly what players get and needs nobody.
+  const isDemoRequested = searchParams.get('demo') === '1';
   const gpsDebugEnabled = searchParams.get('debug') === 'gps';
   
   const [tour, setTour] = useState<Tour | null>(null);
@@ -161,6 +165,8 @@ export const Player: React.FC = () => {
   const bottomBarRef = useRef<HTMLDivElement | null>(null);
   const [topBarHeight, setTopBarHeight] = useState(56);
   const topBarRef = useRef<HTMLDivElement | null>(null);
+  // Preview simulates immediately. A demo cannot decide until the tour has
+  // loaded, because whether simulation is allowed is a property of the tour.
   const [simulationMode, setSimulationMode] = useState(isPreview);
   const [activeZones, setActiveZones] = useState<{id: string, title: string, volume: number, replayable: boolean}[]>([]);
   const [activeMediaZone, setActiveMediaZone] = useState<Zone | null>(null);
@@ -1356,6 +1362,12 @@ export const Player: React.FC = () => {
     if (!loaded) { setNotFound(true); setLoading(false); return; }
     const { tour: t, zones: z } = loaded;
     setTour(t);
+
+    // A demo only simulates if the creator marked this experience as one.
+    // Checked against the loaded tour rather than the URL alone, so ?demo=1 on
+    // somebody else's experience does nothing at all: it plays normally, on
+    // real GPS, exactly as it would without the parameter.
+    if (isDemoRequested && t.allow_simulation) setSimulationMode(true);
     if (t.progression_enabled) {
       const progress = loadPlayerProgress(t.id, t.progression_resources || []);
       playerProgressRef.current = progress;
@@ -1454,8 +1466,10 @@ export const Player: React.FC = () => {
       prefetchOrderRef.current = ordered;
     }
 
-    // Start analytics session — skip in preview mode so creator test-runs don't pollute data.
-    if (!isPreview && tour?.id) {
+    // Start analytics session. Skipped for a creator's own preview, and for a
+    // simulated demo: the dashboard promises "real plays from the player URL",
+    // and somebody dragging a dot around from a desk is not one.
+    if (!isPreview && !simulationMode && tour?.id) {
       startSession(tour.id, PLAYER_TERMS_VERSION).then(id => { sessionIdRef.current = id; });
     }
   };

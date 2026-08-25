@@ -3,7 +3,7 @@ import { Tour, Zone } from '../types';
 import { MAP_STYLES, FONT_STYLES, DEFAULT_MAP_STYLE } from '../constants';
 import { uploadImage } from '../services/storageService';
 import { MediaPicker } from './MediaPicker';
-import { Image as ImageIcon, Type, Palette, AlignLeft, AlignCenter, Upload, MapPin, Eye, Settings, Globe, Lock, Loader2, Sun, Moon, X, Tag as TagIcon, Clock, Route, EyeOff } from 'lucide-react';
+import { Image as ImageIcon, Type, Palette, AlignLeft, AlignCenter, Upload, MapPin, Eye, Settings, Globe, Lock, Loader2, Sun, Moon, X, Tag as TagIcon, Clock, Route, EyeOff, MousePointerClick } from 'lucide-react';
 import { ProgressionSettings } from './ProgressionSettings';
 import { ClosingCardSettings } from './ClosingCardSettings';
 import { trailStats, formatDistance, suggestDuration } from '../utils/trail';
@@ -488,6 +488,37 @@ export const TourInfoPanel: React.FC<TourInfoPanelProps> = ({
 
           {/* How it ends, and the only place money is asked for */}
           <ClosingCardSettings tour={tour} zones={zones} onUpdate={onUpdate} />
+
+          {/* Playable from a chair */}
+          <div className="border-t border-zinc-800 pt-5">
+            <label className="block text-xs font-bold text-zinc-400 uppercase mb-2 flex items-center gap-2">
+              <MousePointerClick size={13} /> Demo Mode
+            </label>
+            <div className="flex items-start gap-3">
+              <button
+                onClick={() => onUpdate({ allow_simulation: !tour.allow_simulation })}
+                className={`w-11 h-6 rounded-full transition-colors shrink-0 mt-0.5 ${
+                  tour.allow_simulation ? 'bg-emerald-500' : 'bg-zinc-700'
+                }`}
+                aria-label={tour.allow_simulation ? 'Disable demo mode' : 'Enable demo mode'}
+              >
+                <span className={`block w-4 h-4 rounded-full bg-white transition-transform ${
+                  tour.allow_simulation ? 'translate-x-6' : 'translate-x-1'
+                }`} />
+              </button>
+              <p className="text-[11px] text-zinc-500 leading-relaxed">
+                Lets anyone play this from a browser by dragging the dot around the map,
+                with no GPS and no walking. Add <span className="font-mono text-zinc-400">?demo=1</span> to
+                the link. Use it to show people what an experience is like. Leave it off
+                for anything meant to be walked, or the walk stops being the point.
+              </p>
+            </div>
+            {tour.allow_simulation && (
+              <p className="text-[10px] text-zinc-600 mt-2">
+                Demo plays are left out of your analytics, the same as previews.
+              </p>
+            )}
+          </div>
 
           {/* Visibility */}
           <div>

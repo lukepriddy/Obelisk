@@ -108,13 +108,14 @@
 .in-view .lock span:nth-child(2) { transform: scale(0.55); }
 .lock svg {
   position: absolute; inset: 0; margin: auto;
-  width: 34%; height: 34%; color: var(--accent);
+  width: 20%; height: 20%; color: var(--accent);
   opacity: 0; transform: scale(0.7);
   transition: opacity 0.6s ease 0.5s, transform 0.6s cubic-bezier(0.2, 0.6, 0.3, 1) 0.5s;
 }
+.in-view .lock svg { opacity: 0.85; }
 /* Arrives after the inner ring has closed, so the two read as one movement
    rather than two things happening at once. */
-.in-view .lock svg { opacity: 1; transform: scale(1); }
+.in-view .lock svg { transform: scale(1); }
 
 /* Collectibles: a row of tokens that fill in. */
 .tokens { display: flex; gap: 0.7rem; }

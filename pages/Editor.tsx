@@ -550,6 +550,7 @@ export const Editor: React.FC<EditorProps> = ({ user }) => {
           start_zoom: editorMapZoomRef.current,
           progression_enabled: tour.progression_enabled,
           progression_resources: tour.progression_resources || [],
+          allow_simulation: tour.allow_simulation === true,
           ending_zone_id: tour.ending_zone_id ?? null,
           closing_message: tour.closing_message ?? null,
           donation_note: tour.donation_note ?? null,

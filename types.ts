@@ -74,6 +74,11 @@ export interface Tour {
   // Free-form tags — act as lightweight folders on the dashboard
   tags?: string[];
 
+  /** Playable with a draggable dot instead of GPS, via ?demo=1. Off unless the
+   *  creator turns it on, because simulating a walk defeats the point of the
+   *  product everywhere except a demo. */
+  allow_simulation?: boolean;
+
   // Optional player progression
   progression_enabled?: boolean;
   progression_resources?: ProgressionResource[];
