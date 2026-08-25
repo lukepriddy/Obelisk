@@ -34,29 +34,35 @@
 
   <div class="wrap hero">
     <p class="eyebrow reveal">Location-based experiences</p>
-    <h1 class="reveal d1">Build audio walks with characters and puzzles in them.</h1>
+    <h1 class="reveal d1">Build immersive location-based experiences with gamification, audio, and interactive AI characters</h1>
     <p class="lead reveal d2">
-      Obelisk is a web app for making experiences that play at real places.
-      You mark spots on a map and decide what each one does. It can play audio,
-      open a chat with a character, hold a locked door, or show an object
-      through the camera. Players open a link in their browser and walk. There
-      is no app to install.
+      Mark spots on a map, decide what each one does, and share a link. Players
+      walk there and it plays in their browser. Nothing to install.
     </p>
     <p class="reveal d2"><a class="cta" href="https://app.obelisk.place">Start building</a></p>
   </div>
 
+  <!--
+    Placeholder for a real example experience.
+
+    This becomes an embedded walk running in preview mode, with simulated
+    position rather than real GPS, so it can be tried from a desk. Two things
+    it needs before it goes in: the experience has to be genuinely public, and
+    preview has to work without signing in, which today it does not.
+  -->
   <div class="wrap block">
-    <p class="eyebrow reveal">How it works</p>
-    <h2 class="reveal">Three steps</h2>
+    <p class="eyebrow reveal">Try it</p>
+    <h2 class="reveal">An example</h2>
     <p class="reveal">
-      You open the map and drop a pin where you want something to happen. You
-      set how big that spot is and what it does. Then you share the link.
+      A short walk you can try from here, with each kind of zone in it. No
+      walking required.
     </p>
-    <p class="reveal">
-      A player opens the link on their phone and starts walking. Nothing plays
-      until they reach one of your spots. Everything below is a thing you can
-      put at one.
-    </p>
+    <div class="demo reveal d1" aria-hidden="true">
+      <div class="demo-inner">
+        <span class="demo-dot"></span>
+        <p class="faint" style="margin:0">Example experience coming soon</p>
+      </div>
+    </div>
   </div>
 
   <div id="features">
@@ -66,9 +72,8 @@
         <div class="feature-copy">
           <h2 class="reveal">Zones</h2>
           <p class="lead reveal d1">
-            A zone is a spot on the map with a size. When someone walks inside
-            it, whatever you put there starts. You set how wide it is, from a
-            few feet across to a whole field, and what happens when they leave.
+            A zone is a spot on the map with a size. Whatever you put there
+            starts when someone walks in.
           </p>
           <div class="chips reveal d2">
             <span class="chip on">Any size</span>
@@ -91,8 +96,7 @@
           <h2 class="reveal">Voices</h2>
           <p class="lead reveal d1">
             Type your script and pick a voice. ElevenLabs and Google voices
-            are built in, so you do not have to record anything. You can add
-            notes about accent and pace, or upload your own audio instead.
+            are built in, so you do not have to record anything.
           </p>
           <div class="chips reveal d2">
             <span class="chip on">ElevenLabs</span>
@@ -118,8 +122,7 @@
         <div class="feature-copy">
           <h2 class="reveal">AI characters</h2>
           <p class="lead reveal d1">
-            A character zone opens a chat. You write who they are, what they
-            want, and what they know but will not say right away. Players type
+            You write who they are and what they are hiding. Players type
             questions and get answers back in that voice.
           </p>
           <div class="chips reveal d2">
@@ -144,9 +147,8 @@
         <div class="feature-copy">
           <h2 class="reveal">Locked zones</h2>
           <p class="lead reveal d1">
-            You can put a password on a zone and hide the answer earlier in
-            the walk. You can write a hint. A character can also open a locked
-            zone once they decide the player has earned it.
+            Put a password on a zone and hide the answer earlier in the walk.
+            A character can open one too, once they decide it is earned.
           </p>
           <div class="chips reveal d2">
             <span class="chip on">Passwords</span>
@@ -166,9 +168,8 @@
         <div class="feature-copy">
           <h2 class="reveal">Collectibles</h2>
           <p class="lead reveal d1">
-            You can hide items along the route. Players pick them up and see
-            them in a counter while they walk. You can also require an item
-            before a zone will open.
+            Hide items along the route for players to pick up. A zone can
+            require one before it opens.
           </p>
           <div class="chips reveal d2">
             <span class="chip on">Hidden items</span>
@@ -188,9 +189,8 @@
         <div class="feature-copy">
           <h2 class="reveal">AR objects</h2>
           <p class="lead reveal d1">
-            You can place an object at a spot on the map. When a player points
-            their camera there, it appears. It can stay still or fly overhead.
-            This runs in the browser too.
+            Place an object at a spot and it appears when a player points
+            their camera there. Still or flying.
           </p>
           <div class="chips reveal d2">
             <span class="chip on">Camera objects</span>
@@ -210,10 +210,8 @@
         <div class="feature-copy">
           <h2 class="reveal">Look and feel</h2>
           <p class="lead reveal d1">
-            You set the colours, the typeface, and the map style. You write
-            the welcome screen players see first and the card they get at the
-            end. The colours on this page change as you scroll, which is the
-            same setting.
+            Set the colours, typeface, and map style, and write your own
+            welcome and ending screens. This page is using the same setting.
           </p>
           <div class="chips reveal d2">
             <span class="chip on">Colours</span>
@@ -235,11 +233,9 @@
     <p class="eyebrow reveal">Built for the real world</p>
     <h2 class="reveal">GPS accuracy</h2>
     <p class="reveal">
-      A phone's location is a guess, and it gets better over the first few
+      A phone's location is a guess that gets better over the first few
       seconds. Obelisk waits for it to settle before the walk starts, so the
-      first zone does not fire in the wrong place. Zones are also a little
-      harder to leave than to enter, so audio does not cut out when someone
-      stands still.
+      first zone does not fire in the wrong place.
     </p>
     <div class="rings reveal d1" aria-hidden="true">
       <span class="ring-outer"></span>
@@ -260,8 +256,7 @@
     <p class="eyebrow reveal">Pricing</p>
     <h2 class="reveal">Pricing</h2>
     <p class="reveal">
-      The AI voices and characters cost money to run. You can pay for that
-      yourself by adding your own key, or you can let us cover it.
+      The AI costs money to run. Add your own key, or let us cover it.
     </p>
 
     <div class="cards">

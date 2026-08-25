@@ -162,3 +162,28 @@
   .in-view .lock span:nth-child(2),
   .in-view .tokens span { transition: none; }
 }
+
+/* ── Example experience slot ────────────────────────────────────────────── */
+/* Sized to a phone in landscape so the real embed can drop straight in
+   without the section reflowing around it on the day it arrives. */
+.demo {
+  margin-top: 2rem;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--bg-raised);
+  aspect-ratio: 16 / 10;
+  max-width: 46rem;
+  display: flex; align-items: center; justify-content: center;
+  position: relative; overflow: hidden;
+}
+.demo::after {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(circle at 50% 55%, color-mix(in srgb, var(--accent) 10%, transparent) 0%, transparent 65%);
+}
+.demo-inner { display: flex; flex-direction: column; align-items: center; gap: 0.9rem; }
+.demo-dot {
+  width: 10px; height: 10px; border-radius: 999px;
+  background: var(--accent); box-shadow: 0 0 24px var(--accent);
+  animation: calibrate-bloom 4.5s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) { .demo-dot { animation: none; } }

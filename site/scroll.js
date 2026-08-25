@@ -42,6 +42,17 @@
   var DEFAULT_ACCENT = '#10b981';
   var visible = [];
 
+  // A zero-height root: -50% top and bottom collapses it to a single line
+  // across the middle of the screen. A section is active while it crosses that
+  // line and stops being active the moment it does not.
+  //
+  // The previous version used a 20% tall band, which made the change depend on
+  // how much of a section happened to be inside it, and that is not symmetric.
+  // Scrolling down, a section entered the band before the one above had left,
+  // so the change came early; scrolling back up it came late, and the two
+  // never agreed on where the boundary was. Sections are contiguous and do not
+  // overlap, so against a single line exactly one of them qualifies at a time,
+  // and the switch happens at the same scroll position in both directions.
   var accentObserver = new IntersectionObserver(function (entries) {
     entries.forEach(function (entry) {
       var i = visible.indexOf(entry.target);
@@ -49,15 +60,16 @@
       if (!entry.isIntersecting && i !== -1) visible.splice(i, 1);
     });
 
-    // Document order, so scrolling up lands on the same accent scrolling down
-    // gave you. Sorting by intersection ratio instead would flicker between two
-    // sections while both are half on screen.
     if (!visible.length) { root.style.setProperty('--accent', DEFAULT_ACCENT); return; }
+
+    // Two can touch the line at once on the exact pixel where sections meet.
+    // Document order settles it the same way whichever direction you arrived
+    // from, so the boundary does not shift under you.
     visible.sort(function (a, b) {
       return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
     });
     root.style.setProperty('--accent', visible[0].getAttribute('data-accent'));
-  }, { rootMargin: '-40% 0px -40% 0px' });
+  }, { rootMargin: '-50% 0px -50% 0px', threshold: 0 });
 
   sections.forEach(function (el) { accentObserver.observe(el); });
 })();
