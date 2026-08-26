@@ -144,6 +144,17 @@ p  { margin: 0 0 1.1rem; max-width: var(--measure); }
 .block + .block { padding-top: 0; }
 .hero { padding-top: 6.5rem; padding-bottom: 5rem; }
 
+/* Vertical rhythm is set for a wide screen, where a section fills a fraction
+   of the height and generous gaps read as composure. On a phone each section
+   is already most of the screen on its own, so the same gaps become dead space
+   somebody has to scroll through to find out there is more. Roughly two thirds
+   here, which keeps the separation without the wait. */
+@media (max-width: 46rem) {
+  .block { padding-top: 3.5rem; padding-bottom: 3.5rem; }
+  .hero  { padding-top: 4.5rem; padding-bottom: 3rem; }
+  footer { padding: 2rem 0 2.5rem; margin-top: 2.5rem; }
+}
+
 .eyebrow {
   font-size: 0.72rem; font-weight: 700; letter-spacing: 0.19em;
   text-transform: uppercase;
