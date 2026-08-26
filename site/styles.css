@@ -92,6 +92,12 @@ nav { margin-left: auto; display: flex; align-items: center; gap: 1.5rem; }
 nav a { color: var(--muted); text-decoration: none; font-size: 0.95rem; }
 nav a:hover { color: var(--text); }
 .cta {
+  /* inline-flex, not the default inline. As a flex child in the header this
+     button got the full box model and stood 40px tall; sitting inside a
+     paragraph in the hero it was inline, where vertical padding paints but
+     does not add height, so the same button measured 33px. Same class, two
+     heights, depending only on what it happened to be inside. */
+  display: inline-flex; align-items: center; justify-content: center;
   background: var(--accent); color: #09090b;
   padding: 0.5rem 0.95rem; border-radius: 999px;
   font-weight: 700; font-size: 0.9rem; text-decoration: none;
