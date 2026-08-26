@@ -12,8 +12,10 @@
  * being smooth is its own rebuttal.
  */
 
-.feature { padding: 6rem 0; border-top: 1px solid var(--line); }
-.feature:first-of-type { border-top: 0; }
+/* No rules between features. They were left over from an earlier layout of
+   boxed panels; the spacing carries the rhythm on its own, and a hairline every
+   six rem was just a row of grey lines down the page. */
+.feature { padding: 6rem 0; }
 
 .feature-grid { display: grid; gap: 2rem; align-items: start; }
 @media (min-width: 54rem) {

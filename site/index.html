@@ -25,21 +25,58 @@
       <a href="#features">Features</a>
       <a href="/about">About</a>
       <a href="/blog">Blog</a>
-      <a class="cta" href="https://app.obelisk.place">Start building</a>
+      <a class="cta" href="#pricing">Start building</a>
     </nav>
   </div>
 </header>
 
 <main>
 
+  <!-- New York in the app's own dark map style, using the same CARTO tiles the
+       Dark option in the builder uses. It fades to nothing before the fold, so
+       it reads as a backdrop that pulls the eye down to the words rather than
+       an image competing with them. Attributed in the footer, as the licence
+       requires. -->
+  <div class="hero-map" aria-hidden="true">
+    <div class="hero-map-grid">
+        <img src="https://a.basemaps.cartocdn.com/dark_all/13/2409/3077@2x.png" alt="" loading="eager" decoding="async">
+        <img src="https://b.basemaps.cartocdn.com/dark_all/13/2410/3077@2x.png" alt="" loading="eager" decoding="async">
+        <img src="https://c.basemaps.cartocdn.com/dark_all/13/2411/3077@2x.png" alt="" loading="eager" decoding="async">
+        <img src="https://d.basemaps.cartocdn.com/dark_all/13/2412/3077@2x.png" alt="" loading="eager" decoding="async">
+        <img src="https://a.basemaps.cartocdn.com/dark_all/13/2413/3077@2x.png" alt="" loading="eager" decoding="async">
+        <img src="https://b.basemaps.cartocdn.com/dark_all/13/2414/3077@2x.png" alt="" loading="eager" decoding="async">
+        <img src="https://c.basemaps.cartocdn.com/dark_all/13/2415/3077@2x.png" alt="" loading="eager" decoding="async">
+        <img src="https://d.basemaps.cartocdn.com/dark_all/13/2416/3077@2x.png" alt="" loading="eager" decoding="async">
+        <img src="https://a.basemaps.cartocdn.com/dark_all/13/2417/3077@2x.png" alt="" loading="eager" decoding="async">
+        <img src="https://b.basemaps.cartocdn.com/dark_all/13/2409/3078@2x.png" alt="" loading="eager" decoding="async">
+        <img src="https://c.basemaps.cartocdn.com/dark_all/13/2410/3078@2x.png" alt="" loading="eager" decoding="async">
+        <img src="https://d.basemaps.cartocdn.com/dark_all/13/2411/3078@2x.png" alt="" loading="eager" decoding="async">
+        <img src="https://a.basemaps.cartocdn.com/dark_all/13/2412/3078@2x.png" alt="" loading="eager" decoding="async">
+        <img src="https://b.basemaps.cartocdn.com/dark_all/13/2413/3078@2x.png" alt="" loading="eager" decoding="async">
+        <img src="https://c.basemaps.cartocdn.com/dark_all/13/2414/3078@2x.png" alt="" loading="eager" decoding="async">
+        <img src="https://d.basemaps.cartocdn.com/dark_all/13/2415/3078@2x.png" alt="" loading="eager" decoding="async">
+        <img src="https://a.basemaps.cartocdn.com/dark_all/13/2416/3078@2x.png" alt="" loading="eager" decoding="async">
+        <img src="https://b.basemaps.cartocdn.com/dark_all/13/2417/3078@2x.png" alt="" loading="eager" decoding="async">
+        <img src="https://c.basemaps.cartocdn.com/dark_all/13/2409/3079@2x.png" alt="" loading="eager" decoding="async">
+        <img src="https://d.basemaps.cartocdn.com/dark_all/13/2410/3079@2x.png" alt="" loading="eager" decoding="async">
+        <img src="https://a.basemaps.cartocdn.com/dark_all/13/2411/3079@2x.png" alt="" loading="eager" decoding="async">
+        <img src="https://b.basemaps.cartocdn.com/dark_all/13/2412/3079@2x.png" alt="" loading="eager" decoding="async">
+        <img src="https://c.basemaps.cartocdn.com/dark_all/13/2413/3079@2x.png" alt="" loading="eager" decoding="async">
+        <img src="https://d.basemaps.cartocdn.com/dark_all/13/2414/3079@2x.png" alt="" loading="eager" decoding="async">
+        <img src="https://a.basemaps.cartocdn.com/dark_all/13/2415/3079@2x.png" alt="" loading="eager" decoding="async">
+        <img src="https://b.basemaps.cartocdn.com/dark_all/13/2416/3079@2x.png" alt="" loading="eager" decoding="async">
+        <img src="https://c.basemaps.cartocdn.com/dark_all/13/2417/3079@2x.png" alt="" loading="eager" decoding="async">
+    </div>
+  </div>
+
   <div class="wrap hero">
     <p class="eyebrow reveal">Location-based experiences</p>
-    <h1 class="reveal d1">Immersive location-based experiences with audio zones, AI characters, AR, and gamification</h1>
+    <h1 class="reveal d1">Build immersive location based experiences like no other</h1>
     <p class="lead reveal d2">
       Mark spots on a map, decide what each one does, and share a link. Players
       walk there and it plays in their browser. Nothing to install.
     </p>
-    <p class="reveal d2"><a class="cta" href="https://app.obelisk.place">Start building</a></p>
+    <p class="reveal d2"><a class="cta" href="#pricing">Start building</a></p>
   </div>
 
   <!--
@@ -427,7 +464,10 @@
     <a href="/about">About</a>
     <a href="/blog">Blog</a>
     <a href="https://app.obelisk.place">Start building</a>
-    <span class="spacer faint">Obelisk</span>
+    <span class="spacer faint">
+      Map tiles by <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>,
+      data by <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>
+    </span>
   </div>
 </footer>
 

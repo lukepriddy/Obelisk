@@ -49,6 +49,35 @@ a { color: inherit; }
 
 .wrap { width: 100%; max-width: 62rem; margin: 0 auto; padding: 0 1.5rem; }
 
+/* ── Hero map ───────────────────────────────────────────────────────────── */
+/* Sits behind the opening text and fades out before the fold. Masked rather
+   than overlaid with a gradient, so the page background shows through instead
+   of a dark panel sitting on top of a dark panel. */
+.hero-map {
+  position: absolute; top: 0; left: 0; right: 0;
+  height: 660px; overflow: hidden; z-index: 0;
+  pointer-events: none;
+  opacity: 0.6;
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 38%, rgba(0,0,0,0.35) 72%, transparent 100%);
+          mask-image: linear-gradient(to bottom, #000 0%, #000 38%, rgba(0,0,0,0.35) 72%, transparent 100%);
+}
+.hero-map-grid {
+  display: grid;
+  grid-template-columns: repeat(9, 256px);
+  width: 2304px;
+  /* Anchored centre so the same part of the city stays in frame as the window
+     changes width, and the edges are what get cropped. */
+  /* The nudge puts Manhattan on the page's centre line rather than the
+     grid's, which are not the same thing once the tile range is rounded. */
+  position: absolute; left: 50%; top: -30px;
+  transform: translateX(calc(-50% + 216px));
+}
+.hero-map-grid img { display: block; width: 256px; height: 256px; }
+
+/* Everything after the map has to sit above it. */
+header, main, footer { position: relative; z-index: 1; }
+.hero { position: relative; z-index: 1; }
+
 /* ── Header ─────────────────────────────────────────────────────────────── */
 header {
   position: sticky; top: 0; z-index: 20;
