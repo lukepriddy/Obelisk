@@ -218,12 +218,53 @@ footer a:hover { color: var(--text); }
 .footrow .spacer { margin-left: auto; }
 
 /* ── Blog list ──────────────────────────────────────────────────────────── */
-.posts { list-style: none; padding: 0; margin: 2.5rem 0 0; }
-.posts li { border-top: 1px solid var(--line); padding: 1.4rem 0; }
-.posts li:last-child { border-bottom: 1px solid var(--line); }
-.posts a { text-decoration: none; display: block; }
-.posts a:hover h3 { color: var(--accent-dim); }
-.posts time { color: var(--faint); font-size: 0.82rem; }
+/* Cards rather than a ruled list. A blog with three posts on a page that is
+   otherwise carefully composed should not look like a directory listing. */
+.posts { list-style: none; padding: 0; margin: 0; display: grid; gap: 1rem; }
+@media (min-width: 54rem) { .posts { grid-template-columns: repeat(2, 1fr); } }
+.posts li {
+  background: var(--bg-raised); border: 1px solid var(--line);
+  border-radius: var(--radius); overflow: hidden;
+  transition: border-color 0.25s ease, transform 0.25s cubic-bezier(0.2, 0.6, 0.3, 1);
+}
+.posts li:hover { border-color: color-mix(in srgb, var(--accent) 45%, transparent); transform: translateY(-2px); }
+.posts a { text-decoration: none; display: block; padding: 1.6rem 1.5rem; height: 100%; }
+.posts h2 { font-size: 1.22rem; margin: 0 0 0.5rem; max-width: none; letter-spacing: -0.02em; }
+.posts p { margin: 0; font-size: 0.95rem; }
+.posts .eyebrow { margin-bottom: 0.7rem; }
+.dot-sep { margin: 0 0.45rem; opacity: 0.5; }
+.readmore { display: inline-block; margin-top: 1rem; font-size: 0.86rem; font-weight: 700; color: var(--accent); }
+.posts a:hover .readmore { text-decoration: underline; }
+
+/* ── Post page ──────────────────────────────────────────────────────────── */
+.post { padding-top: 4.5rem; padding-bottom: 4rem; }
+.post-back { margin-bottom: 1.75rem; }
+.post h1 { font-size: clamp(1.9rem, 4.6vw, 2.9rem); max-width: 22ch; }
+.post .lead { margin-bottom: 0; }
+.posthead { border-bottom: 1px solid var(--line); padding-bottom: 2rem; margin-bottom: 2.5rem; }
+.posthead .eyebrow { display: flex; align-items: center; }
+
+/* An offer at the end of a post, where somebody who read the whole thing is. */
+.post-cta {
+  margin-top: 3.5rem; padding: 2rem 1.75rem;
+  background: var(--bg-raised); border: 1px solid var(--line);
+  border-radius: var(--radius); max-width: var(--measure);
+}
+.post-cta h2 { font-size: 1.25rem; margin: 0 0 0.5rem; }
+.post-cta p { color: var(--muted); font-size: 0.95rem; margin-bottom: 1.25rem; }
+
+.post-nav {
+  display: grid; gap: 1rem; margin-top: 2.5rem;
+  border-top: 1px solid var(--line); padding-top: 2rem;
+}
+@media (min-width: 46rem) { .post-nav { grid-template-columns: 1fr 1fr; } }
+.post-nav a {
+  text-decoration: none; color: var(--text); font-weight: 600;
+  display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.95rem;
+}
+.post-nav a:hover { color: var(--accent); }
+.post-nav .next { text-align: right; }
+.post-nav .faint { font-size: 0.78rem; font-weight: 400; }
 
 /* ── Posts ──────────────────────────────────────────────────────────────── */
 .prose { max-width: var(--measure); }
@@ -236,8 +277,6 @@ footer a:hover { color: var(--text); }
 }
 .prose ul { color: #d4d4d8; padding-left: 1.1rem; margin: 0 0 1.1rem; }
 .prose li { margin: 0.35rem 0; }
-.posthead { border-bottom: 1px solid var(--line); padding-bottom: 2rem; margin-bottom: 2.5rem; }
-.posthead time { color: var(--faint); font-size: 0.85rem; }
 .backlink { color: var(--muted); text-decoration: none; font-size: 0.9rem; }
 .backlink:hover { color: var(--text); }
 
@@ -254,3 +293,9 @@ footer a:hover { color: var(--text); }
    while their computed text-align still read "left". */
 .block.centered > p  { margin-left: auto; margin-right: auto; }
 .block.centered .cards { text-align: left; }
+
+.prose code {
+  background: var(--bg-raised); border: 1px solid var(--line);
+  border-radius: 5px; padding: 0.1em 0.35em; font-size: 0.9em;
+}
+.prose hr { border: 0; border-top: 1px solid var(--line); margin: 2.5rem 0; }

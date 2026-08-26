@@ -4,12 +4,101 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Obelisk: build location-based experiences</title>
-  <meta name="description" content="Obelisk is a platform for location-based immersive experiences. Geolocated audio, AI voices, AR characters, chat characters you can talk to, locked zones, and pages you can theme. No app to install.">
+  <meta name="description" content="Build immersive location-based experiences: geolocated audio, AI characters, AR and gamification. Runs in a browser, with no app to install.">
+  <link rel="canonical" href="https://obelisk.place/">
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Obelisk">
+  <meta property="og:title" content="Obelisk: build location-based experiences">
+  <meta property="og:description" content="Build immersive location-based experiences: geolocated audio, AI characters, AR and gamification. Runs in a browser, with no app to install.">
+  <meta property="og:url" content="https://obelisk.place/">
+  <meta property="og:image" content="https://obelisk.place/og.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Obelisk: build location-based experiences">
+  <meta name="twitter:description" content="Build immersive location-based experiences: geolocated audio, AI characters, AR and gamification. Runs in a browser, with no app to install.">
+  <meta name="twitter:image" content="https://obelisk.place/og.png">
+
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" href="/icons/favicon.svg" type="image/svg+xml">
+  <link rel="alternate" type="application/rss+xml" title="Obelisk blog" href="/feed.xml">
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/calibration.css">
   <link rel="stylesheet" href="/features.css">
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://obelisk.place/#organization",
+      "name": "Obelisk",
+      "url": "https://obelisk.place",
+      "logo": "https://obelisk.place/icons/icon-512.png",
+      "description": "A platform for building location-based immersive experiences with geolocated audio, AI characters, augmented reality and game mechanics."
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://obelisk.place/#website",
+      "url": "https://obelisk.place",
+      "name": "Obelisk",
+      "publisher": { "@id": "https://obelisk.place/#organization" },
+      "inLanguage": "en"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "@id": "https://obelisk.place/#app",
+      "name": "Obelisk",
+      "applicationCategory": "MultimediaApplication",
+      "applicationSubCategory": "Location-based experience builder",
+      "operatingSystem": "Any modern web browser",
+      "url": "https://obelisk.place",
+      "publisher": { "@id": "https://obelisk.place/#organization" },
+      "description": "Build location-based immersive experiences: geolocated audio zones, interactive AI characters, augmented reality objects, locked zones and collectibles. Players open a link in a browser, with no app to install.",
+      "featureList": [
+        "Geolocated audio zones with adjustable radius",
+        "ElevenLabs AI voices built in",
+        "Interactive AI characters players can talk to",
+        "Augmented reality objects in the browser",
+        "Locked zones and passwords",
+        "Collectibles and gamification",
+        "Custom colors, typefaces and map styles"
+      ],
+      "offers": [
+        { "@type": "Offer", "name": "Free", "price": "0", "priceCurrency": "USD" },
+        { "@type": "Offer", "name": "Starter", "price": "10", "priceCurrency": "USD" },
+        { "@type": "Offer", "name": "Creator", "price": "17", "priceCurrency": "USD" }
+      ]
+    },
+    {
+      "@type": "FAQPage",
+      "@id": "https://obelisk.place/#faq",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "What is a location-based experience?",
+          "acceptedAnswer": { "@type": "Answer", "text": "A location-based experience ties content to real places. A player walks to a spot and something happens there: audio plays, a character starts talking, or an object appears through their camera. Obelisk calls each of those spots a zone." }
+        },
+        {
+          "@type": "Question",
+          "name": "Do players need to install an app?",
+          "acceptedAnswer": { "@type": "Answer", "text": "No. Obelisk experiences run in a web browser. You share a link and players open it on their phone." }
+        },
+        {
+          "@type": "Question",
+          "name": "Can I use AI voices instead of recording narration?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Yes. ElevenLabs voices are built in, so you type your script and pick a voice. You can also upload your own audio." }
+        },
+        {
+          "@type": "Question",
+          "name": "What can you build with Obelisk?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Audio tours, locative storytelling, treasure hunts, geolocated games, museum audio guides and nature walks. The same tools cover all of them." }
+        }
+      ]
+    }
+  ]
+}
+  </script>
 </head>
 <body>
 
@@ -22,7 +111,6 @@
       Obelisk
     </a>
     <nav>
-      <a href="#features" class="hide-sm">Features</a>
       <a href="/about">About</a>
       <a href="/blog">Blog</a>
       <a class="cta" href="#pricing">Start building</a>

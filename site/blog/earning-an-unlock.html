@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Letting an AI character decide when to unlock a zone | Obelisk</title>
+  <meta name="description" content="Our first version opened the locked zone as soon as the character replied to anything. Here is what we changed, and why counting messages was not the fix.">
+  <link rel="canonical" href="https://obelisk.place/blog/earning-an-unlock">
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="Obelisk">
+  <meta property="og:title" content="Letting an AI character decide when to unlock a zone | Obelisk">
+  <meta property="og:description" content="Our first version opened the locked zone as soon as the character replied to anything. Here is what we changed, and why counting messages was not the fix.">
+  <meta property="og:url" content="https://obelisk.place/blog/earning-an-unlock">
+  <meta property="og:image" content="https://obelisk.place/og.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Letting an AI character decide when to unlock a zone | Obelisk">
+  <meta name="twitter:description" content="Our first version opened the locked zone as soon as the character replied to anything. Here is what we changed, and why counting messages was not the fix.">
+  <meta name="twitter:image" content="https://obelisk.place/og.png">
+
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" href="/icons/favicon.svg" type="image/svg+xml">
+  <link rel="alternate" type="application/rss+xml" title="Obelisk blog" href="/feed.xml">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "Letting an AI character decide when to unlock a zone",
+  "description": "Our first version opened the locked zone as soon as the character replied to anything. Here is what we changed, and why counting messages was not the fix.",
+  "datePublished": "2026-08-11",
+  "dateModified": "2026-08-11",
+  "author": {
+    "@type": "Organization",
+    "name": "Obelisk",
+    "url": "https://obelisk.place"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Obelisk",
+    "url": "https://obelisk.place"
+  },
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "https://obelisk.place/blog/earning-an-unlock"
+  },
+  "isPartOf": {
+    "@type": "Blog",
+    "name": "Obelisk blog",
+    "@id": "https://obelisk.place/blog"
+  }
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Home",
+      "item": "https://obelisk.place"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "Blog",
+      "item": "https://obelisk.place/blog"
+    },
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "name": "Letting an AI character decide when to unlock a zone",
+      "item": "https://obelisk.place/blog/earning-an-unlock"
+    }
+  ]
+}
+  </script>
+</head>
+<body>
+
+<header>
+  <div class="wrap bar">
+    <a class="brand" href="/">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--accent)">
+        <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>
+      </svg>
+      Obelisk
+    </a>
+    <nav>
+      <a href="/about">About</a>
+      <a href="/blog">Blog</a>
+      <a class="cta" href="/#pricing">Start building</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <article class="wrap post">
+    <p class="post-back"><a class="backlink" href="/blog">All posts</a></p>
+    <header class="posthead">
+      <p class="eyebrow">
+        <time datetime="2026-08-11">August 11, 2026</time>
+        <span class="dot-sep">&middot;</span>1 min read
+      </p>
+      <h1>Letting an AI character decide when to unlock a zone</h1>
+      <p class="lead">Our first version opened the locked zone as soon as the character replied to anything. Here is what we changed, and why counting messages was not the fix.</p>
+    </header>
+    <div class="prose">
+      <p>In Obelisk you can put an AI character in front of a locked zone. If the player talks their way past them, the zone opens.</p>
+      <p>Our first version did not really work. The zone opened as soon as the character replied to anything at all. A player could type hello, get one line back, and walk through.</p>
+      <h2>The problem with that</h2>
+      <p>If the zone opens for anyone, the character is not really guarding anything. Players notice, because they know they did not do anything to get through.</p>
+      <h2>Why we did not just count messages</h2>
+      <p>The obvious fix is to wait for a few messages before opening the zone. We decided against it.</p>
+      <p>If the zone opens after four replies, then the thing the player has to do is send four messages. That is not much better than one.</p>
+      <h2>How it works now</h2>
+      <p>You write what the character is hiding and what someone has to do to get it. The character then decides for itself when that has happened, and tells the app. The player does not see any of this. They get an answer, and the zone is open.</p>
+      <p>The important part is writing something the character can actually judge. This works:</p>
+      <blockquote><p>Reveals it only after the player writes you a poem of three lines. Any honest attempt counts. Asking you to write it does not.</p></blockquote>
+      <p>This does not:</p>
+      <blockquote><p>Reveals it when the player is nice.</p></blockquote>
+      <p>The first one either happened or it did not. The second one is a matter of opinion, and a character asked to judge an opinion will either open for everyone or for nobody.</p>
+      <h2>Nobody gets stuck</h2>
+      <p>The zone still has its normal password. Talking to the character is a second way in, not the only way. If a player never works out what the character wants, they can still enter the password.</p>
+    </div>
+
+    <aside class="post-cta">
+      <h2>Build one yourself</h2>
+      <p>Obelisk is a platform for location-based experiences: audio zones, AI characters, AR, and game mechanics, all in a browser.</p>
+      <a class="cta" href="/#pricing">Start building</a>
+    </aside>
+
+    <nav class="post-nav">
+      <span></span>
+      <a class="next" href="/blog/importing-a-script"><span class="faint">Newer</span>Importing a finished script into a location-based experience</a>
+    </nav>
+  </article>
+</main>
+
+<footer>
+  <div class="wrap footrow">
+    <a href="/">Home</a>
+    <a href="/about">About</a>
+    <a href="/blog">Blog</a>
+    <a href="/feed.xml">RSS</a>
+    <span class="spacer faint">
+      Map tiles by <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>,
+      data by <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>
+    </span>
+  </div>
+</footer>
+</body>
+</html>

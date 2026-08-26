@@ -3,18 +3,71 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Obelisk blog</title>
-  <meta name="description" content="Notes on building Obelisk, and on making things people walk through.">
+  <title>Blog | Obelisk</title>
+  <meta name="description" content="Notes on building location-based experiences: geolocated audio, AI characters, AR, locked zones, and what GPS actually does on a walk.">
+  <link rel="canonical" href="https://obelisk.place/blog">
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Obelisk">
+  <meta property="og:title" content="Blog | Obelisk">
+  <meta property="og:description" content="Notes on building location-based experiences: geolocated audio, AI characters, AR, locked zones, and what GPS actually does on a walk.">
+  <meta property="og:url" content="https://obelisk.place/blog">
+  <meta property="og:image" content="https://obelisk.place/og.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Blog | Obelisk">
+  <meta name="twitter:description" content="Notes on building location-based experiences: geolocated audio, AI characters, AR, locked zones, and what GPS actually does on a walk.">
+  <meta name="twitter:image" content="https://obelisk.place/og.png">
+
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" href="/icons/favicon.svg" type="image/svg+xml">
+  <link rel="alternate" type="application/rss+xml" title="Obelisk blog" href="/feed.xml">
   <link rel="stylesheet" href="/styles.css">
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Blog",
+  "@id": "https://obelisk.place/blog",
+  "name": "Obelisk blog",
+  "description": "Notes on building location-based experiences: geolocated audio, AI characters, AR, and game mechanics.",
+  "url": "https://obelisk.place/blog",
+  "publisher": {
+    "@type": "Organization",
+    "name": "Obelisk",
+    "url": "https://obelisk.place"
+  },
+  "blogPost": [
+    {
+      "@type": "BlogPosting",
+      "headline": "GPS is a guess, and what that means for a location-based experience",
+      "description": "A phone's location is not accurate for the first few seconds. Here is why that breaks a geolocated audio experience, and what we do about it.",
+      "datePublished": "2026-08-23",
+      "url": "https://obelisk.place/blog/gps-accuracy-on-a-walk"
+    },
+    {
+      "@type": "BlogPosting",
+      "headline": "Importing a finished script into a location-based experience",
+      "description": "Paste a whole document and get back a set of geofenced zones with your text in them. How it works, and why the AI never touches a word of it.",
+      "datePublished": "2026-08-17",
+      "url": "https://obelisk.place/blog/importing-a-script"
+    },
+    {
+      "@type": "BlogPosting",
+      "headline": "Letting an AI character decide when to unlock a zone",
+      "description": "Our first version opened the locked zone as soon as the character replied to anything. Here is what we changed, and why counting messages was not the fix.",
+      "datePublished": "2026-08-11",
+      "url": "https://obelisk.place/blog/earning-an-unlock"
+    }
+  ]
+}
+  </script>
 </head>
 <body>
 
 <header>
   <div class="wrap bar">
     <a class="brand" href="/">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--accent)">
         <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>
       </svg>
       Obelisk
@@ -22,7 +75,7 @@
     <nav>
       <a href="/about">About</a>
       <a href="/blog">Blog</a>
-      <a class="cta" href="https://app.obelisk.place">Start building</a>
+      <a class="cta" href="/#pricing">Start building</a>
     </nav>
   </div>
 </header>
@@ -30,50 +83,37 @@
 <main>
   <div class="wrap hero">
     <p class="eyebrow">Blog</p>
-    <h1>Blog</h1>
+    <h1>Notes from building it</h1>
     <p class="lead">
-      Notes on what we are building, and on problems that came up while
-      building it.
+      What we are working on, and problems that came up while building a
+      platform for location-based experiences.
     </p>
   </div>
 
   <div class="wrap block">
-    <!--
-      Posts are hand written here on purpose. There is no CMS and no build step,
-      because a blog with three posts does not need one, and the day it needs
-      one is the day it has earned it. Add a new <li> at the top.
-    -->
     <ul class="posts">
       <li>
-        <a href="/post-gps">
-          <time datetime="2026-08-23">23 August 2026</time>
-          <h3>GPS is a guess, and what that means for a walk</h3>
-          <p class="muted" style="margin:0.35rem 0 0;">
-            A phone's location is not accurate for the first few seconds. Here
-            is why that breaks a walk, and what we do about it.
-          </p>
+        <a href="/blog/gps-accuracy-on-a-walk">
+          <p class="eyebrow"><time datetime="2026-08-23">August 23, 2026</time><span class="dot-sep">&middot;</span>1 min read</p>
+          <h2>GPS is a guess, and what that means for a location-based experience</h2>
+          <p class="muted">A phone's location is not accurate for the first few seconds. Here is why that breaks a geolocated audio experience, and what we do about it.</p>
+          <span class="readmore">Read it</span>
         </a>
       </li>
       <li>
-        <a href="/post-import">
-          <time datetime="2026-08-17">17 August 2026</time>
-          <h3>Importing a finished script</h3>
-          <p class="muted" style="margin:0.35rem 0 0;">
-            You can paste a whole document in and get back a set of zones with
-            your text in them. Here is how it works and why it does not rewrite
-            anything.
-          </p>
+        <a href="/blog/importing-a-script">
+          <p class="eyebrow"><time datetime="2026-08-17">August 17, 2026</time><span class="dot-sep">&middot;</span>1 min read</p>
+          <h2>Importing a finished script into a location-based experience</h2>
+          <p class="muted">Paste a whole document and get back a set of geofenced zones with your text in them. How it works, and why the AI never touches a word of it.</p>
+          <span class="readmore">Read it</span>
         </a>
       </li>
       <li>
-        <a href="/post-unlock">
-          <time datetime="2026-08-11">11 August 2026</time>
-          <h3>Letting a character decide when to unlock a zone</h3>
-          <p class="muted" style="margin:0.35rem 0 0;">
-            Our first version opened the door as soon as the character replied
-            to anything. Here is what we changed and why a message count was
-            not the fix.
-          </p>
+        <a href="/blog/earning-an-unlock">
+          <p class="eyebrow"><time datetime="2026-08-11">August 11, 2026</time><span class="dot-sep">&middot;</span>1 min read</p>
+          <h2>Letting an AI character decide when to unlock a zone</h2>
+          <p class="muted">Our first version opened the locked zone as soon as the character replied to anything. Here is what we changed, and why counting messages was not the fix.</p>
+          <span class="readmore">Read it</span>
         </a>
       </li>
     </ul>
@@ -84,10 +124,13 @@
   <div class="wrap footrow">
     <a href="/">Home</a>
     <a href="/about">About</a>
-    <a href="https://app.obelisk.place">Start building</a>
-    <span class="spacer faint">Obelisk</span>
+    <a href="/blog">Blog</a>
+    <a href="/feed.xml">RSS</a>
+    <span class="spacer faint">
+      Map tiles by <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>,
+      data by <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>
+    </span>
   </div>
 </footer>
-
 </body>
 </html>

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GPS is a guess, and what that means for a location-based experience | Obelisk</title>
+  <meta name="description" content="A phone's location is not accurate for the first few seconds. Here is why that breaks a geolocated audio experience, and what we do about it.">
+  <link rel="canonical" href="https://obelisk.place/blog/gps-accuracy-on-a-walk">
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="Obelisk">
+  <meta property="og:title" content="GPS is a guess, and what that means for a location-based experience | Obelisk">
+  <meta property="og:description" content="A phone's location is not accurate for the first few seconds. Here is why that breaks a geolocated audio experience, and what we do about it.">
+  <meta property="og:url" content="https://obelisk.place/blog/gps-accuracy-on-a-walk">
+  <meta property="og:image" content="https://obelisk.place/og.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="GPS is a guess, and what that means for a location-based experience | Obelisk">
+  <meta name="twitter:description" content="A phone's location is not accurate for the first few seconds. Here is why that breaks a geolocated audio experience, and what we do about it.">
+  <meta name="twitter:image" content="https://obelisk.place/og.png">
+
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" href="/icons/favicon.svg" type="image/svg+xml">
+  <link rel="alternate" type="application/rss+xml" title="Obelisk blog" href="/feed.xml">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "GPS is a guess, and what that means for a location-based experience",
+  "description": "A phone's location is not accurate for the first few seconds. Here is why that breaks a geolocated audio experience, and what we do about it.",
+  "datePublished": "2026-08-23",
+  "dateModified": "2026-08-23",
+  "author": {
+    "@type": "Organization",
+    "name": "Obelisk",
+    "url": "https://obelisk.place"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Obelisk",
+    "url": "https://obelisk.place"
+  },
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "https://obelisk.place/blog/gps-accuracy-on-a-walk"
+  },
+  "isPartOf": {
+    "@type": "Blog",
+    "name": "Obelisk blog",
+    "@id": "https://obelisk.place/blog"
+  }
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Home",
+      "item": "https://obelisk.place"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "Blog",
+      "item": "https://obelisk.place/blog"
+    },
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "name": "GPS is a guess, and what that means for a location-based experience",
+      "item": "https://obelisk.place/blog/gps-accuracy-on-a-walk"
+    }
+  ]
+}
+  </script>
+</head>
+<body>
+
+<header>
+  <div class="wrap bar">
+    <a class="brand" href="/">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--accent)">
+        <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>
+      </svg>
+      Obelisk
+    </a>
+    <nav>
+      <a href="/about">About</a>
+      <a href="/blog">Blog</a>
+      <a class="cta" href="/#pricing">Start building</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <article class="wrap post">
+    <p class="post-back"><a class="backlink" href="/blog">All posts</a></p>
+    <header class="posthead">
+      <p class="eyebrow">
+        <time datetime="2026-08-23">August 23, 2026</time>
+        <span class="dot-sep">&middot;</span>1 min read
+      </p>
+      <h1>GPS is a guess, and what that means for a location-based experience</h1>
+      <p class="lead">A phone's location is not accurate for the first few seconds. Here is why that breaks a geolocated audio experience, and what we do about it.</p>
+    </header>
+    <div class="prose">
+      <p>A phone does not know exactly where it is. It makes a guess from the satellites and the wifi around it, and that guess gets more accurate over the first few seconds.</p>
+      <h2>Why this matters for a walk</h2>
+      <p>If your first zone is small, it can go wrong right at the start. Either nothing plays while the player is standing in the right place, or something plays while they are still in the car park.</p>
+      <p>To the player this does not look like a GPS problem. It looks like the experience is broken.</p>
+      <h2>What Obelisk does</h2>
+      <p>Obelisk does not show the map straight away. It holds a screen in front of the walk while the signal settles, and shows a ring that tightens as the reading gets better. When the reading is good enough, the walk begins.</p>
+      <p>It usually takes a few seconds, which is about how long it takes to put headphones in. After that the first zone plays in the right place.</p>
+      <h2>Drift after that</h2>
+      <p>Even once the signal settles it still moves around a little. So a zone is slightly harder to leave than it is to enter. Without that, standing still can be enough for the app to decide you have walked away and stop the audio.</p>
+    </div>
+
+    <aside class="post-cta">
+      <h2>Build one yourself</h2>
+      <p>Obelisk is a platform for location-based experiences: audio zones, AI characters, AR, and game mechanics, all in a browser.</p>
+      <a class="cta" href="/#pricing">Start building</a>
+    </aside>
+
+    <nav class="post-nav">
+      <a href="/blog/importing-a-script"><span class="faint">Older</span>Importing a finished script into a location-based experience</a>
+      <span></span>
+    </nav>
+  </article>
+</main>
+
+<footer>
+  <div class="wrap footrow">
+    <a href="/">Home</a>
+    <a href="/about">About</a>
+    <a href="/blog">Blog</a>
+    <a href="/feed.xml">RSS</a>
+    <span class="spacer faint">
+      Map tiles by <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>,
+      data by <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>
+    </span>
+  </div>
+</footer>
+</body>
+</html>
