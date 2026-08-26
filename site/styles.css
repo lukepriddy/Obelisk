@@ -218,9 +218,21 @@ footer a:hover { color: var(--text); }
 .footrow .spacer { margin-left: auto; }
 
 /* ── Blog list ──────────────────────────────────────────────────────────── */
-/* Cards rather than a ruled list. A blog with three posts on a page that is
-   otherwise carefully composed should not look like a directory listing. */
-.posts { list-style: none; padding: 0; margin: 0; display: grid; gap: 1rem; }
+/* The page opens on the articles. No heading, no standfirst, because the
+   articles say what the blog is better than a sentence about them would. */
+.blog-index { padding-top: 2.5rem; padding-bottom: 5rem; }
+@media (max-width: 46rem) { .blog-index { padding-top: 1.75rem; padding-bottom: 3.5rem; } }
+
+/* Off screen, not display:none. Hiding it that way would remove it from the
+   accessibility tree too, and a page with no h1 is one a screen reader and a
+   crawler both have to guess at. */
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+.posts { list-style: none; padding: 0; margin: 0; display: grid; gap: 1.25rem; }
 @media (min-width: 54rem) { .posts { grid-template-columns: repeat(2, 1fr); } }
 .posts li {
   background: var(--bg-raised); border: 1px solid var(--line);
@@ -228,10 +240,29 @@ footer a:hover { color: var(--text); }
   transition: border-color 0.25s ease, transform 0.25s cubic-bezier(0.2, 0.6, 0.3, 1);
 }
 .posts li:hover { border-color: color-mix(in srgb, var(--accent) 45%, transparent); transform: translateY(-2px); }
-.posts a { text-decoration: none; display: block; padding: 1.6rem 1.5rem; height: 100%; }
-.posts h2 { font-size: 1.22rem; margin: 0 0 0.5rem; max-width: none; letter-spacing: -0.02em; }
-.posts p { margin: 0; font-size: 0.95rem; }
-.posts .eyebrow { margin-bottom: 0.7rem; }
+.posts a { text-decoration: none; display: flex; flex-direction: column; height: 100%; }
+
+/* Sized by aspect ratio so a card holds its shape before the image arrives and
+   the grid does not jump as thumbnails load. */
+.post-thumb {
+  display: block; aspect-ratio: 16 / 9;
+  background-color: #101012; background-size: cover; background-position: center;
+  border-bottom: 1px solid var(--line);
+  position: relative;
+}
+/* A post with no thumbnail yet gets a tint rather than a grey rectangle, so it
+   reads as not filled in rather than as a broken image. */
+.post-thumb:not([style])::after {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(circle at 42% 38%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 72%);
+}
+.post-body { display: block; padding: 1.4rem 1.5rem 1.6rem; }
+.post-title {
+  display: block; font-size: 1.2rem; font-weight: 700;
+  letter-spacing: -0.02em; line-height: 1.25; margin: 0 0 0.5rem; color: var(--text);
+}
+.posts .muted { display: block; font-size: 0.95rem; line-height: 1.55; }
+.posts .eyebrow { display: flex; align-items: center; margin-bottom: 0.6rem; }
 .dot-sep { margin: 0 0.45rem; opacity: 0.5; }
 .readmore { display: inline-block; margin-top: 1rem; font-size: 0.86rem; font-weight: 700; color: var(--accent); }
 .posts a:hover .readmore { text-decoration: underline; }
@@ -243,6 +274,11 @@ footer a:hover { color: var(--text); }
 .post .lead { margin-bottom: 0; }
 .posthead { border-bottom: 1px solid var(--line); padding-bottom: 2rem; margin-bottom: 2.5rem; }
 .posthead .eyebrow { display: flex; align-items: center; }
+.post-hero {
+  display: block; width: 100%; height: auto;
+  border-radius: var(--radius); border: 1px solid var(--line);
+  margin: 0 0 2.5rem;
+}
 
 /* An offer at the end of a post, where somebody who read the whole thing is. */
 .post-cta {

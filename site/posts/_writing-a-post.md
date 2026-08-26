@@ -19,7 +19,14 @@ Every post needs all four of these:
     description: One or two sentences. Used as the meta description, the card on
       the index, the og:description and the RSS summary, so write it for a
       stranger seeing it out of context.
+    image: /img/blog/the-url.jpg
     ---
+
+`image` is optional and everything else is required. Put the file in
+`site/img/blog/`. It becomes the card thumbnail, the picture at the top of the
+post, and that post's social preview, which beats one shared image for every
+post. 1200x675 or anything else 16:9 works; the card crops to fit. A post
+without one still publishes and shows a tinted placeholder.
 
 The build fails loudly if any are missing, rather than publishing a post with
 an empty description.

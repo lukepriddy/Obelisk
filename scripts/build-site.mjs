@@ -89,6 +89,8 @@ function parsePost(file) {
     const kv = line.match(/^(\w+):\s*(.*)$/);
     if (kv) meta[kv[1]] = kv[2].trim().replace(/^["']|["']$/g, '');
   }
+  // image is optional. A post without one still publishes; the card just
+  // shows a tinted placeholder rather than a broken frame.
   for (const need of ['title', 'date', 'description', 'slug']) {
     if (!meta[need]) throw new Error(`${file}: frontmatter is missing "${need}"`);
   }
@@ -97,6 +99,8 @@ function parsePost(file) {
   meta.minutes = Math.max(1, Math.round(body.split(/\s+/).length / 220));
   meta.html = markdown(body);
   meta.url = `${ORIGIN}/blog/${meta.slug}`;
+  meta.image = meta.image || '';
+  meta.socialImage = meta.image ? ORIGIN + meta.image : `${ORIGIN}/og.png`;
   meta.pretty = new Date(meta.date + 'T12:00:00Z').toLocaleDateString('en-US',
     { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
   return meta;
@@ -135,7 +139,7 @@ const footer = `
   </div>
 </footer>`;
 
-const head = ({ title, description, canonical, extraSchema = '', ogType = 'website' }) => `  <meta charset="utf-8">
+const head = ({ title, description, canonical, extraSchema = '', ogType = 'website', image = `${ORIGIN}/og.png` }) => `  <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${esc(title)}</title>
   <meta name="description" content="${esc(description)}">
@@ -147,11 +151,11 @@ const head = ({ title, description, canonical, extraSchema = '', ogType = 'websi
   <meta property="og:title" content="${esc(title)}">
   <meta property="og:description" content="${esc(description)}">
   <meta property="og:url" content="${canonical}">
-  <meta property="og:image" content="${ORIGIN}/og.png">
+  <meta property="og:image" content="${image}">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="${esc(title)}">
   <meta name="twitter:description" content="${esc(description)}">
-  <meta name="twitter:image" content="${ORIGIN}/og.png">
+  <meta name="twitter:image" content="${image}">
 
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" href="/icons/favicon.svg" type="image/svg+xml">
@@ -163,7 +167,12 @@ const json = obj => `  <script type="application/ld+json">\n${JSON.stringify(obj
 
 // ── Build ───────────────────────────────────────────────────────────────────
 
-const posts = readdirSync(POSTS).filter(f => f.endsWith('.md')).map(parsePost)
+// Underscore-prefixed files are notes to whoever is writing, not posts. A
+// naming convention rather than a hardcoded filename, so a second note does
+// not need a second exception here.
+const posts = readdirSync(POSTS)
+  .filter(f => f.endsWith('.md') && !f.startsWith('_'))
+  .map(parsePost)
   .sort((a, b) => b.date.localeCompare(a.date));
 
 mkdirSync(join(SITE, 'blog'), { recursive: true });
@@ -181,6 +190,7 @@ for (const [i, p] of posts.entries()) {
     author: { '@type': 'Organization', name: 'Obelisk', url: ORIGIN },
     publisher: { '@type': 'Organization', name: 'Obelisk', url: ORIGIN },
     mainEntityOfPage: { '@type': 'WebPage', '@id': p.url },
+    ...(p.image ? { image: ORIGIN + p.image } : {}),
     isPartOf: { '@type': 'Blog', name: 'Obelisk blog', '@id': `${ORIGIN}/blog` },
   }) + '\n' + json({
     '@context': 'https://schema.org',
@@ -195,7 +205,7 @@ for (const [i, p] of posts.entries()) {
   writeFileSync(join(SITE, 'blog', `${p.slug}.html`), `<!DOCTYPE html>
 <html lang="en">
 <head>
-${head({ title: `${p.title} | Obelisk`, description: p.description, canonical: p.url, extraSchema: schema, ogType: 'article' })}
+${head({ title: `${p.title} | Obelisk`, description: p.description, canonical: p.url, extraSchema: schema, ogType: 'article', image: p.socialImage })}
 </head>
 <body>
 ${nav}
@@ -211,6 +221,7 @@ ${nav}
       <h1>${esc(p.title)}</h1>
       <p class="lead">${esc(p.description)}</p>
     </header>
+    ${p.image ? `<img class="post-hero" src="${p.image}" alt="" width="1200" height="675">` : ''}
     <div class="prose">
       ${p.html}
     </div>
@@ -253,7 +264,7 @@ writeFileSync(join(SITE, 'blog.html'), `<!DOCTYPE html>
 <head>
 ${head({
   title: 'Blog | Obelisk',
-  description: 'Notes on building location-based experiences: geolocated audio, AI characters, AR, locked zones, and what GPS actually does on a walk.',
+  description: 'Writing from Obelisk, a platform for building location-based experiences with geolocated audio, AI characters, AR and game mechanics.',
   canonical: `${ORIGIN}/blog`,
   extraSchema: blogSchema,
 })}
@@ -262,23 +273,23 @@ ${head({
 ${nav}
 
 <main>
-  <div class="wrap hero">
-    <p class="eyebrow">Blog</p>
-    <h1>Notes from building it</h1>
-    <p class="lead">
-      What we are working on, and problems that came up while building a
-      platform for location-based experiences.
-    </p>
-  </div>
-
-  <div class="wrap block">
+  <div class="wrap blog-index">
+    <!-- No visible heading, by request: the page is the articles. The h1 is
+         still here and still says what the page is, because a page with no h1
+         is a page a screen reader and a crawler both have to guess at. It is
+         positioned off screen rather than display:none, which would take it
+         out of the accessibility tree along with the pixels. -->
+    <h1 class="sr-only">Blog</h1>
     <ul class="posts">
 ${posts.map(p => `      <li>
         <a href="/blog/${p.slug}">
-          <p class="eyebrow"><time datetime="${p.date}">${p.pretty}</time><span class="dot-sep">&middot;</span>${p.minutes} min read</p>
-          <h2>${esc(p.title)}</h2>
-          <p class="muted">${esc(p.description)}</p>
-          <span class="readmore">Read it</span>
+          <span class="post-thumb"${p.image ? ` style="background-image:url(${p.image})"` : ''}></span>
+          <span class="post-body">
+            <span class="eyebrow"><time datetime="${p.date}">${p.pretty}</time><span class="dot-sep">&middot;</span>${p.minutes} min read</span>
+            <span class="post-title">${esc(p.title)}</span>
+            <span class="muted">${esc(p.description)}</span>
+            <span class="readmore">Read it</span>
+          </span>
         </a>
       </li>`).join('\n')}
     </ul>
