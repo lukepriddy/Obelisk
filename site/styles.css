@@ -106,7 +106,9 @@ nav a:hover { color: var(--text); }
 .cta:hover { background: var(--accent-dim); }
 @media (max-width: 30rem) {
   nav { gap: 1rem; }
-  nav a.hide-sm { display: none; }        /* Pricing only: it is an anchor on this page */
+  /* Only items that are anchors on this same page. About and Blog are real
+     destinations and stay, or a phone loses the only way to reach them. */
+  nav a.hide-sm { display: none; }
   .cta { padding: 0.45rem 0.8rem; font-size: 0.85rem; }
 }
 
@@ -130,9 +132,17 @@ p  { margin: 0 0 1.1rem; max-width: var(--measure); }
 
 /* One page that flows, rather than a stack of boxed-off marketing panels.
    The rhythm comes from spacing, not from borders and background swaps. */
-.block { padding: 5.5rem 0; }
+/* Vertical only, as longhand.
+   These were shorthands, and a shorthand sets all four sides: "padding: 5.5rem 0"
+   also declared padding-left and padding-right as 0. Both of these elements
+   also carry .wrap, which sets the horizontal padding that keeps text off the
+   edge of the screen, and .block came later in the file so it won. On a wide
+   screen the 62rem max-width leaves margins either side and it never showed. On
+   a phone there is nothing spare, so every heading, paragraph and the demo
+   frame sat flush against the edge of the glass. */
+.block { padding-top: 5.5rem; padding-bottom: 5.5rem; }
 .block + .block { padding-top: 0; }
-.hero { padding: 6.5rem 0 5rem; }
+.hero { padding-top: 6.5rem; padding-bottom: 5rem; }
 
 .eyebrow {
   font-size: 0.72rem; font-weight: 700; letter-spacing: 0.19em;

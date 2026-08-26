@@ -357,7 +357,11 @@
   .demo { aspect-ratio: 16 / 10; }
 }
 @media (max-width: 34rem) {
-  .demo { aspect-ratio: 3 / 4; }
+  /* Tall enough for the player's own welcome screen to lay out properly. At
+     3/4 the frame was about 440px and the player responded by collapsing its
+     map preview to a thin strip, so the embed advertised a map with no map in
+     it. This is roughly a phone's proportions, which is what is inside it. */
+  .demo { aspect-ratio: 6 / 11; }
 }
 
 
@@ -371,7 +375,7 @@
 .demo-shield {
   position: absolute; inset: 0; z-index: 2;
   border: 0; padding: 0; cursor: pointer;
-  background: rgba(9, 9, 11, 0.35);
+  background: rgba(9, 9, 11, 0.55);
   display: flex; align-items: center; justify-content: center;
   transition: opacity 0.25s ease;
   font: inherit; color: inherit;
