@@ -220,8 +220,18 @@ footer a:hover { color: var(--text); }
 /* ── Blog list ──────────────────────────────────────────────────────────── */
 /* The page opens on the articles. No heading, no standfirst, because the
    articles say what the blog is better than a sentence about them would. */
-.blog-index { padding-top: 2.5rem; padding-bottom: 5rem; }
-@media (max-width: 46rem) { .blog-index { padding-top: 1.75rem; padding-bottom: 3.5rem; } }
+.blog-index { padding-top: 4rem; padding-bottom: 5rem; }
+@media (max-width: 46rem) { .blog-index { padding-top: 2.5rem; padding-bottom: 3.5rem; } }
+
+/* The masthead sits close to the cards it heads. The previous version had a
+   standfirst under it and a full hero's worth of space below that, which put
+   the first article most of a screen away from the thing announcing it. */
+.blog-masthead {
+  font-size: clamp(2rem, 5vw, 3rem);
+  margin: 0 0 2rem;
+  max-width: none;
+}
+@media (max-width: 46rem) { .blog-masthead { margin-bottom: 1.5rem; } }
 
 /* Off screen, not display:none. Hiding it that way would remove it from the
    accessibility tree too, and a page with no h1 is one a screen reader and a

@@ -263,7 +263,9 @@ writeFileSync(join(SITE, 'blog.html'), `<!DOCTYPE html>
 <html lang="en">
 <head>
 ${head({
-  title: 'Blog | Obelisk',
+  // The phrase is the masthead; the word "blog" is what somebody searching
+  // types. The title carries both, the h1 carries the phrase.
+  title: 'Building on reality | Obelisk blog',
   description: 'Writing from Obelisk, a platform for building location-based experiences with geolocated audio, AI characters, AR and game mechanics.',
   canonical: `${ORIGIN}/blog`,
   extraSchema: blogSchema,
@@ -274,12 +276,7 @@ ${nav}
 
 <main>
   <div class="wrap blog-index">
-    <!-- No visible heading, by request: the page is the articles. The h1 is
-         still here and still says what the page is, because a page with no h1
-         is a page a screen reader and a crawler both have to guess at. It is
-         positioned off screen rather than display:none, which would take it
-         out of the accessibility tree along with the pixels. -->
-    <h1 class="sr-only">Blog</h1>
+    <h1 class="blog-masthead">Building on reality</h1>
     <ul class="posts">
 ${posts.map(p => `      <li>
         <a href="/blog/${p.slug}">
